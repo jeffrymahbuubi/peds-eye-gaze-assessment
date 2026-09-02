@@ -1,0 +1,9 @@
+name: space
+background: "#0d1b2a"
+target_default: "#03a9f4"
+cursor_color: "#ffeb3b"
+particle_color: "#ffd54f"
+character: star               # played on hit
+sounds:
+  hit: assets/sounds/space_hit.wav
+  miss: assets/sounds/space_miss.wav

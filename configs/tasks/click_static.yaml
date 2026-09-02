@@ -1,0 +1,36 @@
+# Static single-target click task.
+task_id: click_static
+title: "靜態點擊 / Static Click"
+instruction: "看著出現的目標，停留一下就會選到它。"
+
+# Optional: override global (default.yaml) settings for THIS task only.
+# Deep-merged over the defaults. Example — give younger children more dwell time:
+# overrides:
+#   dwell:
+#     threshold_ms: 1000
+
+trials: 32
+timeout_ms: 8000            # per-trial timeout
+inter_trial_interval_ms: 800
+
+target:
+  radius_px: 90
+  color: "#ff5252"
+  # Candidate positions in normalized (0-1) screen coordinates. One is chosen
+  # at random per trial (deterministic with --seed).
+  positions:
+    - [0.15, 0.15]
+    - [0.50, 0.15]
+    - [0.85, 0.15]
+    - [0.15, 0.50]
+    - [0.85, 0.50]
+    - [0.15, 0.85]
+    - [0.50, 0.85]
+    - [0.85, 0.85]
+
+feedback:
+  hit_sound: true
+  miss_sound: true
+  particles: true
+
+theme: forest

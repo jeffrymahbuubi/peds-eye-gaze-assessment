@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Test / tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Session output (recorded data must not be committed — may contain PHI)
+sessions/
+*.mp4
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

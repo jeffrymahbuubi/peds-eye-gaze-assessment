@@ -1,0 +1,25 @@
+# Grid click task (Compass-style comparison). Targets light up one at a time.
+task_id: click_grid
+title: "網格點擊 / Grid Click"
+instruction: "亮起來的格子，用眼睛選到它。"
+
+grid:
+  rows: 3
+  cols: 3
+  margin_frac: 0.12          # margin around the grid, fraction of screen
+
+trials: 18                    # <= rows*cols*repeats; order is randomized
+timeout_ms: 8000
+inter_trial_interval_ms: 800
+
+target:
+  radius_px: 80
+  color: "#4caf50"
+  highlight_color: "#ffeb3b"
+
+feedback:
+  hit_sound: true
+  miss_sound: true
+  particles: true
+
+theme: space

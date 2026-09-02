@@ -1,0 +1,24 @@
+# Follow-and-click task. Target moves along a path; select it inside a zone.
+task_id: follow_moving
+title: "追視點擊 / Follow & Click"
+instruction: "跟著移動的目標，在它變亮時選到它。"
+
+trials: 6
+timeout_ms: 12000
+inter_trial_interval_ms: 1000
+
+motion:
+  path: circular            # horizontal | circular
+  speed_frac_per_s: 0.20      # fraction of screen width per second
+  select_window_ms: 2500      # window during which selection counts as hit
+
+target:
+  radius_px: 100
+  color: "#03a9f4"
+
+feedback:
+  hit_sound: true
+  miss_sound: true
+  particles: true
+
+theme: space

@@ -1,0 +1,49 @@
+[project]
+name = "peds-eye-gaze-assessment"
+version = "0.1.0"
+description = "Pediatric eye-control computer operation assessment tool (Gazepoint GP3HD + dwell/switch input)"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Cheng-Wei Lin Lab (NCKU BME)" }]
+license = { text = "MIT" }
+
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# GUI + capture extras are only needed to run the real application, not the
+# headless replay pipeline or the unit tests.
+gui = [
+    "PySide6>=6.6",
+    "opencv-python>=4.9",
+    "pynput>=1.7",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+peds-eye-gaze = "src.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["E501"]

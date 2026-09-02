@@ -1,0 +1,24 @@
+# Scanning selection task. Several icons; the target icon lights up.
+task_id: scanning
+title: "掃描選擇 / Scanning Selection"
+instruction: "在多個圖案中，選到亮起來的那一個。"
+
+trials: 6
+timeout_ms: 10000
+inter_trial_interval_ms: 900
+
+layout:
+  n_icons: 4                  # number of distractor icons + target
+  radius_px: 80
+  arrangement: row           # row | grid
+
+target:
+  color: "#9c27b0"
+  highlight_color: "#ffeb3b"
+
+feedback:
+  hit_sound: true
+  miss_sound: true
+  particles: true
+
+theme: forest

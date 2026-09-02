@@ -1,0 +1,51 @@
+# Global default configuration.
+# Values here are overridden by task-specific YAML (configs/tasks/*.yaml)
+# and by CLI flags. A non-engineer (therapist / RA) can safely edit this file.
+
+app:
+  fullscreen: false
+  target_fps: 150
+  # Physical screen used to convert normalized gaze (0-1) -> pixels when no
+  # real window geometry is available (headless replay).
+  screen_width_px: 1920
+  screen_height_px: 1080
+
+input:
+  # "eye" = gaze pointer + dwell selection
+  # "gaze_switch" = gaze pointer + keyboard/switch click
+  # "switch" = mouse pointer + keyboard/switch click (for setup testing)
+  mode: eye
+
+dwell:
+  threshold_ms: 800
+  refractory_ms: 500
+  jitter_tolerance_px: 40      # allowed jitter while dwelling
+  visual_cursor: true          # show gaze cursor
+  progress_ring: true          # ring progress indicator on target
+
+calibration:
+  enabled: true         # false = skip calibration entirely on this launch (CALIBRATE_START never sent)
+  points: 5             # 5 or 9 -- point layout sent to Gazepoint Control before calibrating
+  show: true            # false = run calibration invisibly (CALIBRATE_SHOW STATE=0), no window pops up
+  timeout_s: null        # per-point fixation duration (CALIBRATE_TIMEOUT); null = leave device default (~1.25s)
+  delay_s: null           # per-point animation lead-in (CALIBRATE_DELAY); null = leave device default (~0.5s)
+
+gazepoint:
+  host: "26.113.49.235"
+  port: 4242
+  # Data records to subscribe to (OpenGaze ENABLE_SEND_* commands).
+  enable:
+    time: true
+    pog_fix: true
+    pog_best: true
+    pupil_left: true
+    pupil_right: true
+    cursor: true
+
+recording:
+  output_root: "sessions"
+  save_gaze_stream: true
+  save_screen_capture: false   # requires opencv (gui extra)
+
+theme:
+  name: forest

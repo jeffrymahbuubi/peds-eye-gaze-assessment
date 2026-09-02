@@ -1,0 +1,9 @@
+name: forest
+background: "#e8f5e9"
+target_default: "#ff5252"
+cursor_color: "#1b5e20"
+particle_color: "#66bb6a"
+character: butterfly          # played on hit
+sounds:
+  hit: assets/sounds/forest_hit.wav
+  miss: assets/sounds/forest_miss.wav
