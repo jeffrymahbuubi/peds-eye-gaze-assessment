@@ -39,6 +39,9 @@ contract in [`docs/DATA_SCHEMA.md`](docs/DATA_SCHEMA.md).
 
 ## Install
 
+Requires **Python >= 3.11** (see `pyproject.toml`); developed and tested on
+**3.12** (pinned in `.python-version`).
+
 ```bash
 # core (headless pipeline + tests) — no Qt needed
 pip install -e ".[dev]"
@@ -46,6 +49,27 @@ pip install -e ".[dev]"
 # full GUI (Windows target)
 pip install -e ".[gui,dev]"
 ```
+
+### With `uv` (recommended — matches the dev environment exactly)
+
+```bash
+# uv reads .python-version automatically, so this creates a 3.12 venv
+uv venv
+
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+
+# core (headless pipeline + tests)
+uv pip install -e ".[dev]"
+
+# full GUI (Windows target)
+uv pip install -e ".[gui,dev]"
+```
+
+If a specific machine doesn't have Python 3.12 installed, `uv venv --python 3.12`
+will fetch and use it automatically without touching the system Python.
 
 ## Run the headless replay demo (no hardware)
 
