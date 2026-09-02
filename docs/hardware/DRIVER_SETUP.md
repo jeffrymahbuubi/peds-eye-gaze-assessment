@@ -9,7 +9,11 @@ version control — install it separately on each machine that runs this app.
 - Official download page: <https://gazept.com/downloads/>
 - A **password is required** and is issued by Gazepoint at the time of
   hardware purchase (see `docs/gazepoints/sources/gazepoint-control.md` and
-  `gazepoint-biometrics.md` in this repo).
+  `gazepoint-biometrics.md` in this repo). It is **not stored in this repo,
+  in this project's files, or anywhere in version control** — it's tied to
+  the hardware purchase, not to the codebase, and must never be committed.
+  If you don't have it, check the original purchase/order confirmation
+  email from Gazepoint, or ask the PI / whoever ordered the GP3HD.
 - The version used during development of this prototype was **Gazepoint
   7.3.0** (`Gazepoint_7.3.0.exe`). Install that version or a newer compatible
   one, using the installer's default options.
