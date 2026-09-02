@@ -18,6 +18,17 @@ version control — install it separately on each machine that runs this app.
   7.3.0** (`Gazepoint_7.3.0.exe`). Install that version or a newer compatible
   one, using the installer's default options.
 
+### Mirror (no vendor password needed)
+
+The exact installer used for this project (`Gazepoint_7.3.0.exe`) is also
+mirrored on Google Drive for convenience when setting up a new machine:
+
+<https://drive.google.com/drive/u/1/folders/139tZCs8GnjL-AQKpE62YyHi7p09Spvth>
+
+This link is tied to a personal Google account — make sure you're signed in
+with an account that has access (or that the folder is shared with the
+account you'll use on the new laptop) before relying on it.
+
 ## After installing
 
 1. Launch **Gazepoint Control** and leave it running in the background. It
