@@ -17,10 +17,19 @@ Send these to turn on the data records we need:
 <SET ID="ENABLE_SEND_TIME" STATE="1" />
 <SET ID="ENABLE_SEND_POG_FIX" STATE="1" />
 <SET ID="ENABLE_SEND_POG_BEST" STATE="1" />
-<SET ID="ENABLE_SEND_PUPIL_LEFT" STATE="1" />
-<SET ID="ENABLE_SEND_PUPIL_RIGHT" STATE="1" />
+<SET ID="ENABLE_SEND_PUPILMM" STATE="1" />
 <SET ID="ENABLE_SEND_CURSOR" STATE="1" />
 ```
+
+**Correction (2026-09-02):** pupil diameter (`LPMM`/`RPMM`, millimeters) is
+gated by the single `ENABLE_SEND_PUPILMM` command above (API manual §5.16),
+not by `ENABLE_SEND_PUPIL_LEFT`/`ENABLE_SEND_PUPIL_RIGHT` as an earlier
+version of this doc said — those two instead gate the *pixel*-based
+`LPD`/`RPD` fields (§5.9/5.10), which this client does not read. The code's
+`gazepoint.enable.pupil_left`/`pupil_right` config keys both map to the one
+`ENABLE_SEND_PUPILMM` call (see `_ENABLE_RECORDS` in
+`src/inputs/gazepoint_client.py`), kept as two keys only so they stay
+independent on/off switches in `configs/default.yaml`.
 
 `enable_command(record_id, state)` in `src/inputs/gazepoint_client.py` builds
 these.

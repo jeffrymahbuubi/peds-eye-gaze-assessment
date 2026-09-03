@@ -98,6 +98,41 @@ python -m src.main --task click_static --gui
 Operator controls (right panel): pause/resume, skip trial, and a live dwell-
 threshold slider — no restart needed to adapt to a child.
 
+## Editing a config file locally without it showing up in `git status`
+
+During experimentation you'll often want to hand-edit a tracked config file
+(`configs/default.yaml`, a task file under `configs/tasks/`, a theme, ...) to
+try different settings, without every tweak becoming a pending change to
+commit or accidentally get pushed. Git's `skip-worktree` flag does this: the
+file stays fully tracked (so a fresh clone still gets it with real content),
+but local edits are hidden from `git status`/`git diff`/`git add -A` until
+you explicitly turn tracking back on.
+
+```bash
+# Start freely editing a file locally — its future edits won't show up in git status
+git update-index --skip-worktree configs/default.yaml
+
+# Confirm which files currently have it set (look for a leading "S")
+git ls-files -v | grep '^S'
+
+# When you DO want a change in this file to actually ship, turn tracking back
+# on first, otherwise `git add`/`git commit` will silently ignore your edits
+git update-index --no-skip-worktree configs/default.yaml
+```
+
+Works the same way for any other tracked config (`configs/tasks/click_static.yaml`,
+`configs/themes/forest.yaml`, etc.) — just substitute the path.
+
+**Caveats:**
+- This is a **local, per-clone git setting** — it is not committed or shared.
+  Set it again on any other machine (e.g. the other laptop) where you want
+  the same free-editing behavior.
+- It's easy to forget it's on. If you make a config change you *do* want to
+  ship and `git status` doesn't show it, check `git ls-files -v | grep '^S'`
+  first — the file is probably still marked skip-worktree.
+- `configs/default.yaml` currently has this set (as of 2026-09-03), reverted
+  to its last committed value (`calibration.enabled: true`) beforehand.
+
 ## Tests & lint
 
 ```bash
