@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import time
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import QApplication
 
 from .data.recorder import SessionRecorder
 from .data.schema import SessionMetadata
 from .engine.calibration import Calibration
-from .engine.config import load_task_config, load_theme
+from .engine.config import CONFIG_ROOT, load_task_config, load_theme
 from .engine.feedback import FeedbackBus
 from .engine.latency import LatencyTracker
 from .engine.task_runner import build_task
@@ -28,19 +29,54 @@ from .ui.main_window import MainWindow
 
 
 class GuiFeedback(FeedbackBus):
-    """Feedback that drives on-canvas particles (audio is best-effort)."""
+    """Feedback that drives on-canvas particles and short hit/miss sound cues.
 
-    def __init__(self, canvas) -> None:
+    Sound loading is best-effort: a missing asset or a task/theme with no
+    `sounds` block just means silence, never a crash (matches the tolerant
+    style used elsewhere on this startup path, e.g. Calibration's stub mode).
+    """
+
+    # Deliberately below full volume: these cues need to never add to
+    # sensory overstimulation for a child with sensory sensitivity, which
+    # weighed into how the sound assets themselves were designed/generated
+    # (SPEC-2026-09-02.md item 4 — short, soft, non-startling cues).
+    _VOLUME = 0.6
+
+    def __init__(self, canvas, theme: dict | None = None, feedback_cfg: dict | None = None) -> None:
         self.canvas = canvas
+        theme = theme or {}
+        feedback_cfg = feedback_cfg or {}
+        self._hit_sound = (
+            self._load_sound(theme, "hit") if feedback_cfg.get("hit_sound", True) else None
+        )
+        self._miss_sound = (
+            self._load_sound(theme, "miss") if feedback_cfg.get("miss_sound", True) else None
+        )
+
+    @staticmethod
+    def _load_sound(theme: dict, key: str) -> QSoundEffect | None:
+        rel_path = theme.get("sounds", {}).get(key)
+        if not rel_path:
+            return None
+        path = CONFIG_ROOT / rel_path
+        if not path.exists():
+            return None
+        effect = QSoundEffect()
+        effect.setSource(QUrl.fromLocalFile(str(path)))
+        effect.setVolume(GuiFeedback._VOLUME)
+        return effect
 
     def on_target_shown(self, x: float, y: float) -> None:
         pass
 
     def on_hit(self, x: float, y: float) -> None:
         self.canvas.burst(x, y)
+        if self._hit_sound is not None:
+            self._hit_sound.play()
 
     def on_miss(self, x: float, y: float) -> None:
-        pass
+        if self._miss_sound is not None:
+            self._miss_sound.play()
 
     def on_progress(self, x: float, y: float, progress: float) -> None:
         pass
@@ -114,7 +150,9 @@ class AssessmentApp:
         self.metadata.calibration_points = cal.n_points
         self.metadata.calibration_error_px = cal.mean_error_px
 
-        self.feedback = GuiFeedback(self.canvas)
+        self.feedback = GuiFeedback(
+            self.canvas, self.theme, self.config.get("task", {}).get("feedback", {})
+        )
         self.task = build_task(task_id, self.config, recorder=self.recorder, feedback=self.feedback)
 
         self._paused = False
@@ -206,6 +244,7 @@ class AssessmentApp:
             cursor_valid=pointer.valid,
             dwell_progress=result.dwell_progress,
             selectable=result.selectable,
+            layout_slots=self.task.layout_slots,
         )
 
         self._update_fps(t_ns)

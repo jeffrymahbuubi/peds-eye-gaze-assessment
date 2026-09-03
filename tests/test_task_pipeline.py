@@ -45,6 +45,34 @@ def test_task_overrides_deep_merge_into_globals(tmp_path: Path):
     assert cfg["task"]["trials"] == 4
 
 
+def test_click_grid_exposes_layout_slots_for_gui():
+    cfg = load_task_config("click_grid")
+    task = build_task("click_grid", cfg)
+    rows = cfg["task"]["grid"]["rows"]
+    cols = cfg["task"]["grid"]["cols"]
+    assert task.layout_slots is not None
+    assert len(task.layout_slots) == rows * cols
+    # every trial's target is one of the declared cells
+    slot_set = set(task.layout_slots)
+    assert all((t.x_norm, t.y_norm) in slot_set for t in task.targets)
+
+
+def test_scanning_exposes_layout_slots_for_gui():
+    cfg = load_task_config("scanning")
+    task = build_task("scanning", cfg)
+    n_icons = cfg["task"]["layout"]["n_icons"]
+    assert task.layout_slots is not None
+    assert len(task.layout_slots) == n_icons
+    slot_set = set(task.layout_slots)
+    assert all((t.x_norm, t.y_norm) in slot_set for t in task.targets)
+
+
+def test_click_static_has_no_layout_slots():
+    cfg = load_task_config("click_static")
+    task = build_task("click_static", cfg)
+    assert task.layout_slots is None
+
+
 def test_set_screen_size_ignores_non_positive_values():
     cfg = load_task_config("click_static")
     task = build_task("click_static", cfg)

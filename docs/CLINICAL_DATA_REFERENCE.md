@@ -80,21 +80,32 @@ Raw event log (`TARGET_SHOWN`, `HIT`, `TIMEOUT`, `MISS_CLICK`, `LATENCY_SAMPLE`)
 that `trials.csv` is derived from — useful for re-deriving custom metrics
 later, but not a distinct clinical data source beyond what's summarized above.
 
-## Fields recorded today but not yet analyzed
+## Fields recorded and now aggregated (updated 2026-09-03)
 
-`analysis/analyze_session.py` currently only computes hit rate, timeout
-count, mean reaction time, a reaction-time histogram, and a 2D gaze heatmap.
-The following are already being **recorded** in `gaze_stream.csv` but never
-**aggregated** into a session-level summary, despite being clinically
-relevant per the sources below:
+`analysis/analyze_session.py` computes hit rate, timeout count, mean
+reaction time, a reaction-time histogram, and a 2D gaze heatmap — **and, as
+of 2026-09-03, also**:
 
-- Fixation frequency/count (`fixation_id`)
-- Fixation duration distribution (`fix_duration_s`)
-- Off-screen / invalid-sample proportion (`valid`)
-- Pupil diameter trends (`pupil_left`/`pupil_right`)
+- Fixation count and rate/min (`fixation_id`)
+- Fixation duration mean/median/max (`fix_duration_s`)
+- Saccade count and rate/min (derived from fixation-id transitions)
+- Valid-gaze ratio, i.e. tracked vs. off-screen/invalid proportion (`valid`)
+- Mean pupil diameter, left/right (`pupil_left`/`pupil_right`)
+- Distinct fixation count per trial (single-target-fixation vs.
+  target-target-fixation-shift signal)
 
-This is a candidate for a future analysis-script extension, not something
-implemented as part of this reference doc.
+via `src/data/exporter.py::compute_fixation_saccade_metrics` and
+`compute_trial_fixation_counts`, written to a new `session_metrics.json` in
+the session directory alongside the existing outputs. See
+`docs/specs/SPEC-2026-09-02.md` item 6 for the implementation writeup and
+[[peds-eye-gaze-assessment-physician-feedback-2026-09-02]] for the memory
+pointer.
+
+**Still not done** (candidate for future work, not implemented here): the
+off-screen-proportion / saccade-latency features from the AUC≥0.90 CVI
+classifier study aren't separately broken out (fixation/saccade *rate* is,
+but not latency specifically), and there's no formal CVI-classification-style
+report or dashboard built on top of this raw aggregation layer yet.
 
 ## Gazepoint Analysis's own session-level summary — is it API-accessible?
 
@@ -137,12 +148,12 @@ from `gaze_stream.csv`, not pulled from Gazepoint Analysis.
 
 | Category | Metric | Why it matters for CP/neuro assessment | Already recorded? |
 |---|---|---|---|
-| Data quality | % valid/on-screen samples, calibration error | A 2025 CP study found 6/39 children couldn't calibrate to the required accuracy at all — a clinical signal, not just QC. A toddler eye-tracking battery study (eLife 2023) uses accuracy + precision as its two general per-session data-quality proxies. | `valid`, `calibration_error_px` — yes, not yet aggregated |
-| Fixation | Mean/median fixation duration, fixation count/rate | One of six features reaching AUC ≥0.90 classifying CVI (common in CP) vs. controls (2025 study, cited above in this doc). | `fixation_id`, `fix_duration_s` — yes, not yet aggregated |
-| Saccade | Latency (≈ time-to-first-fixation), amplitude, direction | Same 2025 study. Amplitude/direction are exactly the two fields Gazepoint doesn't expose live (see above) — would need in-house computation from consecutive fixation POGs. | Latency: yes (`time_to_first_fixation_ms`). Amplitude/direction: not recorded |
+| Data quality | % valid/on-screen samples, calibration error | A 2025 CP study found 6/39 children couldn't calibrate to the required accuracy at all — a clinical signal, not just QC. A toddler eye-tracking battery study (eLife 2023) uses accuracy + precision as its two general per-session data-quality proxies. | `valid`, `calibration_error_px` — **aggregated 2026-09-03** (`valid_ratio` in `session_metrics.json`; calibration error was already in `metadata.json`) |
+| Fixation | Mean/median fixation duration, fixation count/rate | One of six features reaching AUC ≥0.90 classifying CVI (common in CP) vs. controls (2025 study, cited above in this doc). | `fixation_id`, `fix_duration_s` — **aggregated 2026-09-03** (session-level mean/median/max duration, count, rate/min; plus a new per-trial fixation count not in the original design-toward list) |
+| Saccade | Latency (≈ time-to-first-fixation), amplitude, direction | Same 2025 study. Amplitude/direction are exactly the two fields Gazepoint doesn't expose live (see above) — would need in-house computation from consecutive fixation POGs. | Latency: yes (`time_to_first_fixation_ms`, per-trial). Saccade **count/rate aggregated 2026-09-03** (session-level, from fixation-id transitions). Amplitude/direction: still not recorded — a distinct latency-per-saccade metric also isn't broken out separately from the existing per-trial time-to-first-fixation |
 | Task performance | Hit rate / accuracy %, mean reaction time, time-on-task | Matches the metrics used in the published Compass-based longitudinal CP study `click_grid` is modeled on. | Yes, already computed by `analysis/analyze_session.py` |
 | Selection precision | Revisit / re-attempt counts | A 2026 CP oculomotor-training study (ScienceDirect, *Acta Psychologica*) tracked "fixation precision and visual exploration" pre/post intervention using gaze-driven games; this app's `attempts` field is a rough analogue. | Yes (`attempts`), not yet framed as a precision metric |
-| Pupil | Mean/trend pupil diameter | Secondary priority — literature treats it mainly as an attention/cognitive-load signal, not CP-specific. | Yes, not yet aggregated |
+| Pupil | Mean/trend pupil diameter | Secondary priority — literature treats it mainly as an attention/cognitive-load signal, not CP-specific. | **Aggregated 2026-09-03** — mean pupil L/R mm in `session_metrics.json`; trend-over-time still not computed |
 
 **Planned next step (not yet started):** the user intends to pull a sample
 export from Gazepoint Analysis directly (`_all_gaze.csv`, `_fixations.csv`,

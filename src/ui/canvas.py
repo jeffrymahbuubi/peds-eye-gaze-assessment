@@ -27,6 +27,7 @@ class TaskCanvas(QWidget):
         self.target_xy_norm: tuple[float, float] | None = None
         self.target_radius_px: float = 90.0
         self.target_color = QColor(self.theme.get("target_default", "#ff5252"))
+        self.layout_slots: list[tuple[float, float]] = []
         self.cursor_xy_norm: tuple[float, float] = (0.5, 0.5)
         self.cursor_valid: bool = False
         self.dwell_progress: float = 0.0
@@ -45,6 +46,7 @@ class TaskCanvas(QWidget):
         cursor_valid: bool,
         dwell_progress: float,
         selectable: bool = True,
+        layout_slots: list[tuple[float, float]] | None = None,
     ) -> None:
         self.target_xy_norm = target_xy_norm
         self.target_radius_px = target_radius_px
@@ -52,6 +54,7 @@ class TaskCanvas(QWidget):
         self.cursor_valid = cursor_valid
         self.dwell_progress = dwell_progress
         self.selectable = selectable
+        self.layout_slots = layout_slots or []
         self.update()
 
     def burst(self, x_norm: float, y_norm: float) -> None:
@@ -66,6 +69,9 @@ class TaskCanvas(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), self._bg)
 
+        if self.layout_slots:
+            self._draw_layout_slots(painter, w, h)
+
         if self.target_xy_norm is not None:
             tx, ty = norm_to_px(*self.target_xy_norm, w, h)
             self._draw_target(painter, tx, ty)
@@ -79,6 +85,32 @@ class TaskCanvas(QWidget):
             self._draw_cursor(painter, cx, cy)
 
         painter.end()
+
+    def _draw_layout_slots(self, painter: QPainter, w: int, h: int) -> None:
+        """Draw the unlit candidate positions of a multi-item task.
+
+        click_grid's 3x3 cells and scanning's icon row are otherwise invisible
+        between trials — only the single active target is ever painted — which
+        made the two tasks (and click_static) look identical to an observer.
+        This paints every other slot as a dim outline so the layout itself is
+        visible, while the active target (painted afterwards) stays the only
+        filled, bright shape.
+        """
+        r = self.target_radius_px
+        pen = painter.pen()
+        pen.setColor(QColor("#ffffff"))
+        pen.setWidth(2)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setOpacity(0.25)
+        for xn, yn in self.layout_slots:
+            if self.target_xy_norm is not None and math.isclose(xn, self.target_xy_norm[0], abs_tol=1e-6) and math.isclose(
+                yn, self.target_xy_norm[1], abs_tol=1e-6
+            ):
+                continue  # the active slot is drawn as the real target instead
+            sx, sy = norm_to_px(xn, yn, w, h)
+            painter.drawEllipse(QPointF(sx, sy), r, r)
+        painter.setOpacity(1.0)
 
     def _draw_target(self, painter: QPainter, x: float, y: float) -> None:
         r = self.target_radius_px

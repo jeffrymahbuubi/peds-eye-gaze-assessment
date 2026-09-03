@@ -27,6 +27,8 @@ class ClickGridTask(BaseTask):
                 y = margin + (span * (r + 0.5) / rows)
                 cells.append((x, y))
 
+        self.layout_slots = cells  # exposed for the GUI to draw the unlit grid cells
+
         # Randomized order, cycling through all cells if n_trials > len(cells).
         order: list[tuple[float, float]] = []
         while len(order) < n_trials:

@@ -80,6 +80,12 @@ class BaseTask:
         self.iti_ns = int(self.task_cfg.get("inter_trial_interval_ms", 800) * 1e6)
         self.jitter_px = float(config.get("dwell", {}).get("jitter_tolerance_px", 40))
 
+        # Populated by subclasses (in build_targets) that lay out multiple
+        # candidate positions on screen at once — e.g. click_grid's cells or
+        # scanning's icon row. The GUI draws these as dim, unlit markers so
+        # the multi-item layout is actually visible (SPEC-2026-09-02.md #3).
+        # Stays None for single-target tasks (click_static, follow_moving).
+        self.layout_slots: list[tuple[float, float]] | None = None
         self.targets: list[TargetSpec] = self.build_targets()
         self.trials: list[TrialRecord] = []
 

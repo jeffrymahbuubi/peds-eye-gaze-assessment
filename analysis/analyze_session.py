@@ -12,13 +12,19 @@ Usage::
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 # Allow running as a script (add repo root to path).
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.data.exporter import load_trials_rows, summarize  # noqa: E402
+from src.data.exporter import (  # noqa: E402
+    compute_fixation_saccade_metrics,
+    compute_trial_fixation_counts,
+    load_trials_rows,
+    summarize,
+)
 
 
 def _reaction_times_ms(session_dir: Path) -> list[float]:
@@ -99,6 +105,35 @@ def main(argv: list[str]) -> int:
     print(f"  hits       : {summary['n_hits']}  (hit rate {summary['hit_rate']})")
     print(f"  timeouts   : {summary['n_timeouts']}")
     print(f"  mean RT ms : {summary['mean_reaction_time_ms']}")
+
+    fix = compute_fixation_saccade_metrics(session_dir)
+    trial_fix_counts = compute_trial_fixation_counts(session_dir)
+    print("  --- fixation / saccade / pupil (session-level) ---")
+    print(f"  valid gaze ratio      : {fix['valid_ratio']}")
+    print(f"  fixations             : {fix['n_fixations']}  ({fix['fixation_rate_per_min']}/min)")
+    print(
+        "  fixation duration s   : "
+        f"mean {fix['mean_fixation_duration_s']}  "
+        f"median {fix['median_fixation_duration_s']}  "
+        f"max {fix['max_fixation_duration_s']}"
+    )
+    print(f"  saccades              : {fix['n_saccades']}  ({fix['saccade_rate_per_min']}/min)")
+    print(f"  pupil L/R mm (mean)   : {fix['mean_pupil_left_mm']} / {fix['mean_pupil_right_mm']}")
+    print(f"  fixations per trial   : {trial_fix_counts}")
+
+    metrics_path = session_dir / "session_metrics.json"
+    metrics_path.write_text(
+        json.dumps(
+            {
+                "summary": summary,
+                "fixation_saccade": fix,
+                "fixations_per_trial": trial_fix_counts,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    print(f"  metrics json          : {metrics_path}")
 
     rts = _reaction_times_ms(session_dir)
     xs, ys = _gaze_xy(session_dir)

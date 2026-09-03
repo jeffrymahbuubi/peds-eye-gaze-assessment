@@ -22,7 +22,7 @@ class ScanningTask(BaseTask):
         slots = [
             ((i + 0.5) / n_icons, 0.5) for i in range(n_icons)
         ]
-        self.icon_slots = slots  # exposed for the GUI to draw distractors
+        self.layout_slots = slots  # exposed for the GUI to draw distractor icons
 
         targets: list[TargetSpec] = []
         for i in range(n_trials):
