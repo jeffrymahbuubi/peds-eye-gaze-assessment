@@ -1,7 +1,9 @@
 # SPEC-live-settings-panel — Live Settings & Debug Panel
 
-**Status:** implemented, live-validated via qt-mcp, and per-task replay
-fixtures built (2026-09-04). Not yet committed.
+**Status:** implemented, live-validated via qt-mcp, per-task replay fixtures
+built, and committed+pushed (`89d0019`). The disclosed "0 hits in --replay"
+issue is root-caused and fixed (local `configs/default.yaml` config drift,
+not a code defect) — see the final 2026-09-04 log entry.
 **Created:** 2026-09-04
 **Last updated:** 2026-09-04
 
@@ -349,9 +351,52 @@ wants a "Save as default" action, that is new scope, not covered here.
   (unrelated to this task's scope, and previously left alone twice before);
   flagged clearly in `README.md`'s replay section so a future session (or
   the user evaluating a replay run) isn't confused by trials that time out
-  rather than register hits. **Worth investigating in a dedicated future
-  session** — this affects every task's replay-mode usefulness, not just
-  the ones touched today.
+  rather than register hits. **Root-caused and fixed later the same
+  session, see below.**
+
+- **2026-09-04, later still — the "0 hits" issue root-caused and fixed
+  (user asked to tackle it directly).** Traced frame-by-frame with a
+  diagnostic script driving `DwellSelector`/`BaseTask.update()` directly
+  against the fixture: `on_target` did fire (confirming hit-testing/geometry
+  were fine), but `dwell_progress` never rose above 0 -- meaning
+  `DwellSelector.update()` was never even being called.
+  `BaseTask.update()` only calls it when `self.input_mode == "eye"`
+  (`src/tasks/base_task.py`); the committed default is `input.mode: eye`,
+  but the **local, `skip-worktree`'d `configs/default.yaml`** (see
+  [[peds-eye-gaze-assessment-config-skip-worktree-2026-09-03]]) had
+  `mode: switch` -- left over from an unrelated switch-mode debugging
+  session days earlier. `switch` mode requires an explicit click to select
+  (documented in the file's own comment as "for setup testing"); dwell
+  accumulation is skipped entirely, so no `--replay` fixture -- however
+  well-built -- could ever produce a hit, in either headless or live-GUI
+  mode. **Not a code defect anywhere in the dwell/replay/fixture pipeline.**
+  Verified by temporarily overriding `input.mode` to `eye`: the exact same
+  `gaze_replay_click_static.jsonl` fixture went from 0/13 hits to 16/19
+  (84%) headlessly, and `test_click_static_records_hits` passed. This is
+  also the root cause of that test's own previously-flagged, previously
+  "not investigated" failure across multiple prior sessions -- it was never
+  a pipeline regression, just this same local config drift, unnoticed until
+  now because `skip-worktree` hides it from `git status`/`git diff`.
+  **Fix applied, with the user's explicit go-ahead** (asked first, since
+  this file is deliberately local-only and a past session's own convention
+  is not to silently revert someone's skip-worktree edit): local
+  `configs/default.yaml`'s `input.mode` flipped from `switch` back to
+  `eye`. Confirmed live via qt-mcp: launched `click_static --gui --replay`
+  with the fix in place, watched trial progression go from ~8.8s/trial
+  (constant timeouts, as in every session before this fix) to ~2.4s/trial
+  (real dwell completions); a clean session close (`Escape`) showed 12/13
+  hits (92%) in `trials.csv`. Full test suite: down to **one** remaining
+  pre-existing failure, `test_config_merges_task_over_default` (the
+  separate, already-documented `target_fps: 60` vs `150` stale assertion,
+  unrelated to input mode -- not touched, still a one-line fix for whoever
+  picks it up next). `README.md`'s replay section rewritten from "hits are
+  currently unreliable" to a troubleshooting note pointing straight at
+  `input.mode`, since a future session hitting this same symptom now has an
+  immediate, correct answer instead of re-diagnosing from scratch.
+  **This is a config-only fix** -- `configs/default.yaml` is
+  `skip-worktree`'d, so nothing here shows in `git status`/`git diff` or
+  needs a commit; only the `README.md`/this SPEC's documentation updates
+  are real, committable changes from this entry.
   Also updated `README.md`: per-task fixture generation commands, the new
   pre-launch task settings dialog + `--skip-task-settings`, and the Basic/
   Advanced operator-panel controls, replacing the stale single dwell-slider

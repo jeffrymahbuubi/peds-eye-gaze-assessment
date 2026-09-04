@@ -90,13 +90,16 @@ Any of the four tasks works: `--task click_grid|follow_moving|scanning` — use
 that task's own fixture (`gaze_replay_<task>.jsonl`) so the simulated gaze
 actually lines up with that task's target layout. All four are generated
 from the real task classes' own layout, not a hand-duplicated copy, so they
-can never drift out of sync with `configs/tasks/*.yaml`. Note: dwell-triggered
-hits are currently unreliable in `--replay` mode for every task — a
-pre-existing, already-flagged issue unrelated to the fixture generator (see
-SPEC-live-settings-panel.md's 2026-09-04 log entry) — so a replay run's
-trials mostly time out rather than register as hits; the fixtures are still
-useful for exercising the settings panel and watching the canvas/cursor
-behave correctly.
+can never drift out of sync with `configs/tasks/*.yaml`.
+
+**If a replay run shows nothing but timeouts, no hits at all:** check
+`input.mode` in `configs/default.yaml` is `eye`, not `switch`. `switch` mode
+requires an explicit mouse/keyboard click to register a hit — dwell-based
+selection never runs at all, so a `--replay` fixture (which never sends a
+click) can never hit regardless of how well it's built. `eye` is the
+committed default; if your local copy differs, it's a `skip-worktree`d local
+edit left over from switch-mode testing (see the section below), not
+something wrong with the fixture or the replay pipeline.
 
 ## Run the GUI (needs the `gui` extra)
 
