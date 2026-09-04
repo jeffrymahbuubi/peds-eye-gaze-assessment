@@ -22,6 +22,10 @@ dwell:
   jitter_tolerance_px: 40      # allowed jitter while dwelling
   visual_cursor: true          # show gaze cursor
   progress_ring: true          # ring progress indicator on target
+  instant_feedback: true       # bright ring the instant gaze lands on target, not gated by dwell fill (SPEC item 2)
+  smoothing:
+    enabled: true               # smooth raw gaze before it drives the cursor/hit-testing (SPEC item 1)
+    alpha: 0.35                  # 0-1: lower = smoother but laggier, higher = more responsive but jitterier
 
 calibration:
   enabled: true         # false = skip calibration entirely on this launch (CALIBRATE_START never sent)

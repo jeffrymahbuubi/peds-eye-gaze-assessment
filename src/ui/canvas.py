@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QRadialGradient
+from PySide6.QtGui import QColor, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import QWidget
 
 from ..inputs.base import norm_to_px
@@ -34,6 +34,8 @@ class TaskCanvas(QWidget):
         self.selectable: bool = True
         self.show_cursor: bool = True
         self.show_progress_ring: bool = True
+        self.show_instant_feedback: bool = True
+        self.on_target: bool = False
         self._particles: list[tuple[float, float, float]] = []  # x_norm, y_norm, age
 
     # -- state updates from the app loop ----------------------------------
@@ -47,6 +49,7 @@ class TaskCanvas(QWidget):
         dwell_progress: float,
         selectable: bool = True,
         layout_slots: list[tuple[float, float]] | None = None,
+        on_target: bool = False,
     ) -> None:
         self.target_xy_norm = target_xy_norm
         self.target_radius_px = target_radius_px
@@ -55,6 +58,7 @@ class TaskCanvas(QWidget):
         self.dwell_progress = dwell_progress
         self.selectable = selectable
         self.layout_slots = layout_slots or []
+        self.on_target = on_target
         self.update()
 
     def burst(self, x_norm: float, y_norm: float) -> None:
@@ -75,6 +79,8 @@ class TaskCanvas(QWidget):
         if self.target_xy_norm is not None:
             tx, ty = norm_to_px(*self.target_xy_norm, w, h)
             self._draw_target(painter, tx, ty)
+            if self.show_instant_feedback and self.on_target:
+                self._draw_instant_feedback(painter, tx, ty)
             if self.show_progress_ring and self.dwell_progress > 0:
                 self._draw_progress_ring(painter, tx, ty)
 
@@ -97,10 +103,7 @@ class TaskCanvas(QWidget):
         filled, bright shape.
         """
         r = self.target_radius_px
-        pen = painter.pen()
-        pen.setColor(QColor("#ffffff"))
-        pen.setWidth(2)
-        painter.setPen(pen)
+        painter.setPen(QPen(QColor("#ffffff"), 2))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setOpacity(0.25)
         for xn, yn in self.layout_slots:
@@ -122,20 +125,38 @@ class TaskCanvas(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QPointF(x, y), r, r)
         if self.selectable:
-            # bright "catch me now" outline during the selectable window
-            pen = painter.pen()
-            pen.setColor(QColor("#ffffff"))
-            pen.setWidth(4)
-            painter.setPen(pen)
+            # bright "catch me now" outline during the selectable window.
+            # Must be a freshly-constructed QPen, not painter.pen() mutated in
+            # place -- the painter's current pen is NoPen (just used for the
+            # gradient fill above), and changing a NoPen pen's color/width
+            # does not change its style, so the outline silently never drew.
+            painter.setPen(QPen(QColor("#ffffff"), 4))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(QPointF(x, y), r + 4, r + 4)
 
+    def _draw_instant_feedback(self, painter: QPainter, x: float, y: float) -> None:
+        """Immediate acknowledgment that gaze is on the target right now.
+
+        SPEC-2026-09-02.md item 2: the only prior on-target feedback was the
+        dwell progress ring, which needs threshold_ms (800ms default) of
+        accumulated dwell before it's visibly obvious -- so "gaze lands on
+        target" and "nothing happens for the better part of a second" looked
+        identical. This is a full-brightness ring drawn the instant on_target
+        is true, not gated by dwell progress at all.
+        """
+        r = self.target_radius_px + 10
+        painter.setPen(QPen(QColor(self.theme.get("cursor_color", "#ffffff")), 5))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(QPointF(x, y), r, r)
+
     def _draw_progress_ring(self, painter: QPainter, x: float, y: float) -> None:
         r = self.target_radius_px + 16
-        pen = painter.pen()
-        pen.setColor(QColor(self.theme.get("cursor_color", "#ffffff")))
-        pen.setWidth(8)
-        painter.setPen(pen)
+        # Same NoPen-carryover fix as _draw_instant_feedback/_draw_target: a
+        # fresh QPen, not painter.pen() mutated in place -- this arc was
+        # silently never drawn before, which is very likely the real cause
+        # behind SPEC-2026-09-02.md item 1's "toggling dwell.progress_ring
+        # produced no visible change" observation.
+        painter.setPen(QPen(QColor(self.theme.get("cursor_color", "#ffffff")), 8))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         span = int(-360 * 16 * max(0.0, min(1.0, self.dwell_progress)))
         painter.drawArc(int(x - r), int(y - r), int(2 * r), int(2 * r), 90 * 16, span)

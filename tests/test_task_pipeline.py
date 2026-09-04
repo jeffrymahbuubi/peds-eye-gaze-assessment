@@ -116,6 +116,25 @@ def test_hit_testing_uses_live_screen_size_not_config_default():
     assert task.trials[-1].is_hit is True
 
 
+def test_frame_result_reports_on_target_instantly_not_gated_by_dwell():
+    """SPEC-2026-09-02.md item 2: gaze landing on the target must be visible
+    the instant it happens, not only after threshold_ms of accumulated dwell
+    (which is what dwell_progress requires)."""
+    cfg = load_task_config("click_static")
+    task = build_task("click_static", cfg)
+    target = task.targets[0]
+
+    on_target_pointer = Pointer(x=target.x_norm, y=target.y_norm, valid=True, clicked=False)
+    result = task.update(t_ns=1_000_000, pointer=on_target_pointer)
+    assert result.on_target is True
+    # Instant, unlike dwell progress which needs sustained accumulation.
+    assert result.dwell_progress < 1.0
+
+    off_target_pointer = Pointer(x=min(1.0, target.x_norm + 0.5), y=target.y_norm, valid=True, clicked=False)
+    result = task.update(t_ns=2_000_000, pointer=off_target_pointer)
+    assert result.on_target is False
+
+
 def test_follow_moving_selection_window_gates_hits():
     cfg = load_task_config("follow_moving")
     task = build_task("follow_moving", cfg)

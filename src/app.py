@@ -22,7 +22,7 @@ from .engine.feedback import FeedbackBus
 from .engine.latency import LatencyTracker
 from .engine.task_runner import build_task
 from .inputs.base import Pointer
-from .inputs.eye_input import DwellConfig, EyeInput
+from .inputs.eye_input import DwellConfig, EyeInput, SmoothingConfig
 from .inputs.gazepoint_client import GazepointClient
 from .inputs.switch_input import SwitchInput
 from .ui.main_window import MainWindow
@@ -115,11 +115,17 @@ class AssessmentApp:
 
         self.client.start_streaming()
 
+        dwell_cfg = self.config.get("dwell", {})
+        smoothing_cfg = dwell_cfg.get("smoothing", {})
         self.eye = EyeInput(
             self.client,
             DwellConfig(
-                threshold_ms=float(self.config.get("dwell", {}).get("threshold_ms", 800)),
-                refractory_ms=float(self.config.get("dwell", {}).get("refractory_ms", 500)),
+                threshold_ms=float(dwell_cfg.get("threshold_ms", 800)),
+                refractory_ms=float(dwell_cfg.get("refractory_ms", 500)),
+            ),
+            SmoothingConfig(
+                enabled=bool(smoothing_cfg.get("enabled", True)),
+                alpha=float(smoothing_cfg.get("alpha", 0.35)),
             ),
         )
         self.switch = SwitchInput()
@@ -131,8 +137,9 @@ class AssessmentApp:
             fullscreen=bool(self.config.get("app", {}).get("fullscreen", True)),
         )
         self.canvas = self.window.canvas
-        self.canvas.show_cursor = bool(self.config.get("dwell", {}).get("visual_cursor", True))
-        self.canvas.show_progress_ring = bool(self.config.get("dwell", {}).get("progress_ring", True))
+        self.canvas.show_cursor = bool(dwell_cfg.get("visual_cursor", True))
+        self.canvas.show_progress_ring = bool(dwell_cfg.get("progress_ring", True))
+        self.canvas.show_instant_feedback = bool(dwell_cfg.get("instant_feedback", True))
 
         session_id = time.strftime("%Y-%m-%d_") + f"{subject_id}_{task_id}"
         self.metadata = SessionMetadata(
@@ -245,6 +252,7 @@ class AssessmentApp:
             dwell_progress=result.dwell_progress,
             selectable=result.selectable,
             layout_slots=self.task.layout_slots,
+            on_target=result.on_target,
         )
 
         self._update_fps(t_ns)

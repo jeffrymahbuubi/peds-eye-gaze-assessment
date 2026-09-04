@@ -51,6 +51,10 @@ class FrameResult:
     pointer: Pointer
     just_finished_trial: bool
     selectable: bool = True  # whether a selection currently counts as a hit
+    # Instant (not dwell-gated) acknowledgment that gaze is on the target right
+    # now (SPEC-2026-09-02.md item 2) -- distinct from dwell_progress, which
+    # only becomes visible after threshold_ms of accumulated on-target time.
+    on_target: bool = False
 
 
 class BaseTask:
@@ -149,6 +153,7 @@ class BaseTask:
         tx_norm, ty_norm = (None, None)
         dwell_progress = 0.0
         selectable = True
+        on_target = False
 
         if self._phase is Phase.WAIT_INPUT and target is not None and self._current is not None:
             elapsed = t_ns - self._trial_start_ns
@@ -217,6 +222,7 @@ class BaseTask:
             pointer=pointer,
             just_finished_trial=just_finished,
             selectable=selectable,
+            on_target=on_target,
         )
 
     # -- internals ---------------------------------------------------------

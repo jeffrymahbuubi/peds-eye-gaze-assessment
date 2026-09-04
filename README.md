@@ -133,10 +133,50 @@ Works the same way for any other tracked config (`configs/tasks/click_static.yam
 - `configs/default.yaml` currently has this set (as of 2026-09-03), reverted
   to its last committed value (`calibration.enabled: true`) beforehand.
 
+## Adjusting target speed and pacing between trials
+
+A physician testing the tool asked whether the moving target can go slower,
+and whether there can be more of a pause between targets. Both are already
+configurable per task in `configs/tasks/*.yaml` — this just spells out where.
+
+**How fast the `follow_moving` target moves**, in `follow_moving.yaml`:
+
+```yaml
+motion:
+  speed_frac_per_s: 0.20   # fraction of screen width the target crosses per second
+  select_window_ms: 2500   # how long the target stays selectable once it's reachable
+```
+
+Lower `speed_frac_per_s` (e.g. `0.10`) for a slower-moving target. This only
+applies to `follow_moving` — the other three tasks show a stationary target
+per trial, so there's no "movement speed" to tune for them.
+
+**The pause between one target and the next**, in every task's YAML:
+
+```yaml
+inter_trial_interval_ms: 800   # click_static/click_grid: 800, scanning: 900, follow_moving: 1000
+```
+
+Raise this (e.g. to `1500`) for a longer breather between targets. There's no
+separate "appear" animation — the next target simply pops in the instant this
+interval elapses, so this pause is the only adjustable gap between targets.
+
+**How long a trial waits before giving up** is a separate, also per-task
+setting that may be worth checking at the same time:
+
+```yaml
+timeout_ms: 8000   # click_static default; varies per task (see each task's YAML)
+```
+
+Edit `configs/tasks/<task>.yaml` (or use the `git update-index --skip-worktree`
+trick above to try values without them showing up as a pending change), then
+re-run the task to feel the new pacing. Full diagnosis behind these settings:
+`docs/specs/SPEC-2026-09-02.md`, item 5.
+
 ## Tests & lint
 
 ```bash
-pytest        # 46 tests, all headless
+pytest        # 80 tests, all headless
 ruff check .
 ```
 
