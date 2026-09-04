@@ -8,7 +8,9 @@ in :mod:`src.engine.task_runner` never touches this file.
 
 from __future__ import annotations
 
+import sys
 import time
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtMultimedia import QSoundEffect
@@ -16,7 +18,12 @@ from PySide6.QtWidgets import QApplication
 
 from .data.recorder import SessionRecorder
 from .data.schema import SessionMetadata
-from .engine.calibration import Calibration
+from .engine.calibration import (
+    Calibration,
+    CalibrationFileError,
+    load_calibration_result,
+    save_calibration_result,
+)
 from .engine.config import CONFIG_ROOT, load_task_config, load_theme
 from .engine.feedback import FeedbackBus
 from .engine.latency import LatencyTracker
@@ -83,12 +90,39 @@ class GuiFeedback(FeedbackBus):
 
 
 class AssessmentApp:
-    def __init__(self, task_id: str, replay_path: str | None, subject_id: str) -> None:
+    def __init__(
+        self,
+        task_id: str,
+        replay_path: str | None,
+        subject_id: str,
+        calibration_file: str | None = None,
+    ) -> None:
         self.config = load_task_config(task_id)
         self.task_id = task_id
         theme_name = self.config.get("task", {}).get("theme") or self.config.get("theme", {}).get("name", "forest")
         self.theme = load_theme(theme_name)
         self.input_mode = self.config.get("input", {}).get("mode", "eye")
+
+        # Computed up front (not after calibration, as before) because an
+        # auto-saved calibration.json needs the session dir to already be
+        # known before Calibration.run() executes.
+        session_id = time.strftime("%Y-%m-%d_") + f"{subject_id}_{task_id}"
+        output_root = self.config.get("recording", {}).get("output_root", "sessions")
+        session_dir = Path(output_root) / session_id
+
+        # A --calibration-file is loaded and subject-checked before touching
+        # the device at all, so a bad path or subject mismatch fails fast
+        # without opening a socket or showing any calibration UI
+        # (SPEC-2026-09-02.md item 7, Goal 1).
+        preset_calibration = None
+        if calibration_file is not None:
+            saved = load_calibration_result(calibration_file)
+            if saved.subject_id != subject_id:
+                raise CalibrationFileError(
+                    f"Calibration file subject_id {saved.subject_id!r} does not match "
+                    f"--subject {subject_id!r} ({calibration_file})"
+                )
+            preset_calibration = saved.result
 
         gp_cfg = self.config.get("gazepoint", {})
         # `enable` here is the gazepoint.enable.* block (default.yaml keys:
@@ -104,14 +138,29 @@ class AssessmentApp:
         # reader thread is consuming the same socket it will race for (and
         # can silently swallow) that response.
         cal_cfg = self.config.get("calibration", {})
-        cal = Calibration(
-            self.client,
-            n_points=int(cal_cfg.get("points", 5)),
-            enabled=bool(cal_cfg.get("enabled", True)),
-            show=bool(cal_cfg.get("show", True)),
-            point_timeout_s=cal_cfg.get("timeout_s"),
-            point_delay_s=cal_cfg.get("delay_s"),
-        ).run()
+        if preset_calibration is not None:
+            # --calibration-file wins over calibration.enabled: false -- it's
+            # a separate, explicit request to reuse a real prior measurement,
+            # not the config's own dev/no-hardware stub toggle.
+            calibration = Calibration(self.client, preset_result=preset_calibration)
+            cal = calibration.run()
+        else:
+            calibration = Calibration(
+                self.client,
+                n_points=int(cal_cfg.get("points", 5)),
+                enabled=bool(cal_cfg.get("enabled", True)),
+                show=bool(cal_cfg.get("show", True)),
+                point_timeout_s=cal_cfg.get("timeout_s"),
+                point_delay_s=cal_cfg.get("delay_s"),
+            )
+            cal = calibration.run()
+            if not calibration.is_stub:
+                # A real calibration just ran (not the no-hardware/disabled
+                # stub) -- auto-save it so a later launch can reuse it via
+                # --calibration-file. No separate save flag, per the user's
+                # 2026-09-04 design decision.
+                session_dir.mkdir(parents=True, exist_ok=True)
+                save_calibration_result(session_dir / "calibration.json", subject_id, cal)
 
         self.client.start_streaming()
 
@@ -141,7 +190,6 @@ class AssessmentApp:
         self.canvas.show_progress_ring = bool(dwell_cfg.get("progress_ring", True))
         self.canvas.show_instant_feedback = bool(dwell_cfg.get("instant_feedback", True))
 
-        session_id = time.strftime("%Y-%m-%d_") + f"{subject_id}_{task_id}"
         self.metadata = SessionMetadata(
             subject_id=subject_id,
             session_id=session_id,
@@ -149,9 +197,7 @@ class AssessmentApp:
             input_mode=self.input_mode,
             tasks=[task_id],
         )
-        self.recorder = SessionRecorder(
-            self.metadata, output_root=self.config.get("recording", {}).get("output_root", "sessions")
-        )
+        self.recorder = SessionRecorder(self.metadata, output_root=output_root)
         self.recorder.open()
 
         self.metadata.calibration_points = cal.n_points
@@ -294,8 +340,22 @@ class AssessmentApp:
         QApplication.quit()
 
 
-def run_gui(task_id: str, replay_path: str | None = None, subject_id: str = "P000") -> int:
+def run_gui(
+    task_id: str,
+    replay_path: str | None = None,
+    subject_id: str = "P000",
+    calibration_file: str | None = None,
+) -> int:
     app = QApplication.instance() or QApplication([])
-    assessment = AssessmentApp(task_id=task_id, replay_path=replay_path, subject_id=subject_id)
+    try:
+        assessment = AssessmentApp(
+            task_id=task_id,
+            replay_path=replay_path,
+            subject_id=subject_id,
+            calibration_file=calibration_file,
+        )
+    except CalibrationFileError as exc:
+        print(f"Calibration file error: {exc}", file=sys.stderr)
+        return 2
     assessment.window.show()
     return app.exec()

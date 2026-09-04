@@ -1,14 +1,25 @@
-"""Tests for Calibration.run()'s CALIBRATE_RESULT_SUMMARY polling (gap A)."""
+"""Tests for Calibration.run()'s CALIBRATE_RESULT_SUMMARY polling (gap A),
+plus the --calibration-file reuse mechanism (SPEC-2026-09-02.md item 7,
+Goal 1): preset-result short-circuiting, Calibration.is_stub, and the
+save/load_calibration_result file format.
+"""
 
 from __future__ import annotations
 
+import json
 import socket
 import threading
 import time
 
 import pytest
 
-from src.engine.calibration import Calibration
+from src.engine.calibration import (
+    Calibration,
+    CalibrationFileError,
+    CalibrationResult,
+    load_calibration_result,
+    save_calibration_result,
+)
 
 
 class _ScriptedServer:
@@ -142,9 +153,70 @@ def _wait_until(predicate, timeout_s: float = 2.0, interval_s: float = 0.02) -> 
     return predicate()
 
 
-def test_invalid_n_points_raises():
+def test_zero_points_raises():
     with pytest.raises(ValueError):
-        Calibration(client=None, n_points=7)
+        Calibration(client=None, n_points=0)
+
+
+def test_more_than_nine_points_raises():
+    # No vendor or project precedent exists for a layout beyond the 9-point
+    # pool (SPEC-2026-09-02.md item 7 Goal 2) -- deliberately out of scope.
+    with pytest.raises(ValueError):
+        Calibration(client=None, n_points=10)
+
+
+@pytest.mark.parametrize("n", [1, 2, 3, 4, 6, 7, 8])
+def test_sub_5_and_between_5_9_points_send_clear_then_n_addpoints(n):
+    # Goal 2: point counts other than the two vendor/project-precedented ones
+    # (5, 9) now work, via CALIBRATE_CLEAR + N CALIBRATE_ADDPOINT commands --
+    # the same mechanism 9-point calibration already used.
+    server = _ScriptedServer([
+        (0.05, f'<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="10.0" VALID_POINTS="{n}" />\r\n'),
+    ])
+    try:
+        sock = server.connect_client_socket()
+        Calibration(client=_StubClient(sock), n_points=n, timeout_s=2.0).run()
+        assert _wait_until(lambda: server.received_text().count("CALIBRATE_ADDPOINT") == n)
+        sent = server.received_text()
+        assert 'ID="CALIBRATE_CLEAR"' in sent
+        assert 'ID="CALIBRATE_RESET"' not in sent
+    finally:
+        server.close()
+
+
+def test_1_point_layout_is_just_the_center():
+    server = _ScriptedServer([
+        (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="10.0" VALID_POINTS="1" />\r\n'),
+    ])
+    try:
+        sock = server.connect_client_socket()
+        Calibration(client=_StubClient(sock), n_points=1, timeout_s=2.0).run()
+        assert _wait_until(lambda: "CALIBRATE_ADDPOINT" in server.received_text())
+        sent = server.received_text()
+        assert sent.count("CALIBRATE_ADDPOINT") == 1
+        assert 'X="0.5" Y="0.5"' in sent
+    finally:
+        server.close()
+
+
+def test_4_point_layout_is_center_plus_first_three_corners():
+    # Pool order is center-first (matching the vendor's own 5/9-point
+    # ordering), so n=4 takes the center + the first 3 of the 4 corners --
+    # not "4 corners, no center." The 4th corner (0.15, 0.15) is pool[4],
+    # i.e. only included once n >= 5.
+    server = _ScriptedServer([
+        (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="10.0" VALID_POINTS="4" />\r\n'),
+    ])
+    try:
+        sock = server.connect_client_socket()
+        Calibration(client=_StubClient(sock), n_points=4, timeout_s=2.0).run()
+        assert _wait_until(lambda: server.received_text().count("CALIBRATE_ADDPOINT") == 4)
+        sent = server.received_text()
+        for x, y in [(0.5, 0.5), (0.85, 0.15), (0.85, 0.85), (0.15, 0.85)]:
+            assert f'X="{x}" Y="{y}"' in sent
+        assert 'X="0.15" Y="0.15"' not in sent  # the 4th corner, excluded at n=4
+    finally:
+        server.close()
 
 
 def test_5_points_sends_calibrate_reset_not_addpoint():
@@ -222,3 +294,102 @@ def test_point_timeout_and_delay_send_set_commands():
         assert 'ID="CALIBRATE_DELAY" VALUE="1.0"' in sent
     finally:
         server.close()
+
+
+# -- preset_result / is_stub (--calibration-file reuse) --------------------
+
+
+def test_preset_result_returned_without_touching_socket():
+    server = _ScriptedServer([])  # would hang/timeout if Calibration.run() ever queried it
+    try:
+        sock = server.connect_client_socket()
+        preset = CalibrationResult(n_points=9, mean_error_px=12.5, valid=True)
+        result = Calibration(client=_StubClient(sock), preset_result=preset).run()
+        assert result == preset
+        time.sleep(0.1)
+        assert server.received_text() == ""  # no CALIBRATE_* commands sent at all
+    finally:
+        server.close()
+
+
+def test_preset_result_works_with_no_client_at_all():
+    preset = CalibrationResult(n_points=5, mean_error_px=8.0, valid=True)
+    result = Calibration(client=None, preset_result=preset).run()
+    assert result == preset
+
+
+def test_preset_result_skips_n_points_validation():
+    # n_points=15 is out of the 1-9 pool range and would normally raise --
+    # a preset result bypasses that check since no device points are sent.
+    preset = CalibrationResult(n_points=15, mean_error_px=5.0, valid=True)
+    calibration = Calibration(client=None, n_points=5, preset_result=preset)
+    assert calibration.n_points == 15
+    assert calibration.run() == preset
+
+
+def test_is_stub_true_when_no_socket():
+    assert Calibration(client=_StubClient(None), n_points=5).is_stub is True
+
+
+def test_is_stub_true_when_disabled():
+    server = _ScriptedServer([])
+    try:
+        sock = server.connect_client_socket()
+        assert Calibration(client=_StubClient(sock), n_points=5, enabled=False).is_stub is True
+    finally:
+        server.close()
+
+
+def test_is_stub_false_with_real_socket_and_enabled():
+    server = _ScriptedServer([])
+    try:
+        sock = server.connect_client_socket()
+        assert Calibration(client=_StubClient(sock), n_points=5, enabled=True).is_stub is False
+    finally:
+        server.close()
+
+
+# -- save_calibration_result / load_calibration_result ---------------------
+
+
+def test_save_then_load_round_trips(tmp_path):
+    path = tmp_path / "calibration.json"
+    result = CalibrationResult(n_points=9, mean_error_px=17.25, valid=True)
+    save_calibration_result(path, "P042", result)
+
+    saved = load_calibration_result(path)
+    assert saved.subject_id == "P042"
+    assert saved.result == result
+    assert saved.calibrated_at  # a non-empty ISO timestamp string
+
+
+def test_save_writes_none_mean_error_as_null(tmp_path):
+    path = tmp_path / "calibration.json"
+    result = CalibrationResult(n_points=5, mean_error_px=None, valid=False)
+    save_calibration_result(path, "P001", result)
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["mean_error_px"] is None
+
+    saved = load_calibration_result(path)
+    assert saved.result.mean_error_px is None
+    assert saved.result.valid is False
+
+
+def test_load_missing_file_raises_calibration_file_error(tmp_path):
+    with pytest.raises(CalibrationFileError, match="not found"):
+        load_calibration_result(tmp_path / "does_not_exist.json")
+
+
+def test_load_malformed_json_raises_calibration_file_error(tmp_path):
+    path = tmp_path / "calibration.json"
+    path.write_text("{not valid json", encoding="utf-8")
+    with pytest.raises(CalibrationFileError, match="not valid JSON"):
+        load_calibration_result(path)
+
+
+def test_load_missing_fields_raises_calibration_file_error(tmp_path):
+    path = tmp_path / "calibration.json"
+    path.write_text(json.dumps({"subject_id": "P001"}), encoding="utf-8")
+    with pytest.raises(CalibrationFileError, match="missing/invalid fields"):
+        load_calibration_result(path)

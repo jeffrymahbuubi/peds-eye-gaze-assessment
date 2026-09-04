@@ -98,6 +98,55 @@ python -m src.main --task click_static --gui
 Operator controls (right panel): pause/resume, skip trial, and a live dwell-
 threshold slider — no restart needed to adapt to a child.
 
+## Testing `--calibration-file` without a device
+
+`--calibration-file PATH` skips a fresh calibration and reuses a previously
+saved `calibration.json` (auto-written to `<session_dir>/calibration.json`
+whenever a real calibration actually runs — see SPEC-2026-09-02.md item 7).
+There are two things to test here, and only one needs a stand-in for the
+device:
+
+**Reusing a file (no device or fake server needed at all)** — `--replay`
+never opens a socket, so a hand-written calibration file works directly:
+
+```bash
+python -m src.main --task click_static --gui \
+  --replay tests/fixtures/gaze_replay.jsonl \
+  --subject DEMO01 \
+  --calibration-file path/to/calibration.json
+```
+
+`calibration.json`'s `subject_id` must match `--subject` exactly, or the app
+hard-errors before opening any window. A minimal valid file:
+
+```json
+{"subject_id": "DEMO01", "n_points": 5, "mean_error_px": 8.0, "valid": true, "calibrated_at": "2026-01-01T00:00:00+00:00"}
+```
+
+**Auto-save from a real calibration** only happens when a live socket
+actually completes a calibration handshake — `--replay` can never trigger
+it. `tools/fake_gazepoint_server.py` stands in for Gazepoint Control just
+well enough to exercise this:
+
+```bash
+# terminal 1
+python tools/fake_gazepoint_server.py
+
+# terminal 2 — temporarily point gazepoint.host at 127.0.0.1 first (see the
+# skip-worktree section below), then run WITHOUT --replay:
+python -m src.main --task click_static --gui --subject DEMO01
+# → sessions/<date>_DEMO01_click_static/calibration.json should now exist
+
+# reuse it on a later launch:
+python -m src.main --task click_static --gui --subject DEMO01 \
+  --calibration-file sessions/<date>_DEMO01_click_static/calibration.json
+```
+
+Point `gazepoint.host` back at the real device's address when done. The fake
+server sends no gaze (`REC`) data, so the cursor stays "no gaze" — it's only
+useful for the connect/calibrate handshake, not for a moving gaze signal
+(use `--replay` with a `tools/make_replay_fixture.py` fixture for that).
+
 ## Editing a config file locally without it showing up in `git status`
 
 During experimentation you'll often want to hand-edit a tracked config file
