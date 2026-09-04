@@ -74,29 +74,53 @@ will fetch and use it automatically without touching the system Python.
 ## Run the headless replay demo (no hardware)
 
 ```bash
-# regenerate the fixture (optional — one is committed)
-python tools/make_replay_fixture.py tests/fixtures/gaze_replay.jsonl
+# regenerate a fixture (optional — one per task is committed already)
+python tools/make_replay_fixture.py --task click_static     # -> tests/fixtures/gaze_replay_click_static.jsonl
+python tools/make_replay_fixture.py --task click_grid        # -> tests/fixtures/gaze_replay_click_grid.jsonl
+python tools/make_replay_fixture.py --task scanning           # -> tests/fixtures/gaze_replay_scanning.jsonl
+python tools/make_replay_fixture.py --task follow_moving      # -> tests/fixtures/gaze_replay_follow_moving.jsonl
 
 # run a full "calibrate → task → export" loop against the fixture
-python -m src.main --task click_static --replay tests/fixtures/gaze_replay.jsonl
+python -m src.main --task click_static --replay tests/fixtures/gaze_replay_click_static.jsonl
 
 # → sessions/replay_click_static_REPLAY/{trials.csv, gaze_stream.csv, ...}
 ```
 
-Any of the four tasks works: `--task click_grid|follow_moving|scanning`.
+Any of the four tasks works: `--task click_grid|follow_moving|scanning` — use
+that task's own fixture (`gaze_replay_<task>.jsonl`) so the simulated gaze
+actually lines up with that task's target layout. All four are generated
+from the real task classes' own layout, not a hand-duplicated copy, so they
+can never drift out of sync with `configs/tasks/*.yaml`. Note: dwell-triggered
+hits are currently unreliable in `--replay` mode for every task — a
+pre-existing, already-flagged issue unrelated to the fixture generator (see
+SPEC-live-settings-panel.md's 2026-09-04 log entry) — so a replay run's
+trials mostly time out rather than register as hits; the fixtures are still
+useful for exercising the settings panel and watching the canvas/cursor
+behave correctly.
 
 ## Run the GUI (needs the `gui` extra)
 
 ```bash
 # with a paced replay (simulated tracker)
-python -m src.main --task click_static --gui --replay tests/fixtures/gaze_replay.jsonl
+python -m src.main --task click_static --gui --replay tests/fixtures/gaze_replay_click_static.jsonl
 
 # with a real Gazepoint GP3HD (Gazepoint Control running on 127.0.0.1:4242)
 python -m src.main --task click_static --gui
 ```
 
-Operator controls (right panel): pause/resume, skip trial, and a live dwell-
-threshold slider — no restart needed to adapt to a child.
+A **task settings dialog** appears first, letting you adjust that task's
+structural layout (grid size, target radius, icon count, trial count, ...)
+before it starts — "Start task" with nothing changed reproduces the task's
+YAML defaults exactly. Pass `--skip-task-settings` to skip straight to the
+task (useful for scripted/automated launches).
+
+Operator controls (right panel): pause/resume, skip trial, a **Settings**
+group of always-visible controls (dwell threshold, gaze cursor, dwell
+progress ring, instant on-target ring), and a collapsible **Advanced**
+section (refractory period, jitter tolerance, gaze smoothing, trial timeout,
+inter-trial interval, and — for `follow_moving` only — target speed). Every
+control applies instantly, mid-task, with no restart needed — useful both to
+adapt to a child in the moment and for your own debugging.
 
 ## Testing `--calibration-file` without a device
 
@@ -111,7 +135,7 @@ never opens a socket, so a hand-written calibration file works directly:
 
 ```bash
 python -m src.main --task click_static --gui \
-  --replay tests/fixtures/gaze_replay.jsonl \
+  --replay tests/fixtures/gaze_replay_click_static.jsonl \
   --subject DEMO01 \
   --calibration-file path/to/calibration.json
 ```

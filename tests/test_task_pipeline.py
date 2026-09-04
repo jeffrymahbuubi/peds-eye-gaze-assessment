@@ -11,7 +11,7 @@ from src.engine.feedback import NullFeedback
 from src.engine.task_runner import TASK_REGISTRY, build_task, run_headless_replay
 from src.inputs.base import Pointer
 
-FIXTURE = Path(__file__).parent / "fixtures" / "gaze_replay.jsonl"
+FIXTURE = Path(__file__).parent / "fixtures" / "gaze_replay_click_static.jsonl"
 
 
 def test_config_merges_task_over_default():

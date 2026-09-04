@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from PySide6.QtWidgets import QHBoxLayout, QMainWindow, QWidget
 
 from .canvas import TaskCanvas
@@ -12,7 +14,8 @@ class MainWindow(QMainWindow):
     def __init__(
         self,
         theme: dict | None = None,
-        dwell_threshold_ms: int = 800,
+        task_id: str = "click_static",
+        initial_settings: dict[str, Any] | None = None,
         fullscreen: bool = True,
     ) -> None:
         super().__init__()
@@ -23,8 +26,8 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.canvas = TaskCanvas(theme=theme)
-        self.operator_panel = OperatorPanel(dwell_threshold_ms=dwell_threshold_ms)
-        self.operator_panel.setFixedWidth(240)
+        self.operator_panel = OperatorPanel(task_id=task_id, initial_values=initial_settings)
+        self.operator_panel.setFixedWidth(280)
 
         layout.addWidget(self.canvas, stretch=1)
         layout.addWidget(self.operator_panel)

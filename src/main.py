@@ -2,7 +2,7 @@
 
 Headless replay demo (no tracker, no GUI required)::
 
-    python -m src.main --task click_static --replay tests/fixtures/gaze_replay.jsonl
+    python -m src.main --task click_static --replay tests/fixtures/gaze_replay_click_static.jsonl
 
 Live GUI (requires the ``gui`` extra and a Gazepoint tracker or replay)::
 
@@ -44,6 +44,15 @@ def build_parser() -> argparse.ArgumentParser:
             "whenever a real calibration runs."
         ),
     )
+    parser.add_argument(
+        "--skip-task-settings",
+        action="store_true",
+        help=(
+            "Skip the pre-launch task settings dialog (grid size, radius, "
+            "trial count, ...) and start immediately with the task's YAML "
+            "defaults. --gui only. Useful for scripted/automated launches."
+        ),
+    )
     return parser
 
 
@@ -62,6 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             replay_path=args.replay,
             subject_id=args.subject,
             calibration_file=args.calibration_file,
+            skip_task_settings_dialog=args.skip_task_settings,
         )
 
     if args.calibration_file:

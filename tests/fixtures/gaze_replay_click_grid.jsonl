@@ -1,0 +1,666 @@
+{"t_ns": 0, "x": 0.24667, "y": 0.24967, "valid": true, "fixation_id": 1, "fix_duration_s": 0.0}
+{"t_ns": 16666666, "x": 0.2486, "y": 0.2493, "valid": true, "fixation_id": 1, "fix_duration_s": 0.017}
+{"t_ns": 33333332, "x": 0.24962, "y": 0.24829, "valid": true, "fixation_id": 1, "fix_duration_s": 0.033}
+{"t_ns": 49999998, "x": 0.24926, "y": 0.24688, "valid": true, "fixation_id": 1, "fix_duration_s": 0.05}
+{"t_ns": 66666664, "x": 0.24767, "y": 0.24542, "valid": true, "fixation_id": 1, "fix_duration_s": 0.067}
+{"t_ns": 83333330, "x": 0.24561, "y": 0.24426, "valid": true, "fixation_id": 1, "fix_duration_s": 0.083}
+{"t_ns": 99999996, "x": 0.24405, "y": 0.2437, "valid": true, "fixation_id": 1, "fix_duration_s": 0.1}
+{"t_ns": 116666662, "x": 0.24372, "y": 0.24386, "valid": true, "fixation_id": 1, "fix_duration_s": 0.117}
+{"t_ns": 133333328, "x": 0.24477, "y": 0.24471, "valid": true, "fixation_id": 1, "fix_duration_s": 0.133}
+{"t_ns": 149999994, "x": 0.24672, "y": 0.24603, "valid": true, "fixation_id": 1, "fix_duration_s": 0.15}
+{"t_ns": 166666660, "x": 0.24864, "y": 0.24752, "valid": true, "fixation_id": 1, "fix_duration_s": 0.167}
+{"t_ns": 183333326, "x": 0.24963, "y": 0.24879, "valid": true, "fixation_id": 1, "fix_duration_s": 0.183}
+{"t_ns": 199999992, "x": 0.24923, "y": 0.24955, "valid": true, "fixation_id": 1, "fix_duration_s": 0.2}
+{"t_ns": 216666658, "x": 0.24762, "y": 0.2496, "valid": true, "fixation_id": 1, "fix_duration_s": 0.217}
+{"t_ns": 233333324, "x": 0.24557, "y": 0.24893, "valid": true, "fixation_id": 1, "fix_duration_s": 0.233}
+{"t_ns": 249999990, "x": 0.24403, "y": 0.24771, "valid": true, "fixation_id": 1, "fix_duration_s": 0.25}
+{"t_ns": 266666656, "x": 0.24373, "y": 0.24623, "valid": true, "fixation_id": 1, "fix_duration_s": 0.267}
+{"t_ns": 283333322, "x": 0.24481, "y": 0.24486, "valid": true, "fixation_id": 1, "fix_duration_s": 0.283}
+{"t_ns": 299999988, "x": 0.24677, "y": 0.24393, "valid": true, "fixation_id": 1, "fix_duration_s": 0.3}
+{"t_ns": 316666654, "x": 0.24868, "y": 0.24368, "valid": true, "fixation_id": 1, "fix_duration_s": 0.317}
+{"t_ns": 333333320, "x": 0.24964, "y": 0.24415, "valid": true, "fixation_id": 1, "fix_duration_s": 0.333}
+{"t_ns": 349999986, "x": 0.2492, "y": 0.24524, "valid": true, "fixation_id": 1, "fix_duration_s": 0.35}
+{"t_ns": 366666652, "x": 0.24758, "y": 0.24668, "valid": true, "fixation_id": 1, "fix_duration_s": 0.367}
+{"t_ns": 383333318, "x": 0.24552, "y": 0.24812, "valid": true, "fixation_id": 1, "fix_duration_s": 0.383}
+{"t_ns": 399999984, "x": 0.244, "y": 0.2492, "valid": true, "fixation_id": 1, "fix_duration_s": 0.4}
+{"t_ns": 416666650, "x": 0.24374, "y": 0.24966, "valid": true, "fixation_id": 1, "fix_duration_s": 0.417}
+{"t_ns": 433333316, "x": 0.24485, "y": 0.24939, "valid": true, "fixation_id": 1, "fix_duration_s": 0.433}
+{"t_ns": 449999982, "x": 0.24682, "y": 0.24845, "valid": true, "fixation_id": 1, "fix_duration_s": 0.45}
+{"t_ns": 466666648, "x": 0.24871, "y": 0.24708, "valid": true, "fixation_id": 1, "fix_duration_s": 0.467}
+{"t_ns": 483333314, "x": 0.24964, "y": 0.2456, "valid": true, "fixation_id": 1, "fix_duration_s": 0.483}
+{"t_ns": 499999980, "x": 0.24918, "y": 0.24439, "valid": true, "fixation_id": 1, "fix_duration_s": 0.5}
+{"t_ns": 516666646, "x": 0.24753, "y": 0.24373, "valid": true, "fixation_id": 1, "fix_duration_s": 0.517}
+{"t_ns": 533333312, "x": 0.24547, "y": 0.24379, "valid": true, "fixation_id": 1, "fix_duration_s": 0.533}
+{"t_ns": 549999978, "x": 0.24398, "y": 0.24456, "valid": true, "fixation_id": 1, "fix_duration_s": 0.55}
+{"t_ns": 566666644, "x": 0.24375, "y": 0.24584, "valid": true, "fixation_id": 1, "fix_duration_s": 0.567}
+{"t_ns": 583333310, "x": 0.24489, "y": 0.24732, "valid": true, "fixation_id": 1, "fix_duration_s": 0.583}
+{"t_ns": 599999976, "x": 0.24687, "y": 0.24865, "valid": true, "fixation_id": 1, "fix_duration_s": 0.6}
+{"t_ns": 616666642, "x": 0.24875, "y": 0.24949, "valid": true, "fixation_id": 1, "fix_duration_s": 0.617}
+{"t_ns": 633333308, "x": 0.24965, "y": 0.24963, "valid": true, "fixation_id": 1, "fix_duration_s": 0.633}
+{"t_ns": 649999974, "x": 0.24915, "y": 0.24905, "valid": true, "fixation_id": 1, "fix_duration_s": 0.65}
+{"t_ns": 666666640, "x": 0.24748, "y": 0.24789, "valid": true, "fixation_id": 1, "fix_duration_s": 0.667}
+{"t_ns": 683333306, "x": 0.24543, "y": 0.24643, "valid": true, "fixation_id": 1, "fix_duration_s": 0.683}
+{"t_ns": 699999972, "x": 0.24396, "y": 0.24502, "valid": true, "fixation_id": 1, "fix_duration_s": 0.7}
+{"t_ns": 716666638, "x": 0.24376, "y": 0.24402, "valid": true, "fixation_id": 1, "fix_duration_s": 0.717}
+{"t_ns": 733333304, "x": 0.24493, "y": 0.24367, "valid": true, "fixation_id": 1, "fix_duration_s": 0.733}
+{"t_ns": 749999970, "x": 0.24692, "y": 0.24405, "valid": true, "fixation_id": 1, "fix_duration_s": 0.75}
+{"t_ns": 766666636, "x": 0.24879, "y": 0.24507, "valid": true, "fixation_id": 1, "fix_duration_s": 0.767}
+{"t_ns": 783333302, "x": 0.24966, "y": 0.24648, "valid": true, "fixation_id": 1, "fix_duration_s": 0.783}
+{"t_ns": 799999968, "x": 0.24912, "y": 0.24794, "valid": true, "fixation_id": 1, "fix_duration_s": 0.8}
+{"t_ns": 816666634, "x": 0.24743, "y": 0.24909, "valid": true, "fixation_id": 1, "fix_duration_s": 0.817}
+{"t_ns": 833333300, "x": 0.24538, "y": 0.24964, "valid": true, "fixation_id": 1, "fix_duration_s": 0.833}
+{"t_ns": 849999966, "x": 0.24394, "y": 0.24947, "valid": true, "fixation_id": 1, "fix_duration_s": 0.85}
+{"t_ns": 866666632, "x": 0.24378, "y": 0.24861, "valid": true, "fixation_id": 1, "fix_duration_s": 0.867}
+{"t_ns": 883333298, "x": 0.24497, "y": 0.24727, "valid": true, "fixation_id": 1, "fix_duration_s": 0.883}
+{"t_ns": 899999964, "x": 0.24697, "y": 0.24579, "valid": true, "fixation_id": 1, "fix_duration_s": 0.9}
+{"t_ns": 916666630, "x": 0.24882, "y": 0.24452, "valid": true, "fixation_id": 1, "fix_duration_s": 0.917}
+{"t_ns": 933333296, "x": 0.24966, "y": 0.24378, "valid": true, "fixation_id": 1, "fix_duration_s": 0.933}
+{"t_ns": 949999962, "x": 0.24909, "y": 0.24374, "valid": true, "fixation_id": 1, "fix_duration_s": 0.95}
+{"t_ns": 966666628, "x": 0.24738, "y": 0.24442, "valid": true, "fixation_id": 1, "fix_duration_s": 0.967}
+{"t_ns": 983333294, "x": 0.24534, "y": 0.24565, "valid": true, "fixation_id": 1, "fix_duration_s": 0.983}
+{"t_ns": 999999960, "x": 0.24392, "y": 0.24713, "valid": true, "fixation_id": 1, "fix_duration_s": 1.0}
+{"t_ns": 1016666626, "x": 0.24379, "y": 0.24849, "valid": true, "fixation_id": 1, "fix_duration_s": 1.017}
+{"t_ns": 1033333292, "x": 0.24502, "y": 0.24941, "valid": true, "fixation_id": 1, "fix_duration_s": 1.033}
+{"t_ns": 1049999958, "x": 0.24702, "y": 0.24966, "valid": true, "fixation_id": 1, "fix_duration_s": 1.05}
+{"t_ns": 1066666624, "x": 0.24886, "y": 0.24917, "valid": true, "fixation_id": 1, "fix_duration_s": 1.067}
+{"t_ns": 1083333290, "x": 0.24966, "y": 0.24807, "valid": true, "fixation_id": 1, "fix_duration_s": 1.083}
+{"t_ns": 1099999956, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 1116666622, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 1133333288, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 1149999954, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 1166666620, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 1183333286, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 1199999952, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 1216666618, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 1233333284, "x": 0.5, "y": 0.24967, "valid": true, "fixation_id": 2, "fix_duration_s": 0.0}
+{"t_ns": 1249999950, "x": 0.50193, "y": 0.2493, "valid": true, "fixation_id": 2, "fix_duration_s": 0.017}
+{"t_ns": 1266666616, "x": 0.50296, "y": 0.24829, "valid": true, "fixation_id": 2, "fix_duration_s": 0.033}
+{"t_ns": 1283333282, "x": 0.50259, "y": 0.24688, "valid": true, "fixation_id": 2, "fix_duration_s": 0.05}
+{"t_ns": 1299999948, "x": 0.501, "y": 0.24542, "valid": true, "fixation_id": 2, "fix_duration_s": 0.067}
+{"t_ns": 1316666614, "x": 0.49895, "y": 0.24426, "valid": true, "fixation_id": 2, "fix_duration_s": 0.083}
+{"t_ns": 1333333280, "x": 0.49739, "y": 0.2437, "valid": true, "fixation_id": 2, "fix_duration_s": 0.1}
+{"t_ns": 1349999946, "x": 0.49705, "y": 0.24386, "valid": true, "fixation_id": 2, "fix_duration_s": 0.117}
+{"t_ns": 1366666612, "x": 0.49811, "y": 0.24471, "valid": true, "fixation_id": 2, "fix_duration_s": 0.133}
+{"t_ns": 1383333278, "x": 0.50005, "y": 0.24603, "valid": true, "fixation_id": 2, "fix_duration_s": 0.15}
+{"t_ns": 1399999944, "x": 0.50197, "y": 0.24752, "valid": true, "fixation_id": 2, "fix_duration_s": 0.167}
+{"t_ns": 1416666610, "x": 0.50296, "y": 0.24879, "valid": true, "fixation_id": 2, "fix_duration_s": 0.183}
+{"t_ns": 1433333276, "x": 0.50256, "y": 0.24955, "valid": true, "fixation_id": 2, "fix_duration_s": 0.2}
+{"t_ns": 1449999942, "x": 0.50096, "y": 0.2496, "valid": true, "fixation_id": 2, "fix_duration_s": 0.217}
+{"t_ns": 1466666608, "x": 0.4989, "y": 0.24893, "valid": true, "fixation_id": 2, "fix_duration_s": 0.233}
+{"t_ns": 1483333274, "x": 0.49736, "y": 0.24771, "valid": true, "fixation_id": 2, "fix_duration_s": 0.25}
+{"t_ns": 1499999940, "x": 0.49706, "y": 0.24623, "valid": true, "fixation_id": 2, "fix_duration_s": 0.267}
+{"t_ns": 1516666606, "x": 0.49815, "y": 0.24486, "valid": true, "fixation_id": 2, "fix_duration_s": 0.283}
+{"t_ns": 1533333272, "x": 0.5001, "y": 0.24393, "valid": true, "fixation_id": 2, "fix_duration_s": 0.3}
+{"t_ns": 1549999938, "x": 0.50201, "y": 0.24368, "valid": true, "fixation_id": 2, "fix_duration_s": 0.317}
+{"t_ns": 1566666604, "x": 0.50297, "y": 0.24415, "valid": true, "fixation_id": 2, "fix_duration_s": 0.333}
+{"t_ns": 1583333270, "x": 0.50254, "y": 0.24524, "valid": true, "fixation_id": 2, "fix_duration_s": 0.35}
+{"t_ns": 1599999936, "x": 0.50091, "y": 0.24668, "valid": true, "fixation_id": 2, "fix_duration_s": 0.367}
+{"t_ns": 1616666602, "x": 0.49885, "y": 0.24812, "valid": true, "fixation_id": 2, "fix_duration_s": 0.383}
+{"t_ns": 1633333268, "x": 0.49734, "y": 0.2492, "valid": true, "fixation_id": 2, "fix_duration_s": 0.4}
+{"t_ns": 1649999934, "x": 0.49707, "y": 0.24966, "valid": true, "fixation_id": 2, "fix_duration_s": 0.417}
+{"t_ns": 1666666600, "x": 0.49819, "y": 0.24939, "valid": true, "fixation_id": 2, "fix_duration_s": 0.433}
+{"t_ns": 1683333266, "x": 0.50015, "y": 0.24845, "valid": true, "fixation_id": 2, "fix_duration_s": 0.45}
+{"t_ns": 1699999932, "x": 0.50205, "y": 0.24708, "valid": true, "fixation_id": 2, "fix_duration_s": 0.467}
+{"t_ns": 1716666598, "x": 0.50298, "y": 0.2456, "valid": true, "fixation_id": 2, "fix_duration_s": 0.483}
+{"t_ns": 1733333264, "x": 0.50251, "y": 0.24439, "valid": true, "fixation_id": 2, "fix_duration_s": 0.5}
+{"t_ns": 1749999930, "x": 0.50086, "y": 0.24373, "valid": true, "fixation_id": 2, "fix_duration_s": 0.517}
+{"t_ns": 1766666596, "x": 0.49881, "y": 0.24379, "valid": true, "fixation_id": 2, "fix_duration_s": 0.533}
+{"t_ns": 1783333262, "x": 0.49731, "y": 0.24456, "valid": true, "fixation_id": 2, "fix_duration_s": 0.55}
+{"t_ns": 1799999928, "x": 0.49708, "y": 0.24584, "valid": true, "fixation_id": 2, "fix_duration_s": 0.567}
+{"t_ns": 1816666594, "x": 0.49823, "y": 0.24732, "valid": true, "fixation_id": 2, "fix_duration_s": 0.583}
+{"t_ns": 1833333260, "x": 0.5002, "y": 0.24865, "valid": true, "fixation_id": 2, "fix_duration_s": 0.6}
+{"t_ns": 1849999926, "x": 0.50208, "y": 0.24949, "valid": true, "fixation_id": 2, "fix_duration_s": 0.617}
+{"t_ns": 1866666592, "x": 0.50298, "y": 0.24963, "valid": true, "fixation_id": 2, "fix_duration_s": 0.633}
+{"t_ns": 1883333258, "x": 0.50248, "y": 0.24905, "valid": true, "fixation_id": 2, "fix_duration_s": 0.65}
+{"t_ns": 1899999924, "x": 0.50081, "y": 0.24789, "valid": true, "fixation_id": 2, "fix_duration_s": 0.667}
+{"t_ns": 1916666590, "x": 0.49876, "y": 0.24643, "valid": true, "fixation_id": 2, "fix_duration_s": 0.683}
+{"t_ns": 1933333256, "x": 0.49729, "y": 0.24502, "valid": true, "fixation_id": 2, "fix_duration_s": 0.7}
+{"t_ns": 1949999922, "x": 0.4971, "y": 0.24402, "valid": true, "fixation_id": 2, "fix_duration_s": 0.717}
+{"t_ns": 1966666588, "x": 0.49827, "y": 0.24367, "valid": true, "fixation_id": 2, "fix_duration_s": 0.733}
+{"t_ns": 1983333254, "x": 0.50025, "y": 0.24405, "valid": true, "fixation_id": 2, "fix_duration_s": 0.75}
+{"t_ns": 1999999920, "x": 0.50212, "y": 0.24507, "valid": true, "fixation_id": 2, "fix_duration_s": 0.767}
+{"t_ns": 2016666586, "x": 0.50299, "y": 0.24648, "valid": true, "fixation_id": 2, "fix_duration_s": 0.783}
+{"t_ns": 2033333252, "x": 0.50245, "y": 0.24794, "valid": true, "fixation_id": 2, "fix_duration_s": 0.8}
+{"t_ns": 2049999918, "x": 0.50076, "y": 0.24909, "valid": true, "fixation_id": 2, "fix_duration_s": 0.817}
+{"t_ns": 2066666584, "x": 0.49872, "y": 0.24964, "valid": true, "fixation_id": 2, "fix_duration_s": 0.833}
+{"t_ns": 2083333250, "x": 0.49727, "y": 0.24947, "valid": true, "fixation_id": 2, "fix_duration_s": 0.85}
+{"t_ns": 2099999916, "x": 0.49711, "y": 0.24861, "valid": true, "fixation_id": 2, "fix_duration_s": 0.867}
+{"t_ns": 2116666582, "x": 0.49831, "y": 0.24727, "valid": true, "fixation_id": 2, "fix_duration_s": 0.883}
+{"t_ns": 2133333248, "x": 0.5003, "y": 0.24579, "valid": true, "fixation_id": 2, "fix_duration_s": 0.9}
+{"t_ns": 2149999914, "x": 0.50215, "y": 0.24452, "valid": true, "fixation_id": 2, "fix_duration_s": 0.917}
+{"t_ns": 2166666580, "x": 0.50299, "y": 0.24378, "valid": true, "fixation_id": 2, "fix_duration_s": 0.933}
+{"t_ns": 2183333246, "x": 0.50242, "y": 0.24374, "valid": true, "fixation_id": 2, "fix_duration_s": 0.95}
+{"t_ns": 2199999912, "x": 0.50072, "y": 0.24442, "valid": true, "fixation_id": 2, "fix_duration_s": 0.967}
+{"t_ns": 2216666578, "x": 0.49867, "y": 0.24565, "valid": true, "fixation_id": 2, "fix_duration_s": 0.983}
+{"t_ns": 2233333244, "x": 0.49725, "y": 0.24713, "valid": true, "fixation_id": 2, "fix_duration_s": 1.0}
+{"t_ns": 2249999910, "x": 0.49712, "y": 0.24849, "valid": true, "fixation_id": 2, "fix_duration_s": 1.017}
+{"t_ns": 2266666576, "x": 0.49835, "y": 0.24941, "valid": true, "fixation_id": 2, "fix_duration_s": 1.033}
+{"t_ns": 2283333242, "x": 0.50035, "y": 0.24966, "valid": true, "fixation_id": 2, "fix_duration_s": 1.05}
+{"t_ns": 2299999908, "x": 0.50219, "y": 0.24917, "valid": true, "fixation_id": 2, "fix_duration_s": 1.067}
+{"t_ns": 2316666574, "x": 0.503, "y": 0.24807, "valid": true, "fixation_id": 2, "fix_duration_s": 1.083}
+{"t_ns": 2333333240, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 2349999906, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 2366666572, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 2383333238, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 2399999904, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 2416666570, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 2433333236, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 2449999902, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 2466666568, "x": 0.75333, "y": 0.24967, "valid": true, "fixation_id": 3, "fix_duration_s": 0.0}
+{"t_ns": 2483333234, "x": 0.75527, "y": 0.2493, "valid": true, "fixation_id": 3, "fix_duration_s": 0.017}
+{"t_ns": 2499999900, "x": 0.75629, "y": 0.24829, "valid": true, "fixation_id": 3, "fix_duration_s": 0.033}
+{"t_ns": 2516666566, "x": 0.75592, "y": 0.24688, "valid": true, "fixation_id": 3, "fix_duration_s": 0.05}
+{"t_ns": 2533333232, "x": 0.75434, "y": 0.24542, "valid": true, "fixation_id": 3, "fix_duration_s": 0.067}
+{"t_ns": 2549999898, "x": 0.75228, "y": 0.24426, "valid": true, "fixation_id": 3, "fix_duration_s": 0.083}
+{"t_ns": 2566666564, "x": 0.75072, "y": 0.2437, "valid": true, "fixation_id": 3, "fix_duration_s": 0.1}
+{"t_ns": 2583333230, "x": 0.75039, "y": 0.24386, "valid": true, "fixation_id": 3, "fix_duration_s": 0.117}
+{"t_ns": 2599999896, "x": 0.75144, "y": 0.24471, "valid": true, "fixation_id": 3, "fix_duration_s": 0.133}
+{"t_ns": 2616666562, "x": 0.75338, "y": 0.24603, "valid": true, "fixation_id": 3, "fix_duration_s": 0.15}
+{"t_ns": 2633333228, "x": 0.7553, "y": 0.24752, "valid": true, "fixation_id": 3, "fix_duration_s": 0.167}
+{"t_ns": 2649999894, "x": 0.7563, "y": 0.24879, "valid": true, "fixation_id": 3, "fix_duration_s": 0.183}
+{"t_ns": 2666666560, "x": 0.7559, "y": 0.24955, "valid": true, "fixation_id": 3, "fix_duration_s": 0.2}
+{"t_ns": 2683333226, "x": 0.75429, "y": 0.2496, "valid": true, "fixation_id": 3, "fix_duration_s": 0.217}
+{"t_ns": 2699999892, "x": 0.75223, "y": 0.24893, "valid": true, "fixation_id": 3, "fix_duration_s": 0.233}
+{"t_ns": 2716666558, "x": 0.75069, "y": 0.24771, "valid": true, "fixation_id": 3, "fix_duration_s": 0.25}
+{"t_ns": 2733333224, "x": 0.7504, "y": 0.24623, "valid": true, "fixation_id": 3, "fix_duration_s": 0.267}
+{"t_ns": 2749999890, "x": 0.75148, "y": 0.24486, "valid": true, "fixation_id": 3, "fix_duration_s": 0.283}
+{"t_ns": 2766666556, "x": 0.75343, "y": 0.24393, "valid": true, "fixation_id": 3, "fix_duration_s": 0.3}
+{"t_ns": 2783333222, "x": 0.75534, "y": 0.24368, "valid": true, "fixation_id": 3, "fix_duration_s": 0.317}
+{"t_ns": 2799999888, "x": 0.75631, "y": 0.24415, "valid": true, "fixation_id": 3, "fix_duration_s": 0.333}
+{"t_ns": 2816666554, "x": 0.75587, "y": 0.24524, "valid": true, "fixation_id": 3, "fix_duration_s": 0.35}
+{"t_ns": 2833333220, "x": 0.75424, "y": 0.24668, "valid": true, "fixation_id": 3, "fix_duration_s": 0.367}
+{"t_ns": 2849999886, "x": 0.75219, "y": 0.24812, "valid": true, "fixation_id": 3, "fix_duration_s": 0.383}
+{"t_ns": 2866666552, "x": 0.75067, "y": 0.2492, "valid": true, "fixation_id": 3, "fix_duration_s": 0.4}
+{"t_ns": 2883333218, "x": 0.75041, "y": 0.24966, "valid": true, "fixation_id": 3, "fix_duration_s": 0.417}
+{"t_ns": 2899999884, "x": 0.75152, "y": 0.24939, "valid": true, "fixation_id": 3, "fix_duration_s": 0.433}
+{"t_ns": 2916666550, "x": 0.75348, "y": 0.24845, "valid": true, "fixation_id": 3, "fix_duration_s": 0.45}
+{"t_ns": 2933333216, "x": 0.75538, "y": 0.24708, "valid": true, "fixation_id": 3, "fix_duration_s": 0.467}
+{"t_ns": 2949999882, "x": 0.75631, "y": 0.2456, "valid": true, "fixation_id": 3, "fix_duration_s": 0.483}
+{"t_ns": 2966666548, "x": 0.75584, "y": 0.24439, "valid": true, "fixation_id": 3, "fix_duration_s": 0.5}
+{"t_ns": 2983333214, "x": 0.75419, "y": 0.24373, "valid": true, "fixation_id": 3, "fix_duration_s": 0.517}
+{"t_ns": 2999999880, "x": 0.75214, "y": 0.24379, "valid": true, "fixation_id": 3, "fix_duration_s": 0.533}
+{"t_ns": 3016666546, "x": 0.75065, "y": 0.24456, "valid": true, "fixation_id": 3, "fix_duration_s": 0.55}
+{"t_ns": 3033333212, "x": 0.75042, "y": 0.24584, "valid": true, "fixation_id": 3, "fix_duration_s": 0.567}
+{"t_ns": 3049999878, "x": 0.75156, "y": 0.24732, "valid": true, "fixation_id": 3, "fix_duration_s": 0.583}
+{"t_ns": 3066666544, "x": 0.75353, "y": 0.24865, "valid": true, "fixation_id": 3, "fix_duration_s": 0.6}
+{"t_ns": 3083333210, "x": 0.75542, "y": 0.24949, "valid": true, "fixation_id": 3, "fix_duration_s": 0.617}
+{"t_ns": 3099999876, "x": 0.75632, "y": 0.24963, "valid": true, "fixation_id": 3, "fix_duration_s": 0.633}
+{"t_ns": 3116666542, "x": 0.75582, "y": 0.24905, "valid": true, "fixation_id": 3, "fix_duration_s": 0.65}
+{"t_ns": 3133333208, "x": 0.75415, "y": 0.24789, "valid": true, "fixation_id": 3, "fix_duration_s": 0.667}
+{"t_ns": 3149999874, "x": 0.75209, "y": 0.24643, "valid": true, "fixation_id": 3, "fix_duration_s": 0.683}
+{"t_ns": 3166666540, "x": 0.75063, "y": 0.24502, "valid": true, "fixation_id": 3, "fix_duration_s": 0.7}
+{"t_ns": 3183333206, "x": 0.75043, "y": 0.24402, "valid": true, "fixation_id": 3, "fix_duration_s": 0.717}
+{"t_ns": 3199999872, "x": 0.7516, "y": 0.24367, "valid": true, "fixation_id": 3, "fix_duration_s": 0.733}
+{"t_ns": 3216666538, "x": 0.75359, "y": 0.24405, "valid": true, "fixation_id": 3, "fix_duration_s": 0.75}
+{"t_ns": 3233333204, "x": 0.75545, "y": 0.24507, "valid": true, "fixation_id": 3, "fix_duration_s": 0.767}
+{"t_ns": 3249999870, "x": 0.75632, "y": 0.24648, "valid": true, "fixation_id": 3, "fix_duration_s": 0.783}
+{"t_ns": 3266666536, "x": 0.75579, "y": 0.24794, "valid": true, "fixation_id": 3, "fix_duration_s": 0.8}
+{"t_ns": 3283333202, "x": 0.7541, "y": 0.24909, "valid": true, "fixation_id": 3, "fix_duration_s": 0.817}
+{"t_ns": 3299999868, "x": 0.75205, "y": 0.24964, "valid": true, "fixation_id": 3, "fix_duration_s": 0.833}
+{"t_ns": 3316666534, "x": 0.7506, "y": 0.24947, "valid": true, "fixation_id": 3, "fix_duration_s": 0.85}
+{"t_ns": 3333333200, "x": 0.75044, "y": 0.24861, "valid": true, "fixation_id": 3, "fix_duration_s": 0.867}
+{"t_ns": 3349999866, "x": 0.75164, "y": 0.24727, "valid": true, "fixation_id": 3, "fix_duration_s": 0.883}
+{"t_ns": 3366666532, "x": 0.75364, "y": 0.24579, "valid": true, "fixation_id": 3, "fix_duration_s": 0.9}
+{"t_ns": 3383333198, "x": 0.75549, "y": 0.24452, "valid": true, "fixation_id": 3, "fix_duration_s": 0.917}
+{"t_ns": 3399999864, "x": 0.75633, "y": 0.24378, "valid": true, "fixation_id": 3, "fix_duration_s": 0.933}
+{"t_ns": 3416666530, "x": 0.75576, "y": 0.24374, "valid": true, "fixation_id": 3, "fix_duration_s": 0.95}
+{"t_ns": 3433333196, "x": 0.75405, "y": 0.24442, "valid": true, "fixation_id": 3, "fix_duration_s": 0.967}
+{"t_ns": 3449999862, "x": 0.752, "y": 0.24565, "valid": true, "fixation_id": 3, "fix_duration_s": 0.983}
+{"t_ns": 3466666528, "x": 0.75058, "y": 0.24713, "valid": true, "fixation_id": 3, "fix_duration_s": 1.0}
+{"t_ns": 3483333194, "x": 0.75046, "y": 0.24849, "valid": true, "fixation_id": 3, "fix_duration_s": 1.017}
+{"t_ns": 3499999860, "x": 0.75168, "y": 0.24941, "valid": true, "fixation_id": 3, "fix_duration_s": 1.033}
+{"t_ns": 3516666526, "x": 0.75369, "y": 0.24966, "valid": true, "fixation_id": 3, "fix_duration_s": 1.05}
+{"t_ns": 3533333192, "x": 0.75552, "y": 0.24917, "valid": true, "fixation_id": 3, "fix_duration_s": 1.067}
+{"t_ns": 3549999858, "x": 0.75633, "y": 0.24807, "valid": true, "fixation_id": 3, "fix_duration_s": 1.083}
+{"t_ns": 3566666524, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 3583333190, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 3599999856, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 3616666522, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 3633333188, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 3649999854, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 3666666520, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 3683333186, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 3699999852, "x": 0.24667, "y": 0.503, "valid": true, "fixation_id": 4, "fix_duration_s": 0.0}
+{"t_ns": 3716666518, "x": 0.2486, "y": 0.50263, "valid": true, "fixation_id": 4, "fix_duration_s": 0.017}
+{"t_ns": 3733333184, "x": 0.24962, "y": 0.50162, "valid": true, "fixation_id": 4, "fix_duration_s": 0.033}
+{"t_ns": 3749999850, "x": 0.24926, "y": 0.50021, "valid": true, "fixation_id": 4, "fix_duration_s": 0.05}
+{"t_ns": 3766666516, "x": 0.24767, "y": 0.49875, "valid": true, "fixation_id": 4, "fix_duration_s": 0.067}
+{"t_ns": 3783333182, "x": 0.24561, "y": 0.4976, "valid": true, "fixation_id": 4, "fix_duration_s": 0.083}
+{"t_ns": 3799999848, "x": 0.24405, "y": 0.49703, "valid": true, "fixation_id": 4, "fix_duration_s": 0.1}
+{"t_ns": 3816666514, "x": 0.24372, "y": 0.49719, "valid": true, "fixation_id": 4, "fix_duration_s": 0.117}
+{"t_ns": 3833333180, "x": 0.24477, "y": 0.49804, "valid": true, "fixation_id": 4, "fix_duration_s": 0.133}
+{"t_ns": 3849999846, "x": 0.24672, "y": 0.49937, "valid": true, "fixation_id": 4, "fix_duration_s": 0.15}
+{"t_ns": 3866666512, "x": 0.24864, "y": 0.50085, "valid": true, "fixation_id": 4, "fix_duration_s": 0.167}
+{"t_ns": 3883333178, "x": 0.24963, "y": 0.50213, "valid": true, "fixation_id": 4, "fix_duration_s": 0.183}
+{"t_ns": 3899999844, "x": 0.24923, "y": 0.50288, "valid": true, "fixation_id": 4, "fix_duration_s": 0.2}
+{"t_ns": 3916666510, "x": 0.24762, "y": 0.50293, "valid": true, "fixation_id": 4, "fix_duration_s": 0.217}
+{"t_ns": 3933333176, "x": 0.24557, "y": 0.50226, "valid": true, "fixation_id": 4, "fix_duration_s": 0.233}
+{"t_ns": 3949999842, "x": 0.24403, "y": 0.50104, "valid": true, "fixation_id": 4, "fix_duration_s": 0.25}
+{"t_ns": 3966666508, "x": 0.24373, "y": 0.49956, "valid": true, "fixation_id": 4, "fix_duration_s": 0.267}
+{"t_ns": 3983333174, "x": 0.24481, "y": 0.49819, "valid": true, "fixation_id": 4, "fix_duration_s": 0.283}
+{"t_ns": 3999999840, "x": 0.24677, "y": 0.49727, "valid": true, "fixation_id": 4, "fix_duration_s": 0.3}
+{"t_ns": 4016666506, "x": 0.24868, "y": 0.49701, "valid": true, "fixation_id": 4, "fix_duration_s": 0.317}
+{"t_ns": 4033333172, "x": 0.24964, "y": 0.49748, "valid": true, "fixation_id": 4, "fix_duration_s": 0.333}
+{"t_ns": 4049999838, "x": 0.2492, "y": 0.49857, "valid": true, "fixation_id": 4, "fix_duration_s": 0.35}
+{"t_ns": 4066666504, "x": 0.24758, "y": 0.50001, "valid": true, "fixation_id": 4, "fix_duration_s": 0.367}
+{"t_ns": 4083333170, "x": 0.24552, "y": 0.50145, "valid": true, "fixation_id": 4, "fix_duration_s": 0.383}
+{"t_ns": 4099999836, "x": 0.244, "y": 0.50253, "valid": true, "fixation_id": 4, "fix_duration_s": 0.4}
+{"t_ns": 4116666502, "x": 0.24374, "y": 0.50299, "valid": true, "fixation_id": 4, "fix_duration_s": 0.417}
+{"t_ns": 4133333168, "x": 0.24485, "y": 0.50272, "valid": true, "fixation_id": 4, "fix_duration_s": 0.433}
+{"t_ns": 4149999834, "x": 0.24682, "y": 0.50178, "valid": true, "fixation_id": 4, "fix_duration_s": 0.45}
+{"t_ns": 4166666500, "x": 0.24871, "y": 0.50041, "valid": true, "fixation_id": 4, "fix_duration_s": 0.467}
+{"t_ns": 4183333166, "x": 0.24964, "y": 0.49894, "valid": true, "fixation_id": 4, "fix_duration_s": 0.483}
+{"t_ns": 4199999832, "x": 0.24918, "y": 0.49772, "valid": true, "fixation_id": 4, "fix_duration_s": 0.5}
+{"t_ns": 4216666498, "x": 0.24753, "y": 0.49706, "valid": true, "fixation_id": 4, "fix_duration_s": 0.517}
+{"t_ns": 4233333164, "x": 0.24547, "y": 0.49713, "valid": true, "fixation_id": 4, "fix_duration_s": 0.533}
+{"t_ns": 4249999830, "x": 0.24398, "y": 0.49789, "valid": true, "fixation_id": 4, "fix_duration_s": 0.55}
+{"t_ns": 4266666496, "x": 0.24375, "y": 0.49917, "valid": true, "fixation_id": 4, "fix_duration_s": 0.567}
+{"t_ns": 4283333162, "x": 0.24489, "y": 0.50066, "valid": true, "fixation_id": 4, "fix_duration_s": 0.583}
+{"t_ns": 4299999828, "x": 0.24687, "y": 0.50198, "valid": true, "fixation_id": 4, "fix_duration_s": 0.6}
+{"t_ns": 4316666494, "x": 0.24875, "y": 0.50282, "valid": true, "fixation_id": 4, "fix_duration_s": 0.617}
+{"t_ns": 4333333160, "x": 0.24965, "y": 0.50297, "valid": true, "fixation_id": 4, "fix_duration_s": 0.633}
+{"t_ns": 4349999826, "x": 0.24915, "y": 0.50239, "valid": true, "fixation_id": 4, "fix_duration_s": 0.65}
+{"t_ns": 4366666492, "x": 0.24748, "y": 0.50122, "valid": true, "fixation_id": 4, "fix_duration_s": 0.667}
+{"t_ns": 4383333158, "x": 0.24543, "y": 0.49976, "valid": true, "fixation_id": 4, "fix_duration_s": 0.683}
+{"t_ns": 4399999824, "x": 0.24396, "y": 0.49836, "valid": true, "fixation_id": 4, "fix_duration_s": 0.7}
+{"t_ns": 4416666490, "x": 0.24376, "y": 0.49735, "valid": true, "fixation_id": 4, "fix_duration_s": 0.717}
+{"t_ns": 4433333156, "x": 0.24493, "y": 0.497, "valid": true, "fixation_id": 4, "fix_duration_s": 0.733}
+{"t_ns": 4449999822, "x": 0.24692, "y": 0.49738, "valid": true, "fixation_id": 4, "fix_duration_s": 0.75}
+{"t_ns": 4466666488, "x": 0.24879, "y": 0.4984, "valid": true, "fixation_id": 4, "fix_duration_s": 0.767}
+{"t_ns": 4483333154, "x": 0.24966, "y": 0.49981, "valid": true, "fixation_id": 4, "fix_duration_s": 0.783}
+{"t_ns": 4499999820, "x": 0.24912, "y": 0.50127, "valid": true, "fixation_id": 4, "fix_duration_s": 0.8}
+{"t_ns": 4516666486, "x": 0.24743, "y": 0.50242, "valid": true, "fixation_id": 4, "fix_duration_s": 0.817}
+{"t_ns": 4533333152, "x": 0.24538, "y": 0.50297, "valid": true, "fixation_id": 4, "fix_duration_s": 0.833}
+{"t_ns": 4549999818, "x": 0.24394, "y": 0.5028, "valid": true, "fixation_id": 4, "fix_duration_s": 0.85}
+{"t_ns": 4566666484, "x": 0.24378, "y": 0.50194, "valid": true, "fixation_id": 4, "fix_duration_s": 0.867}
+{"t_ns": 4583333150, "x": 0.24497, "y": 0.50061, "valid": true, "fixation_id": 4, "fix_duration_s": 0.883}
+{"t_ns": 4599999816, "x": 0.24697, "y": 0.49912, "valid": true, "fixation_id": 4, "fix_duration_s": 0.9}
+{"t_ns": 4616666482, "x": 0.24882, "y": 0.49786, "valid": true, "fixation_id": 4, "fix_duration_s": 0.917}
+{"t_ns": 4633333148, "x": 0.24966, "y": 0.49711, "valid": true, "fixation_id": 4, "fix_duration_s": 0.933}
+{"t_ns": 4649999814, "x": 0.24909, "y": 0.49708, "valid": true, "fixation_id": 4, "fix_duration_s": 0.95}
+{"t_ns": 4666666480, "x": 0.24738, "y": 0.49776, "valid": true, "fixation_id": 4, "fix_duration_s": 0.967}
+{"t_ns": 4683333146, "x": 0.24534, "y": 0.49899, "valid": true, "fixation_id": 4, "fix_duration_s": 0.983}
+{"t_ns": 4699999812, "x": 0.24392, "y": 0.50046, "valid": true, "fixation_id": 4, "fix_duration_s": 1.0}
+{"t_ns": 4716666478, "x": 0.24379, "y": 0.50183, "valid": true, "fixation_id": 4, "fix_duration_s": 1.017}
+{"t_ns": 4733333144, "x": 0.24502, "y": 0.50274, "valid": true, "fixation_id": 4, "fix_duration_s": 1.033}
+{"t_ns": 4749999810, "x": 0.24702, "y": 0.50299, "valid": true, "fixation_id": 4, "fix_duration_s": 1.05}
+{"t_ns": 4766666476, "x": 0.24886, "y": 0.5025, "valid": true, "fixation_id": 4, "fix_duration_s": 1.067}
+{"t_ns": 4783333142, "x": 0.24966, "y": 0.5014, "valid": true, "fixation_id": 4, "fix_duration_s": 1.083}
+{"t_ns": 4799999808, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 4816666474, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 4833333140, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 4849999806, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 4866666472, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 4883333138, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 4899999804, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 4916666470, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 4933333136, "x": 0.5, "y": 0.503, "valid": true, "fixation_id": 5, "fix_duration_s": 0.0}
+{"t_ns": 4949999802, "x": 0.50193, "y": 0.50263, "valid": true, "fixation_id": 5, "fix_duration_s": 0.017}
+{"t_ns": 4966666468, "x": 0.50296, "y": 0.50162, "valid": true, "fixation_id": 5, "fix_duration_s": 0.033}
+{"t_ns": 4983333134, "x": 0.50259, "y": 0.50021, "valid": true, "fixation_id": 5, "fix_duration_s": 0.05}
+{"t_ns": 4999999800, "x": 0.501, "y": 0.49875, "valid": true, "fixation_id": 5, "fix_duration_s": 0.067}
+{"t_ns": 5016666466, "x": 0.49895, "y": 0.4976, "valid": true, "fixation_id": 5, "fix_duration_s": 0.083}
+{"t_ns": 5033333132, "x": 0.49739, "y": 0.49703, "valid": true, "fixation_id": 5, "fix_duration_s": 0.1}
+{"t_ns": 5049999798, "x": 0.49705, "y": 0.49719, "valid": true, "fixation_id": 5, "fix_duration_s": 0.117}
+{"t_ns": 5066666464, "x": 0.49811, "y": 0.49804, "valid": true, "fixation_id": 5, "fix_duration_s": 0.133}
+{"t_ns": 5083333130, "x": 0.50005, "y": 0.49937, "valid": true, "fixation_id": 5, "fix_duration_s": 0.15}
+{"t_ns": 5099999796, "x": 0.50197, "y": 0.50085, "valid": true, "fixation_id": 5, "fix_duration_s": 0.167}
+{"t_ns": 5116666462, "x": 0.50296, "y": 0.50213, "valid": true, "fixation_id": 5, "fix_duration_s": 0.183}
+{"t_ns": 5133333128, "x": 0.50256, "y": 0.50288, "valid": true, "fixation_id": 5, "fix_duration_s": 0.2}
+{"t_ns": 5149999794, "x": 0.50096, "y": 0.50293, "valid": true, "fixation_id": 5, "fix_duration_s": 0.217}
+{"t_ns": 5166666460, "x": 0.4989, "y": 0.50226, "valid": true, "fixation_id": 5, "fix_duration_s": 0.233}
+{"t_ns": 5183333126, "x": 0.49736, "y": 0.50104, "valid": true, "fixation_id": 5, "fix_duration_s": 0.25}
+{"t_ns": 5199999792, "x": 0.49706, "y": 0.49956, "valid": true, "fixation_id": 5, "fix_duration_s": 0.267}
+{"t_ns": 5216666458, "x": 0.49815, "y": 0.49819, "valid": true, "fixation_id": 5, "fix_duration_s": 0.283}
+{"t_ns": 5233333124, "x": 0.5001, "y": 0.49727, "valid": true, "fixation_id": 5, "fix_duration_s": 0.3}
+{"t_ns": 5249999790, "x": 0.50201, "y": 0.49701, "valid": true, "fixation_id": 5, "fix_duration_s": 0.317}
+{"t_ns": 5266666456, "x": 0.50297, "y": 0.49748, "valid": true, "fixation_id": 5, "fix_duration_s": 0.333}
+{"t_ns": 5283333122, "x": 0.50254, "y": 0.49857, "valid": true, "fixation_id": 5, "fix_duration_s": 0.35}
+{"t_ns": 5299999788, "x": 0.50091, "y": 0.50001, "valid": true, "fixation_id": 5, "fix_duration_s": 0.367}
+{"t_ns": 5316666454, "x": 0.49885, "y": 0.50145, "valid": true, "fixation_id": 5, "fix_duration_s": 0.383}
+{"t_ns": 5333333120, "x": 0.49734, "y": 0.50253, "valid": true, "fixation_id": 5, "fix_duration_s": 0.4}
+{"t_ns": 5349999786, "x": 0.49707, "y": 0.50299, "valid": true, "fixation_id": 5, "fix_duration_s": 0.417}
+{"t_ns": 5366666452, "x": 0.49819, "y": 0.50272, "valid": true, "fixation_id": 5, "fix_duration_s": 0.433}
+{"t_ns": 5383333118, "x": 0.50015, "y": 0.50178, "valid": true, "fixation_id": 5, "fix_duration_s": 0.45}
+{"t_ns": 5399999784, "x": 0.50205, "y": 0.50041, "valid": true, "fixation_id": 5, "fix_duration_s": 0.467}
+{"t_ns": 5416666450, "x": 0.50298, "y": 0.49894, "valid": true, "fixation_id": 5, "fix_duration_s": 0.483}
+{"t_ns": 5433333116, "x": 0.50251, "y": 0.49772, "valid": true, "fixation_id": 5, "fix_duration_s": 0.5}
+{"t_ns": 5449999782, "x": 0.50086, "y": 0.49706, "valid": true, "fixation_id": 5, "fix_duration_s": 0.517}
+{"t_ns": 5466666448, "x": 0.49881, "y": 0.49713, "valid": true, "fixation_id": 5, "fix_duration_s": 0.533}
+{"t_ns": 5483333114, "x": 0.49731, "y": 0.49789, "valid": true, "fixation_id": 5, "fix_duration_s": 0.55}
+{"t_ns": 5499999780, "x": 0.49708, "y": 0.49917, "valid": true, "fixation_id": 5, "fix_duration_s": 0.567}
+{"t_ns": 5516666446, "x": 0.49823, "y": 0.50066, "valid": true, "fixation_id": 5, "fix_duration_s": 0.583}
+{"t_ns": 5533333112, "x": 0.5002, "y": 0.50198, "valid": true, "fixation_id": 5, "fix_duration_s": 0.6}
+{"t_ns": 5549999778, "x": 0.50208, "y": 0.50282, "valid": true, "fixation_id": 5, "fix_duration_s": 0.617}
+{"t_ns": 5566666444, "x": 0.50298, "y": 0.50297, "valid": true, "fixation_id": 5, "fix_duration_s": 0.633}
+{"t_ns": 5583333110, "x": 0.50248, "y": 0.50239, "valid": true, "fixation_id": 5, "fix_duration_s": 0.65}
+{"t_ns": 5599999776, "x": 0.50081, "y": 0.50122, "valid": true, "fixation_id": 5, "fix_duration_s": 0.667}
+{"t_ns": 5616666442, "x": 0.49876, "y": 0.49976, "valid": true, "fixation_id": 5, "fix_duration_s": 0.683}
+{"t_ns": 5633333108, "x": 0.49729, "y": 0.49836, "valid": true, "fixation_id": 5, "fix_duration_s": 0.7}
+{"t_ns": 5649999774, "x": 0.4971, "y": 0.49735, "valid": true, "fixation_id": 5, "fix_duration_s": 0.717}
+{"t_ns": 5666666440, "x": 0.49827, "y": 0.497, "valid": true, "fixation_id": 5, "fix_duration_s": 0.733}
+{"t_ns": 5683333106, "x": 0.50025, "y": 0.49738, "valid": true, "fixation_id": 5, "fix_duration_s": 0.75}
+{"t_ns": 5699999772, "x": 0.50212, "y": 0.4984, "valid": true, "fixation_id": 5, "fix_duration_s": 0.767}
+{"t_ns": 5716666438, "x": 0.50299, "y": 0.49981, "valid": true, "fixation_id": 5, "fix_duration_s": 0.783}
+{"t_ns": 5733333104, "x": 0.50245, "y": 0.50127, "valid": true, "fixation_id": 5, "fix_duration_s": 0.8}
+{"t_ns": 5749999770, "x": 0.50076, "y": 0.50242, "valid": true, "fixation_id": 5, "fix_duration_s": 0.817}
+{"t_ns": 5766666436, "x": 0.49872, "y": 0.50297, "valid": true, "fixation_id": 5, "fix_duration_s": 0.833}
+{"t_ns": 5783333102, "x": 0.49727, "y": 0.5028, "valid": true, "fixation_id": 5, "fix_duration_s": 0.85}
+{"t_ns": 5799999768, "x": 0.49711, "y": 0.50194, "valid": true, "fixation_id": 5, "fix_duration_s": 0.867}
+{"t_ns": 5816666434, "x": 0.49831, "y": 0.50061, "valid": true, "fixation_id": 5, "fix_duration_s": 0.883}
+{"t_ns": 5833333100, "x": 0.5003, "y": 0.49912, "valid": true, "fixation_id": 5, "fix_duration_s": 0.9}
+{"t_ns": 5849999766, "x": 0.50215, "y": 0.49786, "valid": true, "fixation_id": 5, "fix_duration_s": 0.917}
+{"t_ns": 5866666432, "x": 0.50299, "y": 0.49711, "valid": true, "fixation_id": 5, "fix_duration_s": 0.933}
+{"t_ns": 5883333098, "x": 0.50242, "y": 0.49708, "valid": true, "fixation_id": 5, "fix_duration_s": 0.95}
+{"t_ns": 5899999764, "x": 0.50072, "y": 0.49776, "valid": true, "fixation_id": 5, "fix_duration_s": 0.967}
+{"t_ns": 5916666430, "x": 0.49867, "y": 0.49899, "valid": true, "fixation_id": 5, "fix_duration_s": 0.983}
+{"t_ns": 5933333096, "x": 0.49725, "y": 0.50046, "valid": true, "fixation_id": 5, "fix_duration_s": 1.0}
+{"t_ns": 5949999762, "x": 0.49712, "y": 0.50183, "valid": true, "fixation_id": 5, "fix_duration_s": 1.017}
+{"t_ns": 5966666428, "x": 0.49835, "y": 0.50274, "valid": true, "fixation_id": 5, "fix_duration_s": 1.033}
+{"t_ns": 5983333094, "x": 0.50035, "y": 0.50299, "valid": true, "fixation_id": 5, "fix_duration_s": 1.05}
+{"t_ns": 5999999760, "x": 0.50219, "y": 0.5025, "valid": true, "fixation_id": 5, "fix_duration_s": 1.067}
+{"t_ns": 6016666426, "x": 0.503, "y": 0.5014, "valid": true, "fixation_id": 5, "fix_duration_s": 1.083}
+{"t_ns": 6033333092, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 6049999758, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 6066666424, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 6083333090, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 6099999756, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 6116666422, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 6133333088, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 6149999754, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 6166666420, "x": 0.75333, "y": 0.503, "valid": true, "fixation_id": 6, "fix_duration_s": 0.0}
+{"t_ns": 6183333086, "x": 0.75527, "y": 0.50263, "valid": true, "fixation_id": 6, "fix_duration_s": 0.017}
+{"t_ns": 6199999752, "x": 0.75629, "y": 0.50162, "valid": true, "fixation_id": 6, "fix_duration_s": 0.033}
+{"t_ns": 6216666418, "x": 0.75592, "y": 0.50021, "valid": true, "fixation_id": 6, "fix_duration_s": 0.05}
+{"t_ns": 6233333084, "x": 0.75434, "y": 0.49875, "valid": true, "fixation_id": 6, "fix_duration_s": 0.067}
+{"t_ns": 6249999750, "x": 0.75228, "y": 0.4976, "valid": true, "fixation_id": 6, "fix_duration_s": 0.083}
+{"t_ns": 6266666416, "x": 0.75072, "y": 0.49703, "valid": true, "fixation_id": 6, "fix_duration_s": 0.1}
+{"t_ns": 6283333082, "x": 0.75039, "y": 0.49719, "valid": true, "fixation_id": 6, "fix_duration_s": 0.117}
+{"t_ns": 6299999748, "x": 0.75144, "y": 0.49804, "valid": true, "fixation_id": 6, "fix_duration_s": 0.133}
+{"t_ns": 6316666414, "x": 0.75338, "y": 0.49937, "valid": true, "fixation_id": 6, "fix_duration_s": 0.15}
+{"t_ns": 6333333080, "x": 0.7553, "y": 0.50085, "valid": true, "fixation_id": 6, "fix_duration_s": 0.167}
+{"t_ns": 6349999746, "x": 0.7563, "y": 0.50213, "valid": true, "fixation_id": 6, "fix_duration_s": 0.183}
+{"t_ns": 6366666412, "x": 0.7559, "y": 0.50288, "valid": true, "fixation_id": 6, "fix_duration_s": 0.2}
+{"t_ns": 6383333078, "x": 0.75429, "y": 0.50293, "valid": true, "fixation_id": 6, "fix_duration_s": 0.217}
+{"t_ns": 6399999744, "x": 0.75223, "y": 0.50226, "valid": true, "fixation_id": 6, "fix_duration_s": 0.233}
+{"t_ns": 6416666410, "x": 0.75069, "y": 0.50104, "valid": true, "fixation_id": 6, "fix_duration_s": 0.25}
+{"t_ns": 6433333076, "x": 0.7504, "y": 0.49956, "valid": true, "fixation_id": 6, "fix_duration_s": 0.267}
+{"t_ns": 6449999742, "x": 0.75148, "y": 0.49819, "valid": true, "fixation_id": 6, "fix_duration_s": 0.283}
+{"t_ns": 6466666408, "x": 0.75343, "y": 0.49727, "valid": true, "fixation_id": 6, "fix_duration_s": 0.3}
+{"t_ns": 6483333074, "x": 0.75534, "y": 0.49701, "valid": true, "fixation_id": 6, "fix_duration_s": 0.317}
+{"t_ns": 6499999740, "x": 0.75631, "y": 0.49748, "valid": true, "fixation_id": 6, "fix_duration_s": 0.333}
+{"t_ns": 6516666406, "x": 0.75587, "y": 0.49857, "valid": true, "fixation_id": 6, "fix_duration_s": 0.35}
+{"t_ns": 6533333072, "x": 0.75424, "y": 0.50001, "valid": true, "fixation_id": 6, "fix_duration_s": 0.367}
+{"t_ns": 6549999738, "x": 0.75219, "y": 0.50145, "valid": true, "fixation_id": 6, "fix_duration_s": 0.383}
+{"t_ns": 6566666404, "x": 0.75067, "y": 0.50253, "valid": true, "fixation_id": 6, "fix_duration_s": 0.4}
+{"t_ns": 6583333070, "x": 0.75041, "y": 0.50299, "valid": true, "fixation_id": 6, "fix_duration_s": 0.417}
+{"t_ns": 6599999736, "x": 0.75152, "y": 0.50272, "valid": true, "fixation_id": 6, "fix_duration_s": 0.433}
+{"t_ns": 6616666402, "x": 0.75348, "y": 0.50178, "valid": true, "fixation_id": 6, "fix_duration_s": 0.45}
+{"t_ns": 6633333068, "x": 0.75538, "y": 0.50041, "valid": true, "fixation_id": 6, "fix_duration_s": 0.467}
+{"t_ns": 6649999734, "x": 0.75631, "y": 0.49894, "valid": true, "fixation_id": 6, "fix_duration_s": 0.483}
+{"t_ns": 6666666400, "x": 0.75584, "y": 0.49772, "valid": true, "fixation_id": 6, "fix_duration_s": 0.5}
+{"t_ns": 6683333066, "x": 0.75419, "y": 0.49706, "valid": true, "fixation_id": 6, "fix_duration_s": 0.517}
+{"t_ns": 6699999732, "x": 0.75214, "y": 0.49713, "valid": true, "fixation_id": 6, "fix_duration_s": 0.533}
+{"t_ns": 6716666398, "x": 0.75065, "y": 0.49789, "valid": true, "fixation_id": 6, "fix_duration_s": 0.55}
+{"t_ns": 6733333064, "x": 0.75042, "y": 0.49917, "valid": true, "fixation_id": 6, "fix_duration_s": 0.567}
+{"t_ns": 6749999730, "x": 0.75156, "y": 0.50066, "valid": true, "fixation_id": 6, "fix_duration_s": 0.583}
+{"t_ns": 6766666396, "x": 0.75353, "y": 0.50198, "valid": true, "fixation_id": 6, "fix_duration_s": 0.6}
+{"t_ns": 6783333062, "x": 0.75542, "y": 0.50282, "valid": true, "fixation_id": 6, "fix_duration_s": 0.617}
+{"t_ns": 6799999728, "x": 0.75632, "y": 0.50297, "valid": true, "fixation_id": 6, "fix_duration_s": 0.633}
+{"t_ns": 6816666394, "x": 0.75582, "y": 0.50239, "valid": true, "fixation_id": 6, "fix_duration_s": 0.65}
+{"t_ns": 6833333060, "x": 0.75415, "y": 0.50122, "valid": true, "fixation_id": 6, "fix_duration_s": 0.667}
+{"t_ns": 6849999726, "x": 0.75209, "y": 0.49976, "valid": true, "fixation_id": 6, "fix_duration_s": 0.683}
+{"t_ns": 6866666392, "x": 0.75063, "y": 0.49836, "valid": true, "fixation_id": 6, "fix_duration_s": 0.7}
+{"t_ns": 6883333058, "x": 0.75043, "y": 0.49735, "valid": true, "fixation_id": 6, "fix_duration_s": 0.717}
+{"t_ns": 6899999724, "x": 0.7516, "y": 0.497, "valid": true, "fixation_id": 6, "fix_duration_s": 0.733}
+{"t_ns": 6916666390, "x": 0.75359, "y": 0.49738, "valid": true, "fixation_id": 6, "fix_duration_s": 0.75}
+{"t_ns": 6933333056, "x": 0.75545, "y": 0.4984, "valid": true, "fixation_id": 6, "fix_duration_s": 0.767}
+{"t_ns": 6949999722, "x": 0.75632, "y": 0.49981, "valid": true, "fixation_id": 6, "fix_duration_s": 0.783}
+{"t_ns": 6966666388, "x": 0.75579, "y": 0.50127, "valid": true, "fixation_id": 6, "fix_duration_s": 0.8}
+{"t_ns": 6983333054, "x": 0.7541, "y": 0.50242, "valid": true, "fixation_id": 6, "fix_duration_s": 0.817}
+{"t_ns": 6999999720, "x": 0.75205, "y": 0.50297, "valid": true, "fixation_id": 6, "fix_duration_s": 0.833}
+{"t_ns": 7016666386, "x": 0.7506, "y": 0.5028, "valid": true, "fixation_id": 6, "fix_duration_s": 0.85}
+{"t_ns": 7033333052, "x": 0.75044, "y": 0.50194, "valid": true, "fixation_id": 6, "fix_duration_s": 0.867}
+{"t_ns": 7049999718, "x": 0.75164, "y": 0.50061, "valid": true, "fixation_id": 6, "fix_duration_s": 0.883}
+{"t_ns": 7066666384, "x": 0.75364, "y": 0.49912, "valid": true, "fixation_id": 6, "fix_duration_s": 0.9}
+{"t_ns": 7083333050, "x": 0.75549, "y": 0.49786, "valid": true, "fixation_id": 6, "fix_duration_s": 0.917}
+{"t_ns": 7099999716, "x": 0.75633, "y": 0.49711, "valid": true, "fixation_id": 6, "fix_duration_s": 0.933}
+{"t_ns": 7116666382, "x": 0.75576, "y": 0.49708, "valid": true, "fixation_id": 6, "fix_duration_s": 0.95}
+{"t_ns": 7133333048, "x": 0.75405, "y": 0.49776, "valid": true, "fixation_id": 6, "fix_duration_s": 0.967}
+{"t_ns": 7149999714, "x": 0.752, "y": 0.49899, "valid": true, "fixation_id": 6, "fix_duration_s": 0.983}
+{"t_ns": 7166666380, "x": 0.75058, "y": 0.50046, "valid": true, "fixation_id": 6, "fix_duration_s": 1.0}
+{"t_ns": 7183333046, "x": 0.75046, "y": 0.50183, "valid": true, "fixation_id": 6, "fix_duration_s": 1.017}
+{"t_ns": 7199999712, "x": 0.75168, "y": 0.50274, "valid": true, "fixation_id": 6, "fix_duration_s": 1.033}
+{"t_ns": 7216666378, "x": 0.75369, "y": 0.50299, "valid": true, "fixation_id": 6, "fix_duration_s": 1.05}
+{"t_ns": 7233333044, "x": 0.75552, "y": 0.5025, "valid": true, "fixation_id": 6, "fix_duration_s": 1.067}
+{"t_ns": 7249999710, "x": 0.75633, "y": 0.5014, "valid": true, "fixation_id": 6, "fix_duration_s": 1.083}
+{"t_ns": 7266666376, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 7283333042, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 7299999708, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 7316666374, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 7333333040, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 7349999706, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 7366666372, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 7383333038, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 7399999704, "x": 0.24667, "y": 0.75633, "valid": true, "fixation_id": 7, "fix_duration_s": 0.0}
+{"t_ns": 7416666370, "x": 0.2486, "y": 0.75597, "valid": true, "fixation_id": 7, "fix_duration_s": 0.017}
+{"t_ns": 7433333036, "x": 0.24962, "y": 0.75495, "valid": true, "fixation_id": 7, "fix_duration_s": 0.033}
+{"t_ns": 7449999702, "x": 0.24926, "y": 0.75355, "valid": true, "fixation_id": 7, "fix_duration_s": 0.05}
+{"t_ns": 7466666368, "x": 0.24767, "y": 0.75208, "valid": true, "fixation_id": 7, "fix_duration_s": 0.067}
+{"t_ns": 7483333034, "x": 0.24561, "y": 0.75093, "valid": true, "fixation_id": 7, "fix_duration_s": 0.083}
+{"t_ns": 7499999700, "x": 0.24405, "y": 0.75036, "valid": true, "fixation_id": 7, "fix_duration_s": 0.1}
+{"t_ns": 7516666366, "x": 0.24372, "y": 0.75052, "valid": true, "fixation_id": 7, "fix_duration_s": 0.117}
+{"t_ns": 7533333032, "x": 0.24477, "y": 0.75137, "valid": true, "fixation_id": 7, "fix_duration_s": 0.133}
+{"t_ns": 7549999698, "x": 0.24672, "y": 0.7527, "valid": true, "fixation_id": 7, "fix_duration_s": 0.15}
+{"t_ns": 7566666364, "x": 0.24864, "y": 0.75418, "valid": true, "fixation_id": 7, "fix_duration_s": 0.167}
+{"t_ns": 7583333030, "x": 0.24963, "y": 0.75546, "valid": true, "fixation_id": 7, "fix_duration_s": 0.183}
+{"t_ns": 7599999696, "x": 0.24923, "y": 0.75621, "valid": true, "fixation_id": 7, "fix_duration_s": 0.2}
+{"t_ns": 7616666362, "x": 0.24762, "y": 0.75626, "valid": true, "fixation_id": 7, "fix_duration_s": 0.217}
+{"t_ns": 7633333028, "x": 0.24557, "y": 0.7556, "valid": true, "fixation_id": 7, "fix_duration_s": 0.233}
+{"t_ns": 7649999694, "x": 0.24403, "y": 0.75437, "valid": true, "fixation_id": 7, "fix_duration_s": 0.25}
+{"t_ns": 7666666360, "x": 0.24373, "y": 0.7529, "valid": true, "fixation_id": 7, "fix_duration_s": 0.267}
+{"t_ns": 7683333026, "x": 0.24481, "y": 0.75153, "valid": true, "fixation_id": 7, "fix_duration_s": 0.283}
+{"t_ns": 7699999692, "x": 0.24677, "y": 0.7506, "valid": true, "fixation_id": 7, "fix_duration_s": 0.3}
+{"t_ns": 7716666358, "x": 0.24868, "y": 0.75034, "valid": true, "fixation_id": 7, "fix_duration_s": 0.317}
+{"t_ns": 7733333024, "x": 0.24964, "y": 0.75082, "valid": true, "fixation_id": 7, "fix_duration_s": 0.333}
+{"t_ns": 7749999690, "x": 0.2492, "y": 0.75191, "valid": true, "fixation_id": 7, "fix_duration_s": 0.35}
+{"t_ns": 7766666356, "x": 0.24758, "y": 0.75335, "valid": true, "fixation_id": 7, "fix_duration_s": 0.367}
+{"t_ns": 7783333022, "x": 0.24552, "y": 0.75478, "valid": true, "fixation_id": 7, "fix_duration_s": 0.383}
+{"t_ns": 7799999688, "x": 0.244, "y": 0.75586, "valid": true, "fixation_id": 7, "fix_duration_s": 0.4}
+{"t_ns": 7816666354, "x": 0.24374, "y": 0.75633, "valid": true, "fixation_id": 7, "fix_duration_s": 0.417}
+{"t_ns": 7833333020, "x": 0.24485, "y": 0.75606, "valid": true, "fixation_id": 7, "fix_duration_s": 0.433}
+{"t_ns": 7849999686, "x": 0.24682, "y": 0.75512, "valid": true, "fixation_id": 7, "fix_duration_s": 0.45}
+{"t_ns": 7866666352, "x": 0.24871, "y": 0.75374, "valid": true, "fixation_id": 7, "fix_duration_s": 0.467}
+{"t_ns": 7883333018, "x": 0.24964, "y": 0.75227, "valid": true, "fixation_id": 7, "fix_duration_s": 0.483}
+{"t_ns": 7899999684, "x": 0.24918, "y": 0.75105, "valid": true, "fixation_id": 7, "fix_duration_s": 0.5}
+{"t_ns": 7916666350, "x": 0.24753, "y": 0.7504, "valid": true, "fixation_id": 7, "fix_duration_s": 0.517}
+{"t_ns": 7933333016, "x": 0.24547, "y": 0.75046, "valid": true, "fixation_id": 7, "fix_duration_s": 0.533}
+{"t_ns": 7949999682, "x": 0.24398, "y": 0.75123, "valid": true, "fixation_id": 7, "fix_duration_s": 0.55}
+{"t_ns": 7966666348, "x": 0.24375, "y": 0.75251, "valid": true, "fixation_id": 7, "fix_duration_s": 0.567}
+{"t_ns": 7983333014, "x": 0.24489, "y": 0.75399, "valid": true, "fixation_id": 7, "fix_duration_s": 0.583}
+{"t_ns": 7999999680, "x": 0.24687, "y": 0.75531, "valid": true, "fixation_id": 7, "fix_duration_s": 0.6}
+{"t_ns": 8016666346, "x": 0.24875, "y": 0.75615, "valid": true, "fixation_id": 7, "fix_duration_s": 0.617}
+{"t_ns": 8033333012, "x": 0.24965, "y": 0.7563, "valid": true, "fixation_id": 7, "fix_duration_s": 0.633}
+{"t_ns": 8049999678, "x": 0.24915, "y": 0.75572, "valid": true, "fixation_id": 7, "fix_duration_s": 0.65}
+{"t_ns": 8066666344, "x": 0.24748, "y": 0.75456, "valid": true, "fixation_id": 7, "fix_duration_s": 0.667}
+{"t_ns": 8083333010, "x": 0.24543, "y": 0.75309, "valid": true, "fixation_id": 7, "fix_duration_s": 0.683}
+{"t_ns": 8099999676, "x": 0.24396, "y": 0.75169, "valid": true, "fixation_id": 7, "fix_duration_s": 0.7}
+{"t_ns": 8116666342, "x": 0.24376, "y": 0.75069, "valid": true, "fixation_id": 7, "fix_duration_s": 0.717}
+{"t_ns": 8133333008, "x": 0.24493, "y": 0.75033, "valid": true, "fixation_id": 7, "fix_duration_s": 0.733}
+{"t_ns": 8149999674, "x": 0.24692, "y": 0.75071, "valid": true, "fixation_id": 7, "fix_duration_s": 0.75}
+{"t_ns": 8166666340, "x": 0.24879, "y": 0.75173, "valid": true, "fixation_id": 7, "fix_duration_s": 0.767}
+{"t_ns": 8183333006, "x": 0.24966, "y": 0.75315, "valid": true, "fixation_id": 7, "fix_duration_s": 0.783}
+{"t_ns": 8199999672, "x": 0.24912, "y": 0.75461, "valid": true, "fixation_id": 7, "fix_duration_s": 0.8}
+{"t_ns": 8216666338, "x": 0.24743, "y": 0.75575, "valid": true, "fixation_id": 7, "fix_duration_s": 0.817}
+{"t_ns": 8233333004, "x": 0.24538, "y": 0.75631, "valid": true, "fixation_id": 7, "fix_duration_s": 0.833}
+{"t_ns": 8249999670, "x": 0.24394, "y": 0.75613, "valid": true, "fixation_id": 7, "fix_duration_s": 0.85}
+{"t_ns": 8266666336, "x": 0.24378, "y": 0.75527, "valid": true, "fixation_id": 7, "fix_duration_s": 0.867}
+{"t_ns": 8283333002, "x": 0.24497, "y": 0.75394, "valid": true, "fixation_id": 7, "fix_duration_s": 0.883}
+{"t_ns": 8299999668, "x": 0.24697, "y": 0.75246, "valid": true, "fixation_id": 7, "fix_duration_s": 0.9}
+{"t_ns": 8316666334, "x": 0.24882, "y": 0.75119, "valid": true, "fixation_id": 7, "fix_duration_s": 0.917}
+{"t_ns": 8333333000, "x": 0.24966, "y": 0.75045, "valid": true, "fixation_id": 7, "fix_duration_s": 0.933}
+{"t_ns": 8349999666, "x": 0.24909, "y": 0.75041, "valid": true, "fixation_id": 7, "fix_duration_s": 0.95}
+{"t_ns": 8366666332, "x": 0.24738, "y": 0.75109, "valid": true, "fixation_id": 7, "fix_duration_s": 0.967}
+{"t_ns": 8383332998, "x": 0.24534, "y": 0.75232, "valid": true, "fixation_id": 7, "fix_duration_s": 0.983}
+{"t_ns": 8399999664, "x": 0.24392, "y": 0.7538, "valid": true, "fixation_id": 7, "fix_duration_s": 1.0}
+{"t_ns": 8416666330, "x": 0.24379, "y": 0.75516, "valid": true, "fixation_id": 7, "fix_duration_s": 1.017}
+{"t_ns": 8433332996, "x": 0.24502, "y": 0.75608, "valid": true, "fixation_id": 7, "fix_duration_s": 1.033}
+{"t_ns": 8449999662, "x": 0.24702, "y": 0.75632, "valid": true, "fixation_id": 7, "fix_duration_s": 1.05}
+{"t_ns": 8466666328, "x": 0.24886, "y": 0.75584, "valid": true, "fixation_id": 7, "fix_duration_s": 1.067}
+{"t_ns": 8483332994, "x": 0.24966, "y": 0.75474, "valid": true, "fixation_id": 7, "fix_duration_s": 1.083}
+{"t_ns": 8499999660, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 8516666326, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 8533332992, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 8549999658, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 8566666324, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 8583332990, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 8599999656, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 8616666322, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 8633332988, "x": 0.5, "y": 0.75633, "valid": true, "fixation_id": 8, "fix_duration_s": 0.0}
+{"t_ns": 8649999654, "x": 0.50193, "y": 0.75597, "valid": true, "fixation_id": 8, "fix_duration_s": 0.017}
+{"t_ns": 8666666320, "x": 0.50296, "y": 0.75495, "valid": true, "fixation_id": 8, "fix_duration_s": 0.033}
+{"t_ns": 8683332986, "x": 0.50259, "y": 0.75355, "valid": true, "fixation_id": 8, "fix_duration_s": 0.05}
+{"t_ns": 8699999652, "x": 0.501, "y": 0.75208, "valid": true, "fixation_id": 8, "fix_duration_s": 0.067}
+{"t_ns": 8716666318, "x": 0.49895, "y": 0.75093, "valid": true, "fixation_id": 8, "fix_duration_s": 0.083}
+{"t_ns": 8733332984, "x": 0.49739, "y": 0.75036, "valid": true, "fixation_id": 8, "fix_duration_s": 0.1}
+{"t_ns": 8749999650, "x": 0.49705, "y": 0.75052, "valid": true, "fixation_id": 8, "fix_duration_s": 0.117}
+{"t_ns": 8766666316, "x": 0.49811, "y": 0.75137, "valid": true, "fixation_id": 8, "fix_duration_s": 0.133}
+{"t_ns": 8783332982, "x": 0.50005, "y": 0.7527, "valid": true, "fixation_id": 8, "fix_duration_s": 0.15}
+{"t_ns": 8799999648, "x": 0.50197, "y": 0.75418, "valid": true, "fixation_id": 8, "fix_duration_s": 0.167}
+{"t_ns": 8816666314, "x": 0.50296, "y": 0.75546, "valid": true, "fixation_id": 8, "fix_duration_s": 0.183}
+{"t_ns": 8833332980, "x": 0.50256, "y": 0.75621, "valid": true, "fixation_id": 8, "fix_duration_s": 0.2}
+{"t_ns": 8849999646, "x": 0.50096, "y": 0.75626, "valid": true, "fixation_id": 8, "fix_duration_s": 0.217}
+{"t_ns": 8866666312, "x": 0.4989, "y": 0.7556, "valid": true, "fixation_id": 8, "fix_duration_s": 0.233}
+{"t_ns": 8883332978, "x": 0.49736, "y": 0.75437, "valid": true, "fixation_id": 8, "fix_duration_s": 0.25}
+{"t_ns": 8899999644, "x": 0.49706, "y": 0.7529, "valid": true, "fixation_id": 8, "fix_duration_s": 0.267}
+{"t_ns": 8916666310, "x": 0.49815, "y": 0.75153, "valid": true, "fixation_id": 8, "fix_duration_s": 0.283}
+{"t_ns": 8933332976, "x": 0.5001, "y": 0.7506, "valid": true, "fixation_id": 8, "fix_duration_s": 0.3}
+{"t_ns": 8949999642, "x": 0.50201, "y": 0.75034, "valid": true, "fixation_id": 8, "fix_duration_s": 0.317}
+{"t_ns": 8966666308, "x": 0.50297, "y": 0.75082, "valid": true, "fixation_id": 8, "fix_duration_s": 0.333}
+{"t_ns": 8983332974, "x": 0.50254, "y": 0.75191, "valid": true, "fixation_id": 8, "fix_duration_s": 0.35}
+{"t_ns": 8999999640, "x": 0.50091, "y": 0.75335, "valid": true, "fixation_id": 8, "fix_duration_s": 0.367}
+{"t_ns": 9016666306, "x": 0.49885, "y": 0.75478, "valid": true, "fixation_id": 8, "fix_duration_s": 0.383}
+{"t_ns": 9033332972, "x": 0.49734, "y": 0.75586, "valid": true, "fixation_id": 8, "fix_duration_s": 0.4}
+{"t_ns": 9049999638, "x": 0.49707, "y": 0.75633, "valid": true, "fixation_id": 8, "fix_duration_s": 0.417}
+{"t_ns": 9066666304, "x": 0.49819, "y": 0.75606, "valid": true, "fixation_id": 8, "fix_duration_s": 0.433}
+{"t_ns": 9083332970, "x": 0.50015, "y": 0.75512, "valid": true, "fixation_id": 8, "fix_duration_s": 0.45}
+{"t_ns": 9099999636, "x": 0.50205, "y": 0.75374, "valid": true, "fixation_id": 8, "fix_duration_s": 0.467}
+{"t_ns": 9116666302, "x": 0.50298, "y": 0.75227, "valid": true, "fixation_id": 8, "fix_duration_s": 0.483}
+{"t_ns": 9133332968, "x": 0.50251, "y": 0.75105, "valid": true, "fixation_id": 8, "fix_duration_s": 0.5}
+{"t_ns": 9149999634, "x": 0.50086, "y": 0.7504, "valid": true, "fixation_id": 8, "fix_duration_s": 0.517}
+{"t_ns": 9166666300, "x": 0.49881, "y": 0.75046, "valid": true, "fixation_id": 8, "fix_duration_s": 0.533}
+{"t_ns": 9183332966, "x": 0.49731, "y": 0.75123, "valid": true, "fixation_id": 8, "fix_duration_s": 0.55}
+{"t_ns": 9199999632, "x": 0.49708, "y": 0.75251, "valid": true, "fixation_id": 8, "fix_duration_s": 0.567}
+{"t_ns": 9216666298, "x": 0.49823, "y": 0.75399, "valid": true, "fixation_id": 8, "fix_duration_s": 0.583}
+{"t_ns": 9233332964, "x": 0.5002, "y": 0.75531, "valid": true, "fixation_id": 8, "fix_duration_s": 0.6}
+{"t_ns": 9249999630, "x": 0.50208, "y": 0.75615, "valid": true, "fixation_id": 8, "fix_duration_s": 0.617}
+{"t_ns": 9266666296, "x": 0.50298, "y": 0.7563, "valid": true, "fixation_id": 8, "fix_duration_s": 0.633}
+{"t_ns": 9283332962, "x": 0.50248, "y": 0.75572, "valid": true, "fixation_id": 8, "fix_duration_s": 0.65}
+{"t_ns": 9299999628, "x": 0.50081, "y": 0.75456, "valid": true, "fixation_id": 8, "fix_duration_s": 0.667}
+{"t_ns": 9316666294, "x": 0.49876, "y": 0.75309, "valid": true, "fixation_id": 8, "fix_duration_s": 0.683}
+{"t_ns": 9333332960, "x": 0.49729, "y": 0.75169, "valid": true, "fixation_id": 8, "fix_duration_s": 0.7}
+{"t_ns": 9349999626, "x": 0.4971, "y": 0.75069, "valid": true, "fixation_id": 8, "fix_duration_s": 0.717}
+{"t_ns": 9366666292, "x": 0.49827, "y": 0.75033, "valid": true, "fixation_id": 8, "fix_duration_s": 0.733}
+{"t_ns": 9383332958, "x": 0.50025, "y": 0.75071, "valid": true, "fixation_id": 8, "fix_duration_s": 0.75}
+{"t_ns": 9399999624, "x": 0.50212, "y": 0.75173, "valid": true, "fixation_id": 8, "fix_duration_s": 0.767}
+{"t_ns": 9416666290, "x": 0.50299, "y": 0.75315, "valid": true, "fixation_id": 8, "fix_duration_s": 0.783}
+{"t_ns": 9433332956, "x": 0.50245, "y": 0.75461, "valid": true, "fixation_id": 8, "fix_duration_s": 0.8}
+{"t_ns": 9449999622, "x": 0.50076, "y": 0.75575, "valid": true, "fixation_id": 8, "fix_duration_s": 0.817}
+{"t_ns": 9466666288, "x": 0.49872, "y": 0.75631, "valid": true, "fixation_id": 8, "fix_duration_s": 0.833}
+{"t_ns": 9483332954, "x": 0.49727, "y": 0.75613, "valid": true, "fixation_id": 8, "fix_duration_s": 0.85}
+{"t_ns": 9499999620, "x": 0.49711, "y": 0.75527, "valid": true, "fixation_id": 8, "fix_duration_s": 0.867}
+{"t_ns": 9516666286, "x": 0.49831, "y": 0.75394, "valid": true, "fixation_id": 8, "fix_duration_s": 0.883}
+{"t_ns": 9533332952, "x": 0.5003, "y": 0.75246, "valid": true, "fixation_id": 8, "fix_duration_s": 0.9}
+{"t_ns": 9549999618, "x": 0.50215, "y": 0.75119, "valid": true, "fixation_id": 8, "fix_duration_s": 0.917}
+{"t_ns": 9566666284, "x": 0.50299, "y": 0.75045, "valid": true, "fixation_id": 8, "fix_duration_s": 0.933}
+{"t_ns": 9583332950, "x": 0.50242, "y": 0.75041, "valid": true, "fixation_id": 8, "fix_duration_s": 0.95}
+{"t_ns": 9599999616, "x": 0.50072, "y": 0.75109, "valid": true, "fixation_id": 8, "fix_duration_s": 0.967}
+{"t_ns": 9616666282, "x": 0.49867, "y": 0.75232, "valid": true, "fixation_id": 8, "fix_duration_s": 0.983}
+{"t_ns": 9633332948, "x": 0.49725, "y": 0.7538, "valid": true, "fixation_id": 8, "fix_duration_s": 1.0}
+{"t_ns": 9649999614, "x": 0.49712, "y": 0.75516, "valid": true, "fixation_id": 8, "fix_duration_s": 1.017}
+{"t_ns": 9666666280, "x": 0.49835, "y": 0.75608, "valid": true, "fixation_id": 8, "fix_duration_s": 1.033}
+{"t_ns": 9683332946, "x": 0.50035, "y": 0.75632, "valid": true, "fixation_id": 8, "fix_duration_s": 1.05}
+{"t_ns": 9699999612, "x": 0.50219, "y": 0.75584, "valid": true, "fixation_id": 8, "fix_duration_s": 1.067}
+{"t_ns": 9716666278, "x": 0.503, "y": 0.75474, "valid": true, "fixation_id": 8, "fix_duration_s": 1.083}
+{"t_ns": 9733332944, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 9749999610, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 9766666276, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 9783332942, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 9799999608, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 9816666274, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 9833332940, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 9849999606, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 9866666272, "x": 0.75333, "y": 0.75633, "valid": true, "fixation_id": 9, "fix_duration_s": 0.0}
+{"t_ns": 9883332938, "x": 0.75527, "y": 0.75597, "valid": true, "fixation_id": 9, "fix_duration_s": 0.017}
+{"t_ns": 9899999604, "x": 0.75629, "y": 0.75495, "valid": true, "fixation_id": 9, "fix_duration_s": 0.033}
+{"t_ns": 9916666270, "x": 0.75592, "y": 0.75355, "valid": true, "fixation_id": 9, "fix_duration_s": 0.05}
+{"t_ns": 9933332936, "x": 0.75434, "y": 0.75208, "valid": true, "fixation_id": 9, "fix_duration_s": 0.067}
+{"t_ns": 9949999602, "x": 0.75228, "y": 0.75093, "valid": true, "fixation_id": 9, "fix_duration_s": 0.083}
+{"t_ns": 9966666268, "x": 0.75072, "y": 0.75036, "valid": true, "fixation_id": 9, "fix_duration_s": 0.1}
+{"t_ns": 9983332934, "x": 0.75039, "y": 0.75052, "valid": true, "fixation_id": 9, "fix_duration_s": 0.117}
+{"t_ns": 9999999600, "x": 0.75144, "y": 0.75137, "valid": true, "fixation_id": 9, "fix_duration_s": 0.133}
+{"t_ns": 10016666266, "x": 0.75338, "y": 0.7527, "valid": true, "fixation_id": 9, "fix_duration_s": 0.15}
+{"t_ns": 10033332932, "x": 0.7553, "y": 0.75418, "valid": true, "fixation_id": 9, "fix_duration_s": 0.167}
+{"t_ns": 10049999598, "x": 0.7563, "y": 0.75546, "valid": true, "fixation_id": 9, "fix_duration_s": 0.183}
+{"t_ns": 10066666264, "x": 0.7559, "y": 0.75621, "valid": true, "fixation_id": 9, "fix_duration_s": 0.2}
+{"t_ns": 10083332930, "x": 0.75429, "y": 0.75626, "valid": true, "fixation_id": 9, "fix_duration_s": 0.217}
+{"t_ns": 10099999596, "x": 0.75223, "y": 0.7556, "valid": true, "fixation_id": 9, "fix_duration_s": 0.233}
+{"t_ns": 10116666262, "x": 0.75069, "y": 0.75437, "valid": true, "fixation_id": 9, "fix_duration_s": 0.25}
+{"t_ns": 10133332928, "x": 0.7504, "y": 0.7529, "valid": true, "fixation_id": 9, "fix_duration_s": 0.267}
+{"t_ns": 10149999594, "x": 0.75148, "y": 0.75153, "valid": true, "fixation_id": 9, "fix_duration_s": 0.283}
+{"t_ns": 10166666260, "x": 0.75343, "y": 0.7506, "valid": true, "fixation_id": 9, "fix_duration_s": 0.3}
+{"t_ns": 10183332926, "x": 0.75534, "y": 0.75034, "valid": true, "fixation_id": 9, "fix_duration_s": 0.317}
+{"t_ns": 10199999592, "x": 0.75631, "y": 0.75082, "valid": true, "fixation_id": 9, "fix_duration_s": 0.333}
+{"t_ns": 10216666258, "x": 0.75587, "y": 0.75191, "valid": true, "fixation_id": 9, "fix_duration_s": 0.35}
+{"t_ns": 10233332924, "x": 0.75424, "y": 0.75335, "valid": true, "fixation_id": 9, "fix_duration_s": 0.367}
+{"t_ns": 10249999590, "x": 0.75219, "y": 0.75478, "valid": true, "fixation_id": 9, "fix_duration_s": 0.383}
+{"t_ns": 10266666256, "x": 0.75067, "y": 0.75586, "valid": true, "fixation_id": 9, "fix_duration_s": 0.4}
+{"t_ns": 10283332922, "x": 0.75041, "y": 0.75633, "valid": true, "fixation_id": 9, "fix_duration_s": 0.417}
+{"t_ns": 10299999588, "x": 0.75152, "y": 0.75606, "valid": true, "fixation_id": 9, "fix_duration_s": 0.433}
+{"t_ns": 10316666254, "x": 0.75348, "y": 0.75512, "valid": true, "fixation_id": 9, "fix_duration_s": 0.45}
+{"t_ns": 10333332920, "x": 0.75538, "y": 0.75374, "valid": true, "fixation_id": 9, "fix_duration_s": 0.467}
+{"t_ns": 10349999586, "x": 0.75631, "y": 0.75227, "valid": true, "fixation_id": 9, "fix_duration_s": 0.483}
+{"t_ns": 10366666252, "x": 0.75584, "y": 0.75105, "valid": true, "fixation_id": 9, "fix_duration_s": 0.5}
+{"t_ns": 10383332918, "x": 0.75419, "y": 0.7504, "valid": true, "fixation_id": 9, "fix_duration_s": 0.517}
+{"t_ns": 10399999584, "x": 0.75214, "y": 0.75046, "valid": true, "fixation_id": 9, "fix_duration_s": 0.533}
+{"t_ns": 10416666250, "x": 0.75065, "y": 0.75123, "valid": true, "fixation_id": 9, "fix_duration_s": 0.55}
+{"t_ns": 10433332916, "x": 0.75042, "y": 0.75251, "valid": true, "fixation_id": 9, "fix_duration_s": 0.567}
+{"t_ns": 10449999582, "x": 0.75156, "y": 0.75399, "valid": true, "fixation_id": 9, "fix_duration_s": 0.583}
+{"t_ns": 10466666248, "x": 0.75353, "y": 0.75531, "valid": true, "fixation_id": 9, "fix_duration_s": 0.6}
+{"t_ns": 10483332914, "x": 0.75542, "y": 0.75615, "valid": true, "fixation_id": 9, "fix_duration_s": 0.617}
+{"t_ns": 10499999580, "x": 0.75632, "y": 0.7563, "valid": true, "fixation_id": 9, "fix_duration_s": 0.633}
+{"t_ns": 10516666246, "x": 0.75582, "y": 0.75572, "valid": true, "fixation_id": 9, "fix_duration_s": 0.65}
+{"t_ns": 10533332912, "x": 0.75415, "y": 0.75456, "valid": true, "fixation_id": 9, "fix_duration_s": 0.667}
+{"t_ns": 10549999578, "x": 0.75209, "y": 0.75309, "valid": true, "fixation_id": 9, "fix_duration_s": 0.683}
+{"t_ns": 10566666244, "x": 0.75063, "y": 0.75169, "valid": true, "fixation_id": 9, "fix_duration_s": 0.7}
+{"t_ns": 10583332910, "x": 0.75043, "y": 0.75069, "valid": true, "fixation_id": 9, "fix_duration_s": 0.717}
+{"t_ns": 10599999576, "x": 0.7516, "y": 0.75033, "valid": true, "fixation_id": 9, "fix_duration_s": 0.733}
+{"t_ns": 10616666242, "x": 0.75359, "y": 0.75071, "valid": true, "fixation_id": 9, "fix_duration_s": 0.75}
+{"t_ns": 10633332908, "x": 0.75545, "y": 0.75173, "valid": true, "fixation_id": 9, "fix_duration_s": 0.767}
+{"t_ns": 10649999574, "x": 0.75632, "y": 0.75315, "valid": true, "fixation_id": 9, "fix_duration_s": 0.783}
+{"t_ns": 10666666240, "x": 0.75579, "y": 0.75461, "valid": true, "fixation_id": 9, "fix_duration_s": 0.8}
+{"t_ns": 10683332906, "x": 0.7541, "y": 0.75575, "valid": true, "fixation_id": 9, "fix_duration_s": 0.817}
+{"t_ns": 10699999572, "x": 0.75205, "y": 0.75631, "valid": true, "fixation_id": 9, "fix_duration_s": 0.833}
+{"t_ns": 10716666238, "x": 0.7506, "y": 0.75613, "valid": true, "fixation_id": 9, "fix_duration_s": 0.85}
+{"t_ns": 10733332904, "x": 0.75044, "y": 0.75527, "valid": true, "fixation_id": 9, "fix_duration_s": 0.867}
+{"t_ns": 10749999570, "x": 0.75164, "y": 0.75394, "valid": true, "fixation_id": 9, "fix_duration_s": 0.883}
+{"t_ns": 10766666236, "x": 0.75364, "y": 0.75246, "valid": true, "fixation_id": 9, "fix_duration_s": 0.9}
+{"t_ns": 10783332902, "x": 0.75549, "y": 0.75119, "valid": true, "fixation_id": 9, "fix_duration_s": 0.917}
+{"t_ns": 10799999568, "x": 0.75633, "y": 0.75045, "valid": true, "fixation_id": 9, "fix_duration_s": 0.933}
+{"t_ns": 10816666234, "x": 0.75576, "y": 0.75041, "valid": true, "fixation_id": 9, "fix_duration_s": 0.95}
+{"t_ns": 10833332900, "x": 0.75405, "y": 0.75109, "valid": true, "fixation_id": 9, "fix_duration_s": 0.967}
+{"t_ns": 10849999566, "x": 0.752, "y": 0.75232, "valid": true, "fixation_id": 9, "fix_duration_s": 0.983}
+{"t_ns": 10866666232, "x": 0.75058, "y": 0.7538, "valid": true, "fixation_id": 9, "fix_duration_s": 1.0}
+{"t_ns": 10883332898, "x": 0.75046, "y": 0.75516, "valid": true, "fixation_id": 9, "fix_duration_s": 1.017}
+{"t_ns": 10899999564, "x": 0.75168, "y": 0.75608, "valid": true, "fixation_id": 9, "fix_duration_s": 1.033}
+{"t_ns": 10916666230, "x": 0.75369, "y": 0.75632, "valid": true, "fixation_id": 9, "fix_duration_s": 1.05}
+{"t_ns": 10933332896, "x": 0.75552, "y": 0.75584, "valid": true, "fixation_id": 9, "fix_duration_s": 1.067}
+{"t_ns": 10949999562, "x": 0.75633, "y": 0.75474, "valid": true, "fixation_id": 9, "fix_duration_s": 1.083}
+{"t_ns": 10966666228, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 10983332894, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 10999999560, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 11016666226, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 11033332892, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 11049999558, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 11066666224, "x": 0.5, "y": 0.5, "valid": false}
+{"t_ns": 11083332890, "x": 0.5, "y": 0.5, "valid": false}

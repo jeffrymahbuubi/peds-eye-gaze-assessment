@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtMultimedia import QSoundEffect
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 from .data.recorder import SessionRecorder
 from .data.schema import SessionMetadata
@@ -24,7 +25,7 @@ from .engine.calibration import (
     load_calibration_result,
     save_calibration_result,
 )
-from .engine.config import CONFIG_ROOT, load_task_config, load_theme
+from .engine.config import CONFIG_ROOT, deep_merge, load_task_config, load_theme
 from .engine.feedback import FeedbackBus
 from .engine.latency import LatencyTracker
 from .engine.task_runner import build_task
@@ -33,6 +34,8 @@ from .inputs.eye_input import DwellConfig, EyeInput, SmoothingConfig
 from .inputs.gazepoint_client import GazepointClient
 from .inputs.switch_input import SwitchInput
 from .ui.main_window import MainWindow
+from .ui.settings_registry import initial_live_values
+from .ui.task_settings_dialog import TaskSettingsDialog
 
 
 class GuiFeedback(FeedbackBus):
@@ -96,9 +99,16 @@ class AssessmentApp:
         replay_path: str | None,
         subject_id: str,
         calibration_file: str | None = None,
+        structural_overrides: dict | None = None,
     ) -> None:
         self.config = load_task_config(task_id)
         self.task_id = task_id
+        if structural_overrides:
+            # Pre-launch-only structural params (grid size, radius, trial
+            # count, ...) collected via TaskSettingsDialog -- SPEC-live-
+            # settings-panel.md section 5.3. Reuses the exact merge a task
+            # YAML's own `overrides:` block already goes through.
+            self.config["task"] = deep_merge(self.config["task"], structural_overrides)
         theme_name = self.config.get("task", {}).get("theme") or self.config.get("theme", {}).get("name", "forest")
         self.theme = load_theme(theme_name)
         self.input_mode = self.config.get("input", {}).get("mode", "eye")
@@ -164,31 +174,36 @@ class AssessmentApp:
 
         self.client.start_streaming()
 
-        dwell_cfg = self.config.get("dwell", {})
-        smoothing_cfg = dwell_cfg.get("smoothing", {})
+        # Single source of truth for every live-settings-panel field's
+        # starting value (SPEC-live-settings-panel.md section 5.1) -- used
+        # both to seed the operator panel's controls and to initialize the
+        # live objects below, so the two can never drift apart.
+        self._live_values = initial_live_values(self.config)
+        lv = self._live_values
+
         self.eye = EyeInput(
             self.client,
             DwellConfig(
-                threshold_ms=float(dwell_cfg.get("threshold_ms", 800)),
-                refractory_ms=float(dwell_cfg.get("refractory_ms", 500)),
+                threshold_ms=float(lv["dwell.threshold_ms"]),
+                refractory_ms=float(lv["dwell.refractory_ms"]),
             ),
             SmoothingConfig(
-                enabled=bool(smoothing_cfg.get("enabled", True)),
-                alpha=float(smoothing_cfg.get("alpha", 0.35)),
+                enabled=bool(lv["dwell.smoothing.enabled"]),
+                alpha=float(lv["dwell.smoothing.alpha"]),
             ),
         )
         self.switch = SwitchInput()
 
-        dwell_ms = int(self.config.get("dwell", {}).get("threshold_ms", 800))
         self.window = MainWindow(
             theme=self.theme,
-            dwell_threshold_ms=dwell_ms,
+            task_id=task_id,
+            initial_settings=lv,
             fullscreen=bool(self.config.get("app", {}).get("fullscreen", True)),
         )
         self.canvas = self.window.canvas
-        self.canvas.show_cursor = bool(dwell_cfg.get("visual_cursor", True))
-        self.canvas.show_progress_ring = bool(dwell_cfg.get("progress_ring", True))
-        self.canvas.show_instant_feedback = bool(dwell_cfg.get("instant_feedback", True))
+        self.canvas.show_cursor = bool(lv["dwell.visual_cursor"])
+        self.canvas.show_progress_ring = bool(lv["dwell.progress_ring"])
+        self.canvas.show_instant_feedback = bool(lv["dwell.instant_feedback"])
 
         self.metadata = SessionMetadata(
             subject_id=subject_id,
@@ -232,7 +247,7 @@ class AssessmentApp:
         panel = self.window.operator_panel
         panel.pause_toggled.connect(self._set_paused)
         panel.skip_requested.connect(self._skip_trial)
-        panel.dwell_threshold_changed.connect(self._set_dwell_threshold)
+        panel.setting_changed.connect(self._apply_setting)
 
     def _install_key_handler(self) -> None:
         original = self.canvas.keyPressEvent
@@ -258,13 +273,49 @@ class AssessmentApp:
         # Force a timeout on the current trial by rewinding its start time.
         self.task._trial_start_ns = 0  # noqa: SLF001 - deliberate operator override
 
-    def _set_dwell_threshold(self, ms: int) -> None:
-        if self.task.dwell is not None:
-            self.task.dwell.config = DwellConfig(
-                threshold_ms=float(ms),
-                refractory_ms=self.task.dwell.config.refractory_ms,
-                hold_grace_ms=self.task.dwell.config.hold_grace_ms,
-            )
+    def _apply_setting(self, key: str, value: object) -> None:
+        """Apply one live-settings-panel change to the object that actually
+        consumes it (SPEC-live-settings-panel.md section 5.1).
+
+        Every key here is read fresh every frame/paint by its target object,
+        so the change takes effect on the very next tick -- including within
+        the trial already in progress (deliberate; see the SPEC's section
+        5.5 on why a SETTING_CHANGED event is logged alongside every change).
+        """
+        old_value = self._live_values.get(key)
+        self._live_values[key] = value
+
+        if key == "dwell.threshold_ms" and self.task.dwell is not None:
+            self.task.dwell.config = replace(self.task.dwell.config, threshold_ms=float(value))
+        elif key == "dwell.refractory_ms" and self.task.dwell is not None:
+            self.task.dwell.config = replace(self.task.dwell.config, refractory_ms=float(value))
+        elif key == "dwell.jitter_tolerance_px":
+            self.task.jitter_px = float(value)
+        elif key == "dwell.visual_cursor":
+            self.canvas.show_cursor = bool(value)
+        elif key == "dwell.progress_ring":
+            self.canvas.show_progress_ring = bool(value)
+        elif key == "dwell.instant_feedback":
+            self.canvas.show_instant_feedback = bool(value)
+        elif key == "dwell.smoothing.enabled":
+            self.eye.smoother.config = replace(self.eye.smoother.config, enabled=bool(value))
+            # Drop the running EMA so the next sample doesn't blend toward a
+            # stale average from before the change (SPEC section 5.4).
+            self.eye.smoother.reset()
+        elif key == "dwell.smoothing.alpha":
+            self.eye.smoother.config = replace(self.eye.smoother.config, alpha=float(value))
+            self.eye.smoother.reset()
+        elif key == "task.timeout_ms":
+            self.task.timeout_ns = int(float(value) * 1e6)
+        elif key == "task.inter_trial_interval_ms":
+            self.task.iti_ns = int(float(value) * 1e6)
+        elif key == "motion.speed_frac_per_s" and hasattr(self.task, "speed"):
+            self.task.speed = float(value)
+
+        self.recorder.record_event(
+            "SETTING_CHANGED", time.time_ns(), key=key, old_value=old_value, new_value=value
+        )
+        self.recorder.log(f"Setting changed: {key} {old_value!r} -> {value!r}")
 
     # -- main loop ---------------------------------------------------------
 
@@ -345,14 +396,30 @@ def run_gui(
     replay_path: str | None = None,
     subject_id: str = "P000",
     calibration_file: str | None = None,
+    skip_task_settings_dialog: bool = False,
 ) -> int:
     app = QApplication.instance() or QApplication([])
+
+    structural_overrides: dict | None = None
+    if not skip_task_settings_dialog:
+        # Structural/layout task params (grid size, radius, trial count, ...)
+        # are collected here, before AssessmentApp/build_targets() run --
+        # SPEC-live-settings-panel.md section 5.3. "Start task" with no
+        # changes reproduces today's YAML-only behavior exactly.
+        preview_config = load_task_config(task_id)
+        dialog = TaskSettingsDialog(task_id, preview_config)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            print("Task launch cancelled.", file=sys.stderr)
+            return 0
+        structural_overrides = dialog.overrides()
+
     try:
         assessment = AssessmentApp(
             task_id=task_id,
             replay_path=replay_path,
             subject_id=subject_id,
             calibration_file=calibration_file,
+            structural_overrides=structural_overrides,
         )
     except CalibrationFileError as exc:
         print(f"Calibration file error: {exc}", file=sys.stderr)
