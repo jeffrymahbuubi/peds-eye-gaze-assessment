@@ -2,9 +2,9 @@
 
 **Status:** original scope (§1-§7), §8 (slider+readout widget), and §9
 (regroup OperatorPanel into always-visible "Settings"/"Pacing" boxes) are
-all implemented and live-validated via qt-mcp. Original scope
-committed+pushed (`89d0019`, `c988dba`). **§8 and §9's work is implemented
-and tested but not yet committed.**
+all implemented, live-validated via qt-mcp, and committed+pushed
+(`89d0019`, `c988dba`, `b3b2a2f`). **Everything in this SPEC is now on
+`origin/main`; nothing outstanding.**
 **Created:** 2026-09-04
 **Last updated:** 2026-09-07
 
