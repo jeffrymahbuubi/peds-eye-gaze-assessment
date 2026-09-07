@@ -39,6 +39,11 @@ class TargetSpec:
     x_norm: float
     y_norm: float
     radius_px: float
+    # Which element of the task's static layout this target is (e.g. a
+    # scanning icon slot); -1 for tasks with no fixed multi-item layout.
+    # Lets the canvas draw the *active* slot in full colour/shape while the
+    # rest render as distractors, via FrameResult.target.slot_index.
+    slot_index: int = -1
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +137,20 @@ class BaseTask:
         where selecting outside the window is a failed attempt rather than a hit.
         """
         return True
+
+    def scene_spec(self) -> dict[str, Any]:
+        """Describe the task's persistent on-screen layout for the renderer.
+
+        Fetched once when a task starts (see ``AssessmentApp.__init__``), not
+        per frame. Default ``{"mode": "single"}`` matches today's rendering
+        (one target on an empty field, plus the generic dim ``layout_slots``
+        outlines for tasks that set them) so every task not yet ported to a
+        dedicated mode is unaffected. ``scanning`` is the first task to
+        override this (mode ``"icons"`` — see ``ScanningTask.scene_spec``);
+        porting the rest (``"grid"`` for click_grid, ``"moving"`` for
+        follow_moving) is future work, not done here.
+        """
+        return {"mode": "single"}
 
     # -- public API --------------------------------------------------------
 

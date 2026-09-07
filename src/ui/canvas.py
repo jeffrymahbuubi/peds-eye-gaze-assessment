@@ -9,11 +9,17 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QRadialGradient
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QRadialGradient
 from PySide6.QtWidgets import QWidget
 
 from ..inputs.base import norm_to_px
+
+# Distractor glyphs for the scanning field (ported from resources/diki, see
+# SPEC-diki-design-audit.md S3.4/S4). Distinct shapes -- not just distinct
+# colours -- mean the child discriminates form, which is what a scanning/
+# visual-search assessment is for.
+_SHAPE_CIRCLE, _SHAPE_SQUARE, _SHAPE_TRIANGLE, _SHAPE_DIAMOND, _SHAPE_HEX, _SHAPE_STAR = range(6)
 
 
 class TaskCanvas(QWidget):
@@ -38,6 +44,15 @@ class TaskCanvas(QWidget):
         self.on_target: bool = False
         self._particles: list[tuple[float, float, float]] = []  # x_norm, y_norm, age
 
+        # Scene (task-level layout description, ported from resources/diki --
+        # see SPEC-diki-design-audit.md S3.1). Set once per task run via
+        # AssessmentApp; default "single" matches pre-existing rendering
+        # (just the active target + any generic layout_slots outlines) so
+        # tasks not yet ported to a dedicated mode are unaffected.
+        self.scene: dict = {"mode": "single"}
+        self.active_slot: int = -1
+        self._trail: list[tuple[float, float]] = []  # "moving" mode only
+
     # -- state updates from the app loop ----------------------------------
 
     def set_frame(
@@ -50,6 +65,8 @@ class TaskCanvas(QWidget):
         selectable: bool = True,
         layout_slots: list[tuple[float, float]] | None = None,
         on_target: bool = False,
+        scene: dict | None = None,
+        active_slot: int = -1,
     ) -> None:
         self.target_xy_norm = target_xy_norm
         self.target_radius_px = target_radius_px
@@ -59,6 +76,23 @@ class TaskCanvas(QWidget):
         self.selectable = selectable
         self.layout_slots = layout_slots or []
         self.on_target = on_target
+        if scene is not None:
+            self.scene = scene
+        self.active_slot = active_slot
+
+        # Fading motion-trail history for "moving" mode (ported from
+        # resources/diki, SPEC-diki-design-audit.md S3.5/S4). Cleared
+        # whenever the target isn't shown (e.g. between trials during ITI)
+        # so the trail never bridges a teleport to the next trial's start.
+        if self.scene.get("mode") == "moving" and target_xy_norm is not None:
+            self._trail.append(target_xy_norm)
+            # ~1.5s of history at 60Hz -- long enough to read as a path, short
+            # enough not to overlap the target's own next lap on a small orbit.
+            if len(self._trail) > 90:
+                self._trail.pop(0)
+        elif target_xy_norm is None and self._trail:
+            self._trail.clear()
+
         self.update()
 
     def burst(self, x_norm: float, y_norm: float) -> None:
@@ -73,7 +107,14 @@ class TaskCanvas(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.fillRect(self.rect(), self._bg)
 
-        if self.layout_slots:
+        mode = self.scene.get("mode", "single")
+        if mode == "icons":
+            self._draw_icon_scene(painter, w, h)
+        elif mode == "grid":
+            self._draw_grid_scene(painter, w, h)
+        elif mode == "moving":
+            self._draw_trail(painter, w, h)
+        elif self.layout_slots:
             self._draw_layout_slots(painter, w, h)
 
         if self.target_xy_norm is not None:
@@ -115,6 +156,104 @@ class TaskCanvas(QWidget):
             painter.drawEllipse(QPointF(sx, sy), r, r)
         painter.setOpacity(1.0)
 
+    def _draw_grid_scene(self, painter: QPainter, w: int, h: int) -> None:
+        """Draw every grid cell as a real rounded-rect, not a dim circle.
+
+        Ported from resources/diki (SPEC-diki-design-audit.md S3.3/S4) --
+        click_grid mimics a communication board, so the whole board should be
+        visible, not just the lit cell. The active cell is drawn afterwards
+        by _draw_target on top; this only paints the (n-1) inactive cells.
+        """
+        cells = self.scene.get("cells") or []
+        cw = float(self.scene.get("cell_w", 0.0)) * w
+        ch = float(self.scene.get("cell_h", 0.0)) * h
+        if not cells or cw <= 0 or ch <= 0:
+            return
+
+        pad = 0.06 * min(cw, ch)
+        idle = QColor(self.theme.get("cursor_color", "#ffffff"))
+        idle.setAlpha(38)
+        for i, (xn, yn) in enumerate(cells):
+            if i == self.active_slot:
+                continue  # the active cell is drawn as the real target instead
+            cx, cy = norm_to_px(xn, yn, w, h)
+            rect = QRectF(cx - cw / 2 + pad, cy - ch / 2 + pad, cw - 2 * pad, ch - 2 * pad)
+            painter.setPen(QPen(idle, 2))
+            painter.setBrush(QColor(255, 255, 255, 16))
+            painter.drawRoundedRect(rect, 14, 14)
+
+    def _draw_trail(self, painter: QPainter, w: int, h: int) -> None:
+        """Fading trail behind a moving target, so pursuit is visible.
+
+        Ported from resources/diki (SPEC-diki-design-audit.md S3.5/S4) --
+        distinguishes "tracked it" from "waited where it would arrive."
+        History is accumulated in set_frame, not here.
+        """
+        if len(self._trail) < 2:
+            return
+        color = QColor(self.target_color)
+        n = len(self._trail)
+        painter.setPen(Qt.PenStyle.NoPen)
+        for i, (xn, yn) in enumerate(self._trail[:-1]):
+            frac = (i + 1) / n
+            color.setAlpha(int(120 * frac))
+            painter.setBrush(color)
+            px, py = norm_to_px(xn, yn, w, h)
+            radius = self.target_radius_px * 0.34 * frac
+            painter.drawEllipse(QPointF(px, py), radius, radius)
+
+    def _draw_icon_scene(self, painter: QPainter, w: int, h: int) -> None:
+        """Draw the distractor field; the cued slot is drawn by _draw_target.
+
+        Ported from resources/diki (SPEC-diki-design-audit.md S3.4/S4).
+        """
+        slots = self.scene.get("slots") or []
+        shapes = self.scene.get("shapes") or []
+        if not slots:
+            return
+
+        r = self.target_radius_px * 0.78
+        distractor = QColor(self.theme.get("cursor_color", "#ffffff"))
+        distractor.setAlpha(64)
+        for i, (xn, yn) in enumerate(slots):
+            if i == self.active_slot:
+                continue  # the target itself is drawn on top, in colour
+            cx, cy = norm_to_px(xn, yn, w, h)
+            shape = shapes[i] if i < len(shapes) else _SHAPE_CIRCLE
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(distractor)
+            painter.drawPath(self._shape_path(cx, cy, r, shape))
+
+    def _shape_path(self, cx: float, cy: float, r: float, shape: int) -> QPainterPath:
+        path = QPainterPath()
+        if shape == _SHAPE_SQUARE:
+            path.addRoundedRect(QRectF(cx - r, cy - r, 2 * r, 2 * r), r * 0.2, r * 0.2)
+            return path
+        if shape == _SHAPE_TRIANGLE:
+            pts = [(0, -r), (r * 0.92, r * 0.7), (-r * 0.92, r * 0.7)]
+        elif shape == _SHAPE_DIAMOND:
+            pts = [(0, -r), (r, 0), (0, r), (-r, 0)]
+        elif shape == _SHAPE_HEX:
+            pts = [
+                (r * math.cos(math.tau * k / 6), r * math.sin(math.tau * k / 6))
+                for k in range(6)
+            ]
+        elif shape == _SHAPE_STAR:
+            pts = []
+            for k in range(10):
+                rad = r if k % 2 == 0 else r * 0.45
+                ang = math.tau * k / 10 - math.pi / 2
+                pts.append((rad * math.cos(ang), rad * math.sin(ang)))
+        else:  # circle
+            path.addEllipse(QPointF(cx, cy), r, r)
+            return path
+
+        path.moveTo(cx + pts[0][0], cy + pts[0][1])
+        for dx, dy in pts[1:]:
+            path.lineTo(cx + dx, cy + dy)
+        path.closeSubpath()
+        return path
+
     def _draw_target(self, painter: QPainter, x: float, y: float) -> None:
         r = self.target_radius_px
         color = self.target_color if self.selectable else self.target_color.darker(180)
@@ -123,7 +262,18 @@ class TaskCanvas(QWidget):
         grad.setColorAt(1.0, color)
         painter.setBrush(grad)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(QPointF(x, y), r, r)
+
+        mode = self.scene.get("mode", "single")
+        if mode == "icons" and self.active_slot >= 0:
+            # Keep the target's silhouette so the child matches shape, not
+            # just brightness/colour -- a plain circle would turn a search
+            # task into pop-out. Ported from resources/diki.
+            shapes = self.scene.get("shapes") or []
+            shape = shapes[self.active_slot] if self.active_slot < len(shapes) else _SHAPE_CIRCLE
+            painter.drawPath(self._shape_path(x, y, r * 0.78, shape))
+        else:
+            painter.drawEllipse(QPointF(x, y), r, r)
+
         if self.selectable:
             # bright "catch me now" outline during the selectable window.
             # Must be a freshly-constructed QPen, not painter.pen() mutated in

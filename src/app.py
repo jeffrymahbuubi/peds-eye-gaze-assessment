@@ -222,6 +222,11 @@ class AssessmentApp:
             self.canvas, self.theme, self.config.get("task", {}).get("feedback", {})
         )
         self.task = build_task(task_id, self.config, recorder=self.recorder, feedback=self.feedback)
+        # Fetched once, not per frame -- the task's persistent on-screen
+        # layout description (ported from resources/diki, see
+        # SPEC-diki-design-audit.md S3.1). Default {"mode": "single"} for
+        # tasks not yet ported to a dedicated scene.
+        self._scene = self.task.scene_spec()
 
         self._paused = False
         self._wire_operator()
@@ -350,6 +355,8 @@ class AssessmentApp:
             selectable=result.selectable,
             layout_slots=self.task.layout_slots,
             on_target=result.on_target,
+            scene=self._scene,
+            active_slot=(result.target.slot_index if result.target else -1),
         )
 
         self._update_fps(t_ns)

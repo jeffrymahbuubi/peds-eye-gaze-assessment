@@ -73,6 +73,82 @@ def test_click_static_has_no_layout_slots():
     assert task.layout_slots is None
 
 
+def test_default_scene_spec_is_single():
+    # click_static has no dedicated scene in diki either -- stays on
+    # BaseTask's default. See SPEC-diki-design-audit.md S3.1/S3.2.
+    cfg = load_task_config("click_static")
+    task = build_task("click_static", cfg)
+    assert task.scene_spec() == {"mode": "single"}
+
+
+def test_click_grid_scene_spec_is_grid_with_cells():
+    cfg = load_task_config("click_grid")
+    task = build_task("click_grid", cfg)
+    rows = cfg["task"]["grid"]["rows"]
+    cols = cfg["task"]["grid"]["cols"]
+
+    scene = task.scene_spec()
+    assert scene["mode"] == "grid"
+    assert scene["rows"] == rows
+    assert scene["cols"] == cols
+    assert len(scene["cells"]) == rows * cols
+    assert scene["cells"] == task.layout_slots  # same alias kept for compat
+    assert scene["cell_w"] > 0 and scene["cell_h"] > 0
+
+
+def test_click_grid_target_slot_index_matches_its_own_cell():
+    cfg = load_task_config("click_grid")
+    task = build_task("click_grid", cfg)
+    for t in task.targets:
+        assert 0 <= t.slot_index < len(task.cells)
+        cx, cy = task.cells[t.slot_index]
+        assert (t.x_norm, t.y_norm) == (cx, cy)
+
+
+def test_follow_moving_scene_spec_is_moving_with_path_and_speed():
+    cfg = load_task_config("follow_moving")
+    task = build_task("follow_moving", cfg)
+    scene = task.scene_spec()
+    assert scene["mode"] == "moving"
+    assert scene["path"] == cfg["task"]["motion"]["path"]
+    assert scene["speed"] == cfg["task"]["motion"]["speed_frac_per_s"]
+
+
+def test_scanning_scene_spec_is_icons_with_shapes_and_slots():
+    cfg = load_task_config("scanning")
+    task = build_task("scanning", cfg)
+    n_icons = cfg["task"]["layout"]["n_icons"]
+
+    scene = task.scene_spec()
+    assert scene["mode"] == "icons"
+    assert len(scene["slots"]) == n_icons
+    assert len(scene["shapes"]) == n_icons
+    # 6 distinct glyphs (circle/square/triangle/diamond/hex/star), cycling.
+    assert all(0 <= s <= 5 for s in scene["shapes"])
+    # scene's slots match the alias kept for the fixture tool/backward compat.
+    assert scene["slots"] == task.layout_slots
+
+
+def test_scanning_grid_arrangement_is_two_dimensional():
+    # The default arrangement (grid) must use both rows and columns for a
+    # multi-icon layout -- a single shared y would silently regress to the
+    # old "not real visual search" horizontal-row behaviour.
+    cfg = load_task_config("scanning")
+    assert cfg["task"]["layout"]["arrangement"] == "grid"
+    task = build_task("scanning", cfg)
+    distinct_y = {round(y, 6) for _, y in task.icon_slots}
+    assert len(distinct_y) > 1
+
+
+def test_scanning_target_slot_index_matches_its_own_position():
+    cfg = load_task_config("scanning")
+    task = build_task("scanning", cfg)
+    for t in task.targets:
+        assert 0 <= t.slot_index < len(task.icon_slots)
+        sx, sy = task.icon_slots[t.slot_index]
+        assert (t.x_norm, t.y_norm) == (sx, sy)
+
+
 def test_set_screen_size_ignores_non_positive_values():
     cfg = load_task_config("click_static")
     task = build_task("click_static", cfg)

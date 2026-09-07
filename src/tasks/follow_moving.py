@@ -36,6 +36,14 @@ class FollowMovingTask(BaseTask):
             targets.append(TargetSpec(index=i, x_norm=0.1, y_norm=y, radius_px=radius))
         return targets
 
+    def scene_spec(self) -> dict:
+        # Lets the canvas draw a fading motion trail behind the live target
+        # position (ported from resources/diki, SPEC-diki-design-audit.md
+        # S3.5/S4) -- distinguishes "tracked it" from "waited where it would
+        # arrive." path/speed aren't read by the canvas today but are
+        # included for parity with diki and any future trail-shape tuning.
+        return {"mode": "moving", "path": self.path, "speed": self.speed}
+
     def is_selectable(self, target: TargetSpec, elapsed_ns: int) -> bool:
         start, end = self.select_windows[target.index]
         return start <= elapsed_ns <= end
