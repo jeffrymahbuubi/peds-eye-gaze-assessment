@@ -3,10 +3,10 @@
 Shows live diagnostics -- FPS, gaze validity, current trial index -- and
 exposes runtime controls: pause/resume, skip trial, and a live settings
 panel built from ``settings_registry.LIVE_SETTINGS`` (SPEC-live-settings-panel.md
-section 5.1/5.2). A small "Basic" group (physician-facing: dwell threshold,
-visual cursor, progress ring, instant feedback) is always visible; everything
-else (jitter tolerance, refractory, smoothing, task timing) lives in a
-collapsed-by-default "Advanced" section for debugging/development use.
+section 9). Two always-visible groups, split by field origin: "Settings"
+(every ``dwell.*`` field -- configs/default.yaml's global dwell block) and
+"Pacing" (everything else -- each task's own YAML config: trial timeout,
+inter-trial interval, follow_moving's target speed).
 """
 
 from __future__ import annotations
@@ -16,17 +16,15 @@ from typing import Any
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDoubleSpinBox,
     QGroupBox,
     QLabel,
     QPushButton,
-    QSlider,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
 from .settings_registry import LiveSetting, live_settings_for_task
+from .slider_spin import SliderSpinRow
 
 
 class OperatorPanel(QWidget):
@@ -72,39 +70,24 @@ class OperatorPanel(QWidget):
         layout.addWidget(control_box)
 
         settings = live_settings_for_task(task_id)
-        basic = [s for s in settings if s.group == "basic"]
-        advanced = [s for s in settings if s.group == "advanced"]
+        dwell_settings = [s for s in settings if s.group == "settings"]
+        pacing_settings = [s for s in settings if s.group == "pacing"]
 
-        basic_box = QGroupBox("Settings")
-        basic_layout = QVBoxLayout(basic_box)
-        for setting in basic:
-            basic_layout.addWidget(self._build_control(setting))
-        layout.addWidget(basic_box)
+        settings_box = QGroupBox("Settings")
+        settings_layout = QVBoxLayout(settings_box)
+        for setting in dwell_settings:
+            settings_layout.addWidget(self._build_control(setting))
+        layout.addWidget(settings_box)
 
-        # Collapsed by default: a checkable QGroupBox whose title checkbox
-        # shows/hides its contents -- standard Qt pattern, no extra widget
-        # dependency (SPEC section 7, open question 1).
-        self.advanced_box = QGroupBox("Advanced")
-        self.advanced_box.setCheckable(True)
-        self.advanced_box.setChecked(False)
-        advanced_layout = QVBoxLayout(self.advanced_box)
-        for setting in advanced:
-            advanced_layout.addWidget(self._build_control(setting))
-        self._advanced_content = advanced_layout
-        self._set_advanced_visible(False)
-        self.advanced_box.toggled.connect(self._set_advanced_visible)
-        layout.addWidget(self.advanced_box)
+        pacing_box = QGroupBox("Pacing")
+        pacing_layout = QVBoxLayout(pacing_box)
+        for setting in pacing_settings:
+            pacing_layout.addWidget(self._build_control(setting))
+        layout.addWidget(pacing_box)
 
         layout.addStretch(1)
 
     # -- control construction ------------------------------------------------
-
-    def _set_advanced_visible(self, visible: bool) -> None:
-        for i in range(self._advanced_content.count()):
-            item = self._advanced_content.itemAt(i)
-            widget = item.widget() if item is not None else None
-            if widget is not None:
-                widget.setVisible(visible)
 
     def _build_control(self, setting: LiveSetting) -> QWidget:
         value = self._values.get(setting.key)
@@ -121,22 +104,18 @@ class OperatorPanel(QWidget):
 
         row.addWidget(QLabel(setting.label))
         if setting.kind == "int":
-            spin = QSpinBox()
-            spin.setMinimum(int(setting.min or 0))
-            spin.setMaximum(int(setting.max or 100))
-            spin.setSingleStep(int(setting.step or 1))
-            spin.setValue(int(value if value is not None else setting.min or 0))
-            spin.valueChanged.connect(lambda v, k=setting.key: self._emit_change(k, int(v)))
-            row.addWidget(spin)
+            minimum = setting.min if setting.min is not None else 0
+            maximum = setting.max if setting.max is not None else 100
+            step = setting.step if setting.step is not None else 1
+            initial = int(value if value is not None else setting.min or 0)
         else:  # float
-            spin = QDoubleSpinBox()
-            spin.setMinimum(float(setting.min or 0.0))
-            spin.setMaximum(float(setting.max or 1.0))
-            spin.setSingleStep(float(setting.step or 0.05))
-            spin.setDecimals(2)
-            spin.setValue(float(value if value is not None else setting.min or 0.0))
-            spin.valueChanged.connect(lambda v, k=setting.key: self._emit_change(k, float(v)))
-            row.addWidget(spin)
+            minimum = setting.min if setting.min is not None else 0.0
+            maximum = setting.max if setting.max is not None else 1.0
+            step = setting.step if setting.step is not None else 0.05
+            initial = float(value if value is not None else setting.min or 0.0)
+        control = SliderSpinRow(setting.kind, minimum, maximum, step, initial)
+        control.valueChanged.connect(lambda v, k=setting.key: self._emit_change(k, v))
+        row.addWidget(control)
         return container
 
     def _emit_change(self, key: str, value: Any) -> None:

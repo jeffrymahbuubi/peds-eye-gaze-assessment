@@ -24,7 +24,7 @@ from typing import Any
 class LiveSetting:
     key: str  # dotted key identifying this field (matches AssessmentApp's dispatch table)
     label: str
-    group: str  # "basic" | "advanced"
+    group: str  # "settings" (dwell.*) | "pacing" (everything else)
     kind: str  # "bool" | "int" | "float"
     min: float | None = None
     max: float | None = None
@@ -49,25 +49,30 @@ class StructuralSetting:
         return not self.applies_to or task_id in self.applies_to
 
 
-# -- live, mid-task settings (SPEC section 5.1) -----------------------------
+# -- live, mid-task settings (SPEC section 5.1, regrouped per section 9) ----
+#
+# Grouped by field origin, not by relevance tier (SPEC section 9): "settings"
+# is every dwell.* field (configs/default.yaml's global dwell: block);
+# "pacing" is everything else (each task's own YAML config -- how fast/slow
+# a trial moves along). Both groups are always visible in OperatorPanel.
 
 LIVE_SETTINGS: list[LiveSetting] = [
-    LiveSetting("dwell.threshold_ms", "Dwell threshold (ms)", "basic", "int", 300, 2000, 50),
-    LiveSetting("dwell.visual_cursor", "Show gaze cursor", "basic", "bool"),
-    LiveSetting("dwell.progress_ring", "Show dwell progress ring", "basic", "bool"),
-    LiveSetting("dwell.instant_feedback", "Show instant on-target ring", "basic", "bool"),
-    LiveSetting("dwell.refractory_ms", "Refractory period (ms)", "advanced", "int", 0, 2000, 50),
-    LiveSetting("dwell.jitter_tolerance_px", "Jitter tolerance (px)", "advanced", "int", 0, 100, 5),
-    LiveSetting("dwell.smoothing.enabled", "Gaze smoothing enabled", "advanced", "bool"),
-    LiveSetting("dwell.smoothing.alpha", "Smoothing alpha", "advanced", "float", 0.05, 1.0, 0.05),
-    LiveSetting("task.timeout_ms", "Trial timeout (ms)", "advanced", "int", 1000, 20000, 500),
+    LiveSetting("dwell.threshold_ms", "Dwell threshold (ms)", "settings", "int", 300, 2000, 50),
+    LiveSetting("dwell.visual_cursor", "Show gaze cursor", "settings", "bool"),
+    LiveSetting("dwell.progress_ring", "Show dwell progress ring", "settings", "bool"),
+    LiveSetting("dwell.instant_feedback", "Show instant on-target ring", "settings", "bool"),
+    LiveSetting("dwell.refractory_ms", "Refractory period (ms)", "settings", "int", 0, 2000, 50),
+    LiveSetting("dwell.jitter_tolerance_px", "Jitter tolerance (px)", "settings", "int", 0, 100, 5),
+    LiveSetting("dwell.smoothing.enabled", "Gaze smoothing enabled", "settings", "bool"),
+    LiveSetting("dwell.smoothing.alpha", "Smoothing alpha", "settings", "float", 0.05, 1.0, 0.05),
+    LiveSetting("task.timeout_ms", "Trial timeout (ms)", "pacing", "int", 1000, 20000, 500),
     LiveSetting(
-        "task.inter_trial_interval_ms", "Inter-trial interval (ms)", "advanced", "int", 0, 3000, 100
+        "task.inter_trial_interval_ms", "Inter-trial interval (ms)", "pacing", "int", 0, 3000, 100
     ),
     LiveSetting(
         "motion.speed_frac_per_s",
         "Target speed (frac/s)",
-        "advanced",
+        "pacing",
         "float",
         0.05,
         1.0,

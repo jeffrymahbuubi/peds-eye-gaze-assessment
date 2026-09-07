@@ -17,14 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PySide6.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
-    QDoubleSpinBox,
-    QFormLayout,
-    QSpinBox,
-    QVBoxLayout,
-)
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QVBoxLayout
 
 from .settings_registry import (
     StructuralSetting,
@@ -32,6 +25,7 @@ from .settings_registry import (
     set_nested,
     structural_settings_for_task,
 )
+from .slider_spin import SliderSpinRow
 
 
 class TaskSettingsDialog(QDialog):
@@ -43,12 +37,12 @@ class TaskSettingsDialog(QDialog):
 
         outer = QVBoxLayout(self)
         form = QFormLayout()
-        self._spins: dict[str, QSpinBox | QDoubleSpinBox] = {}
+        self._controls: dict[str, SliderSpinRow] = {}
 
         for setting in self._settings:
-            spin = self._build_spin(setting, values.get(setting.key))
-            self._spins[setting.key] = spin
-            form.addRow(setting.label, spin)
+            control = self._build_control(setting, values.get(setting.key))
+            self._controls[setting.key] = control
+            form.addRow(setting.label, control)
 
         outer.addLayout(form)
 
@@ -59,28 +53,16 @@ class TaskSettingsDialog(QDialog):
         outer.addWidget(buttons)
 
     @staticmethod
-    def _build_spin(setting: StructuralSetting, value: Any) -> QSpinBox | QDoubleSpinBox:
-        if setting.kind == "int":
-            spin = QSpinBox()
-            spin.setMinimum(int(setting.min))
-            spin.setMaximum(int(setting.max))
-            spin.setSingleStep(int(setting.step))
-            spin.setValue(int(value if value is not None else setting.min))
-        else:
-            spin = QDoubleSpinBox()
-            spin.setMinimum(float(setting.min))
-            spin.setMaximum(float(setting.max))
-            spin.setSingleStep(float(setting.step))
-            spin.setDecimals(2)
-            spin.setValue(float(value if value is not None else setting.min))
-        return spin
+    def _build_control(setting: StructuralSetting, value: Any) -> SliderSpinRow:
+        initial = value if value is not None else setting.min
+        return SliderSpinRow(setting.kind, setting.min, setting.max, setting.step, initial)
 
     def overrides(self) -> dict[str, Any]:
         """Return a nested dict (dotted keys expanded) suitable for
         ``deep_merge``-ing over ``config["task"]``."""
         result: dict[str, Any] = {}
         for setting in self._settings:
-            spin = self._spins[setting.key]
-            value = spin.value()
+            control = self._controls[setting.key]
+            value = control.value()
             set_nested(result, setting.key, int(value) if setting.kind == "int" else float(value))
         return result

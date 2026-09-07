@@ -1,11 +1,12 @@
 # SPEC-live-settings-panel — Live Settings & Debug Panel
 
-**Status:** implemented, live-validated via qt-mcp, per-task replay fixtures
-built, and committed+pushed (`89d0019`). The disclosed "0 hits in --replay"
-issue is root-caused and fixed (local `configs/default.yaml` config drift,
-not a code defect) — see the final 2026-09-04 log entry.
+**Status:** original scope (§1-§7), §8 (slider+readout widget), and §9
+(regroup OperatorPanel into always-visible "Settings"/"Pacing" boxes) are
+all implemented and live-validated via qt-mcp. Original scope
+committed+pushed (`89d0019`, `c988dba`). **§8 and §9's work is implemented
+and tested but not yet committed.**
 **Created:** 2026-09-04
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-07
 
 ## 1. Origin / what was asked
 
@@ -147,6 +148,11 @@ This grouping is a starting proposal, not a hard boundary; because it's
 registry-driven, moving a field between Basic/Advanced later is a one-word
 change, not a UI rewrite.
 
+**Superseded 2026-09-07** — this Basic/Advanced-by-relevance grouping (and
+its "starting proposal" caveat above) is replaced by a grouping-by-origin
+scheme; see §9 for the current design. This section stays as an accurate
+record of what was designed and built on 2026-09-04.
+
 ### 5.2 OperatorPanel: Basic section + collapsible Advanced section
 
 `OperatorPanel` (`src/ui/operator_panel.py`) gains a `QGroupBox` (or a
@@ -155,6 +161,11 @@ pattern) titled "Advanced", collapsed by default, below the existing
 Status/Controls boxes. Basic-group widgets stay where the dwell slider is
 today; Advanced-group widgets are built the same way inside the collapsed
 box. No change to the panel's existing Status display or Pause/Skip buttons.
+
+**Superseded 2026-09-07** — the collapsed-by-default/checkable-to-expand
+behavior described here is retired; both groups are now always visible.
+See §9. This section stays as an accurate record of what was designed and
+built on 2026-09-04.
 
 ### 5.3 Pre-launch settings step for structural/task parameters
 
@@ -237,7 +248,199 @@ wants a "Save as default" action, that is new scope, not covered here.
 4. Whether `SETTING_CHANGED` events should also appear in the human-readable
    `session.log`, not just `events.jsonl` — small, deferred to implementation.
 
-## 8. Log
+## 8. Slider + numeric-readout widget for every int/float setting (2026-09-07)
+
+### 8.1 Origin: this closes a documented drift, it isn't new scope
+
+§5.1 (line 126 above) already specified `OperatorPanel` should build
+"checkbox for `bool`, slider+label for `float`/`int`" per field. The
+implementation that shipped in the 2026-09-04 log entry below built
+`QSpinBox`/`QDoubleSpinBox` for every `int`/`float` field instead —
+`src/ui/operator_panel.py` still imports `QSlider` (line 23) but never
+constructs one anywhere in the file. This substitution was never recorded
+in this SPEC's log at the time it happened. `src/ui/task_settings_dialog.py`
+(the pre-launch structural dialog, §5.3) never had a widget type specified
+for it at all, and also ended up all spin boxes.
+
+A GUI audit this session (cross-checked against the `qt-docs` and
+`context7` MCP tools — see [[qt-docs-context7-complementary]]) surfaced
+this gap. Separately, the user asked (same session) to replace up/down-arrow
+spin boxes with sliders "since it's much more convenient" — this is that
+same gap, from the user-experience side rather than the documentation-audit
+side. Resolved together as one change: reconcile the implementation back
+toward §5.1's original intent, extended to also cover the pre-launch
+dialog, rather than treating it as unrelated new scope.
+
+Confirmed via clarifying questions before drafting this section:
+
+1. **Scope: both surfaces.** `OperatorPanel`'s mid-task `LIVE_SETTINGS`
+   (`dwell.threshold_ms`, `dwell.refractory_ms`, `dwell.jitter_tolerance_px`,
+   `dwell.smoothing.alpha`, `task.timeout_ms`,
+   `task.inter_trial_interval_ms`, `motion.speed_frac_per_s`) **and**
+   `TaskSettingsDialog`'s `STRUCTURAL_SETTINGS` (`trials`,
+   `target.radius_px`, `layout.radius_px`, `grid.rows`, `grid.cols`,
+   `layout.n_icons`, `motion.select_window_ms`) both move to the new
+   widget. `bool`-kind fields (checkboxes) are unaffected.
+2. **Widget pattern: paired slider + numeric readout, synced both ways** —
+   not a bare slider. A slider alone would drop the precision a
+   physician-facing dwell-threshold control plausibly needs; a spin box
+   alone is what's being replaced. Qt's standard combo (slider for coarse
+   drag, small spin box next to it for the exact value, each updating the
+   other) keeps both.
+
+This is a **presentation-only** change: no change to `LiveSetting`/
+`StructuralSetting` (§5.1's dataclasses stay exactly as defined in
+`settings_registry.py`, including every already-chosen min/max/step), no
+change to `AssessmentApp._apply_setting`'s dotted-key dispatch, no change
+to what values are offered or their ranges.
+
+### 8.2 Int/float → slider mapping
+
+`QSlider` (`PySide6.QtWidgets`) is integer-position-only — it has no native
+float mode. Every `LiveSetting`/`StructuralSetting` already carries
+`min`/`max`/`step` (required fields, per the existing dataclasses), which
+gives a uniform mapping for both `"int"` and `"float"` kind entries without
+new metadata:
+
+```
+slider.setMinimum(0)
+slider.setMaximum(round((max - min) / step))
+slider.setValue(round((value - min) / step))
+
+# slider -> real value, on valueChanged(position):
+value = min + position * step
+```
+
+For `"int"` fields this always lands on an exact integer (step is itself an
+int, e.g. `dwell.threshold_ms`'s step of 50). For `"float"` fields (only
+`dwell.smoothing.alpha`, step `0.05`, and `motion.speed_frac_per_s`, step
+`0.05`) the same formula holds since `step` is a `float` already declared
+on the dataclass — no new precision concerns beyond what the existing spin
+boxes already had via `setSingleStep`/`setDecimals(2)`.
+
+### 8.3 Shared widget, not duplicated sync logic
+
+Both `OperatorPanel._build_control` and `TaskSettingsDialog._build_spin`
+need the identical slider+readout pairing and identical bidirectional sync
+(slider move → update readout without re-triggering the readout's own
+signal → avoid an infinite feedback loop; readout edit → update slider
+position the same way). `settings_registry.py` cannot host this widget — it
+is deliberately PySide6-free (its own module docstring: "so it can be unit-
+tested headlessly") and must stay that way.
+
+**Proposed:** a new small module, `src/ui/slider_spin.py`, exporting one
+`QWidget` subclass (name TBD at implementation time, e.g. `SliderSpinRow`)
+that:
+
+- Takes `kind` (`"int"`/`"float"`), `min`, `max`, `step`, and an initial
+  value at construction (the same fields a `LiveSetting`/`StructuralSetting`
+  already carries — the constructor can take the descriptor directly).
+- Internally builds one `QSlider` (`Qt.Orientation.Horizontal` — already
+  the default, matching every existing row's layout direction) plus one
+  `QSpinBox` or `QDoubleSpinBox` (chosen by `kind`, mirroring today's
+  `_build_spin`/`_build_control` branch), laid out in a row.
+- Exposes a single `valueChanged` `Signal(object)` (int or float, matching
+  the existing per-field signal shape already used for `setting_changed`)
+  and `.value()`/`.setValue()`, so both call sites construct one instance
+  per numeric field and connect exactly the way they connect a spin box
+  today — no change to `_build_control`'s or `TaskSettingsDialog`'s
+  surrounding wiring beyond swapping which widget gets built.
+- Owns the slider↔spin-box sync internally (block the other widget's
+  signal while applying a programmatic update — the standard Qt pattern
+  for a two-widget mirrored value — so callers never see an intermediate
+  or duplicate `valueChanged` emission).
+
+### 8.4 Layout note (non-blocking)
+
+`OperatorPanel` is fixed at 280px wide (`main_window.py`:
+`operator_panel.setFixedWidth(280)`). A slider + label + numeric box all in
+one row is tighter there than in `TaskSettingsDialog` (an unconstrained
+modal). Suggested approach, consistent with today's `_build_control` row
+layout: keep the field label on its own line, then the slider+spin-box pair
+in a row beneath it (rather than trying to fit label+slider+box on one
+line). Exact pixel/stretch tuning is left to implementation time and a
+quick qt-mcp visual check — not a design fork worth blocking on.
+
+### 8.5 Explicitly unchanged
+
+- `settings_registry.py`'s data (every field's `min`/`max`/`step`/`label`/
+  `group`/`applies_to`) — only how a value is *displayed and dragged*
+  changes, not what's offered.
+- `AssessmentApp._apply_setting`'s dispatch table and the `SETTING_CHANGED`
+  event logging (§5.5) — both operate on `(key, value)` regardless of which
+  widget produced `value`.
+- Persistence behavior (§5.6, still session-only, no config write-back).
+
+## 9. Regroup OperatorPanel by field origin; always visible, no collapse (2026-09-07)
+
+### 9.1 Origin and what this supersedes
+
+User feedback (this session), about `OperatorPanel` specifically — not
+`TaskSettingsDialog` (§5.3/§8), which this section does not touch: having
+to manually check "Advanced" to see its settings is unwanted friction, and
+the Basic/Advanced split itself should be replaced with a grouping by where
+each field's value actually comes from, not by a physician-facing/
+debugging-relevance judgment. This supersedes §5.1's "Basic: physician-
+relevant / Advanced: the user's own debugging" rationale and §5.2's
+collapsed-by-default `QGroupBox` design (both left in place above, marked
+superseded, per this project's log convention of not rewriting history).
+
+Two decisions:
+
+1. **Always visible.** No collapsed section, no checkbox-to-expand. Every
+   field in both groups is shown the moment the panel is built, exactly
+   like today's Basic group already behaves — nothing new to build for
+   visibility, just removing the mechanism that currently hides Advanced.
+2. **Regroup by dotted-key prefix, not by relevance tier:**
+   - **"Settings"** (same title text as today's Basic box) — every
+     `LiveSetting` whose `key` starts with `dwell.`. Concretely, all 8
+     current dwell fields: `dwell.threshold_ms`, `dwell.refractory_ms`,
+     `dwell.jitter_tolerance_px`, `dwell.visual_cursor`,
+     `dwell.progress_ring`, `dwell.instant_feedback`,
+     `dwell.smoothing.enabled`, `dwell.smoothing.alpha` — i.e. every field
+     that lives under `configs/default.yaml`'s global `dwell:` block.
+   - **"Pacing"** (renamed from "Advanced" — "Task Specific" was the
+     working name during design; the user chose "Pacing" as more
+     immediately meaningful on the panel itself) — every `LiveSetting`
+     whose key does **not** start with `dwell.`: `task.timeout_ms`,
+     `task.inter_trial_interval_ms`, and `motion.speed_frac_per_s` (still
+     gated by `applies_to=("follow_moving",)`, unchanged). All three govern
+     how fast or slow a trial moves along; they also happen to be exactly
+     the fields that come from each task's own YAML config rather than the
+     global `dwell:` block.
+
+The rule is the dotted-key prefix, not an enumerated list — a future field
+added to `LIVE_SETTINGS` self-sorts into the right box by which config
+block it reads from, with no separate grouping decision needed.
+
+### 9.2 What changes, concretely
+
+- `settings_registry.py`: every `LiveSetting`'s `group` literal moves from
+  `"basic"`/`"advanced"` to `"settings"` / `"pacing"`. No change to any
+  `min`/`max`/`step`/`label`/`applies_to`/`kind` value — this is a
+  regrouping + visibility change only, the same scope discipline §8 used
+  for the widget-presentation change.
+- `src/ui/operator_panel.py`: both boxes become plain `QGroupBox` — no
+  `setCheckable(True)`, no `setChecked(False)`, no `toggled.connect(...)`.
+  The `_set_advanced_visible` method and the `self._advanced_content`
+  bookkeeping it exists solely to support are removed entirely, since
+  nothing hides/shows children anymore. Box titles: "Settings" (unchanged
+  text) and "Pacing" (renamed from "Advanced"). Every field is still built
+  via `_build_control`/`SliderSpinRow` (§8) exactly as before — only which
+  box it's added to, and whether that box can be collapsed, changes.
+
+### 9.3 Explicitly unchanged
+
+- `applies_to` per-task filtering (e.g. `motion.speed_frac_per_s` only for
+  `follow_moving`) — same filtering, now inside an always-visible box
+  instead of a collapsed one.
+- The `SliderSpinRow` widget (§8) and its slider↔spin-box sync — every
+  field still gets one; only its container box changes.
+- `AssessmentApp._apply_setting`'s dispatch table, `SETTING_CHANGED` event
+  logging (§5.5), and persistence behavior (§5.6, session-only).
+- `TaskSettingsDialog` (§5.3/§8) — out of scope for this section entirely.
+
+## 10. Log
 
 - **2026-09-04** — SPEC created. Design-only session (`/sparc:orchestrator`,
   explicit user instruction: design the approach, do not implement). Grounded
@@ -352,14 +555,49 @@ wants a "Save as default" action, that is new scope, not covered here.
   flagged clearly in `README.md`'s replay section so a future session (or
   the user evaluating a replay run) isn't confused by trials that time out
   rather than register hits. **Root-caused and fixed later the same
-  session, see below.**
+  session — see the dated entry near the end of this log, after the
+  click_static rename below.**
+  Also updated `README.md`: per-task fixture generation commands, the new
+  pre-launch task settings dialog + `--skip-task-settings`, and the Basic/
+  Advanced operator-panel controls, replacing the stale single dwell-slider
+  description.
 
-- **2026-09-04, later still — the "0 hits" issue root-caused and fixed
-  (user asked to tackle it directly).** Traced frame-by-frame with a
-  diagnostic script driving `DwellSelector`/`BaseTask.update()` directly
-  against the fixture: `on_target` did fire (confirming hit-testing/geometry
-  were fine), but `dwell_progress` never rose above 0 -- meaning
-  `DwellSelector.update()` was never even being called.
+- **2026-09-04, later still — click_static's fixture renamed for
+  consistency, per user feedback.** The user noticed
+  `tests/fixtures/gaze_replay.jsonl` (click_static's fixture, unchanged
+  since before this task) didn't show up alongside the 3 new
+  `gaze_replay_<task>.jsonl` files — reasonable, since it didn't share their
+  naming pattern and, being already git-tracked and untouched, didn't
+  appear in `git status` either. Asked which fix they wanted (rename only,
+  vs. explain where it is); the user's own answer was "I delete it, create
+  it again" — interpreted as: delete the old file and regenerate it under
+  the consistent name via the same tool used for the other three, so all
+  four are both consistently named and freshly tool-generated.
+  `git rm tests/fixtures/gaze_replay.jsonl`, then
+  `python tools/make_replay_fixture.py --task click_static` (now defaults
+  to `tests/fixtures/gaze_replay_click_static.jsonl` -- the click_static
+  special case in `default_out_path()` was removed). Updated every real
+  reference: `tests/test_task_pipeline.py`'s `FIXTURE` constant (the one
+  functional dependency -- full suite re-run afterward, same 2 pre-existing
+  failures, no new breakage), `src/main.py`'s docstring example, and
+  `README.md` (all four `gaze_replay.jsonl` mentions, plus the "including
+  click_static's own long-committed fixture" aside in the 0-hits note,
+  which stopped being accurate the moment the file was regenerated).
+  **Deliberately left untouched:** `docs/HANDOVER_GAZEPOINT.md` (explicitly
+  version-pinned to an old commit, `4e7e592` -- a point-in-time onboarding
+  snapshot, not a living usage doc) and the *prior*, already-dated log
+  entries in this file and in `SPEC-2026-09-02.md` that mention
+  `gaze_replay.jsonl` by its old name -- those describe actions genuinely
+  taken against that filename at the time and stay accurate as historical
+  record; only this new entry and current-usage docs reflect the rename.
+
+- **2026-09-04, later still (after the rename, and after the settings-panel
+  work above was committed as `89d0019`) — the "0 hits" issue root-caused
+  and fixed (user asked to tackle it directly).** Traced frame-by-frame
+  with a diagnostic script driving `DwellSelector`/`BaseTask.update()`
+  directly against the fixture: `on_target` did fire (confirming
+  hit-testing/geometry were fine), but `dwell_progress` never rose above 0
+  -- meaning `DwellSelector.update()` was never even being called.
   `BaseTask.update()` only calls it when `self.input_mode == "eye"`
   (`src/tasks/base_task.py`); the committed default is `input.mode: eye`,
   but the **local, `skip-worktree`'d `configs/default.yaml`** (see
@@ -396,37 +634,121 @@ wants a "Save as default" action, that is new scope, not covered here.
   **This is a config-only fix** -- `configs/default.yaml` is
   `skip-worktree`'d, so nothing here shows in `git status`/`git diff` or
   needs a commit; only the `README.md`/this SPEC's documentation updates
-  are real, committable changes from this entry.
-  Also updated `README.md`: per-task fixture generation commands, the new
-  pre-launch task settings dialog + `--skip-task-settings`, and the Basic/
-  Advanced operator-panel controls, replacing the stale single dwell-slider
-  description.
+  are real, committable changes from this entry. Committed and pushed as
+  `c988dba` (`/sparc:devops`). **Everything in this SPEC is now on
+  `origin/main`; nothing outstanding.**
 
-- **2026-09-04, later still — click_static's fixture renamed for
-  consistency, per user feedback.** The user noticed
-  `tests/fixtures/gaze_replay.jsonl` (click_static's fixture, unchanged
-  since before this task) didn't show up alongside the 3 new
-  `gaze_replay_<task>.jsonl` files — reasonable, since it didn't share their
-  naming pattern and, being already git-tracked and untouched, didn't
-  appear in `git status` either. Asked which fix they wanted (rename only,
-  vs. explain where it is); the user's own answer was "I delete it, create
-  it again" — interpreted as: delete the old file and regenerate it under
-  the consistent name via the same tool used for the other three, so all
-  four are both consistently named and freshly tool-generated.
-  `git rm tests/fixtures/gaze_replay.jsonl`, then
-  `python tools/make_replay_fixture.py --task click_static` (now defaults
-  to `tests/fixtures/gaze_replay_click_static.jsonl` -- the click_static
-  special case in `default_out_path()` was removed). Updated every real
-  reference: `tests/test_task_pipeline.py`'s `FIXTURE` constant (the one
-  functional dependency -- full suite re-run afterward, same 2 pre-existing
-  failures, no new breakage), `src/main.py`'s docstring example, and
-  `README.md` (all four `gaze_replay.jsonl` mentions, plus the "including
-  click_static's own long-committed fixture" aside in the 0-hits note,
-  which stopped being accurate the moment the file was regenerated).
-  **Deliberately left untouched:** `docs/HANDOVER_GAZEPOINT.md` (explicitly
-  version-pinned to an old commit, `4e7e592` -- a point-in-time onboarding
-  snapshot, not a living usage doc) and the *prior*, already-dated log
-  entries in this file and in `SPEC-2026-09-02.md` that mention
-  `gaze_replay.jsonl` by its old name -- those describe actions genuinely
-  taken against that filename at the time and stay accurate as historical
-  record; only this new entry and current-usage docs reflect the rename.
+- **2026-09-07 — design-only session for §8 (slider+readout widget),
+  `/sparc:orchestrator`, explicit instruction: update this SPEC before
+  implementing.** Triggered by two things together: a GUI audit this
+  session (Qt/PySide6 best practices, verified live against the newly
+  added `qt-docs` and `context7` MCP tools — see
+  [[qt-docs-context7-complementary]]) found that §5.1's original
+  "slider+label for float/int" design was never actually built —
+  `src/ui/operator_panel.py` ships `QSpinBox`/`QDoubleSpinBox` instead, with
+  an unused leftover `QSlider` import — and separately the user asked to
+  replace up/down-arrow spin boxes with sliders across task settings.
+  Both are the same gap. Two clarifying questions resolved the scope: (1)
+  both `OperatorPanel` live settings and `TaskSettingsDialog` pre-launch
+  settings get sliders, not just one; (2) paired slider + numeric readout,
+  not a bare slider, to keep exact-value precision. §8 documents the
+  int/float→slider mapping (reusing each setting's existing min/max/step,
+  no new metadata), a proposed shared `src/ui/slider_spin.py` widget to
+  avoid duplicating slider↔spin-box sync logic between the two call sites,
+  and a non-blocking layout note for `OperatorPanel`'s fixed 280px width.
+  **No code changed this session** — `settings_registry.py`,
+  `operator_panel.py`, `task_settings_dialog.py`, and `app.py` are all
+  untouched; implementation is the next step.
+
+- **2026-09-07, later the same day — §8 implemented and live-validated.**
+  New: `src/ui/slider_spin.py` (`SliderSpinRow`, exactly as designed in
+  §8.2/§8.3 — internal `QSlider` + `QSpinBox`/`QDoubleSpinBox` by `kind`,
+  `blockSignals` on the non-originating widget during a programmatic update
+  to avoid feedback loops, single `valueChanged(object)` Signal,
+  `.value()`/`.setValue()`). Changed: `src/ui/operator_panel.py`'s
+  `_build_control` and `src/ui/task_settings_dialog.py`'s
+  `_build_spin`→`_build_control` both now construct a `SliderSpinRow`
+  instead of a bare spin box; both files' now-unused `QSpinBox`/
+  `QDoubleSpinBox`/`QSlider` imports removed. No change to
+  `settings_registry.py`'s data or `AssessmentApp._apply_setting`'s
+  dispatch, per §8.5.
+  **Tests:** full suite — same single pre-existing failure as before
+  (`test_config_merges_task_over_default`, unrelated stale `target_fps`
+  assertion), no new regressions.
+  **qt-mcp live validation** (real running GUI, `click_static --gui
+  --replay tests/fixtures/gaze_replay_click_static.jsonl`, `QT_MCP_PROBE=1`):
+  `TaskSettingsDialog` showed both structural fields (`trials`,
+  `target.radius_px`) as `SliderSpinRow`s with correct YAML defaults (32,
+  90); setting the spin box to 18 moved the slider to the matching
+  position, and moving the slider to position 40 correctly produced value
+  41 (`min=1, step=1` → `1 + 40*1`), confirming §8.2's mapping in both
+  directions. "Start task" proceeded normally into `MainWindow`.
+  `OperatorPanel`'s Basic group showed `dwell.threshold_ms` as a
+  `SliderSpinRow` (800ms default); expanding Advanced showed all 5
+  Advanced numeric fields as `SliderSpinRow`s with correct defaults,
+  including `dwell.smoothing.alpha` correctly using a `QDoubleSpinBox`
+  (0.35) — confirming the `"float"` branch works through the shared widget,
+  not just `"int"`. Changing the threshold slider to 1200 produced a
+  `SETTING_CHANGED` event in `events.jsonl`
+  (`{"key": "dwell.threshold_ms", "old_value": 800, "new_value": 1200}`),
+  confirming the full path (slider → `SliderSpinRow.valueChanged` →
+  `OperatorPanel.setting_changed` → `AssessmentApp._apply_setting` →
+  recorder) still works unchanged end-to-end. App closed cleanly via
+  `Escape` (exit code 0), no Qt warnings.
+  **Not done yet:** committing this work (matching the project's pattern of
+  asking before commit+push).
+
+- **2026-09-07, later still — §9 design session, `/sparc:orchestrator`,
+  explicit instruction: update this SPEC first, implement only after the
+  user says "go ahead."** User feedback on `OperatorPanel` specifically:
+  (1) stop requiring a manual check of "Advanced" to see its settings —
+  show everything always; (2) regroup by where a field's value comes from
+  rather than by physician/debug relevance — "Settings" becomes every
+  `dwell.*` field (all 8, not just the 4 that were "Basic"), "Task
+  Specific" (replacing "Advanced") becomes everything else
+  (`task.timeout_ms`, `task.inter_trial_interval_ms`,
+  `motion.speed_frac_per_s`). §9 documents the dwell-prefix rule, the
+  `settings_registry.py`/`operator_panel.py` changes this implies, and
+  marks §5.1/§5.2's original Basic/Advanced design as superseded (their
+  text is left intact as historical record, per this doc's own
+  convention). `TaskSettingsDialog` is explicitly out of scope for this
+  change. **No code changed this session** — `settings_registry.py` and
+  `operator_panel.py` are both untouched; implementation is pending the
+  user's "go ahead."
+
+- **2026-09-07, later still — §9 implemented and live-validated.** User
+  was asked whether "Task Specific" had a better name; picked **"Pacing"**
+  (over "Timing," which fit `task.timeout_ms`/`task.inter_trial_interval_ms`
+  but not `motion.speed_frac_per_s`, a speed rather than a duration) and
+  said go ahead. §9's text above updated throughout to say "Pacing"
+  instead of the working name "Task Specific."
+  **Changed:** `src/ui/settings_registry.py` — every `LiveSetting`'s
+  `group` moved from `"basic"`/`"advanced"` to `"settings"` (all 8
+  `dwell.*` fields) / `"pacing"` (`task.timeout_ms`,
+  `task.inter_trial_interval_ms`, `motion.speed_frac_per_s`); no
+  `min`/`max`/`step`/`label`/`applies_to`/`kind` value touched.
+  `src/ui/operator_panel.py` — `_build_control`'s call sites now filter on
+  `"settings"`/`"pacing"`; both boxes are now plain `QGroupBox("Settings")`
+  / `QGroupBox("Pacing")` with no `setCheckable`/`setChecked`/`toggled`
+  wiring; `_set_advanced_visible` and `self._advanced_content` removed
+  entirely (confirmed no other file referenced them). Module docstring
+  updated to describe the new two-group-by-origin design instead of the
+  superseded Basic/Advanced-by-relevance one.
+  **Tests:** full suite — same single pre-existing failure
+  (`test_config_merges_task_over_default`), no new regressions.
+  **qt-mcp live validation** (`click_static --gui --replay
+  tests/fixtures/gaze_replay_click_static.jsonl --skip-task-settings`,
+  `QT_MCP_PROBE=1`): `qt_snapshot` of `OperatorPanel` showed all 8 dwell
+  fields under "Settings" and both applicable pacing fields
+  (`task.timeout_ms`, `task.inter_trial_interval_ms`) under "Pacing" —
+  `motion.speed_frac_per_s` correctly absent (click_static isn't
+  follow_moving) — with **no `[hidden]`/`[disabled]` flags anywhere** in
+  the tree, confirming the collapse mechanism is fully gone, not just
+  visually. Changed `dwell.jitter_tolerance_px`'s slider to 60 live;
+  `events.jsonl` recorded
+  `{"key": "dwell.jitter_tolerance_px", "old_value": 40, "new_value": 60}`,
+  confirming `AssessmentApp._apply_setting`'s dispatch is unaffected by the
+  regroup. App closed cleanly via `Escape` (exit code 0).
+  **Not done yet:** committing this work (matching the project's pattern of
+  asking before commit+push) — this and §8's still-uncommitted slider work
+  can be committed together.
