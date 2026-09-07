@@ -1,8 +1,8 @@
 ---
 title: GP3HD Hardware Integration Validation
-status: in-progress
+status: complete
 created: 2026-08-31
-last_updated: 2026-08-31
+last_updated: 2026-09-07
 ---
 
 ## Update 2026-08-31 (new feature: configurable calibration parameters)
@@ -331,12 +331,12 @@ Open Items for what's genuinely still outstanding (two live drills).
   forced invalid while disconnected even with a cached valid sample, and
   that sources without `is_connected()` (e.g. a bare replay source) are
   unaffected. **36/36 tests pass** (29 original + 7 new).
-- **Not tested against the real GP3HD**: exercising this against the
-  actual device would require stopping/blocking Gazepoint Control mid-session,
-  which risks disrupting an active setup — deferred pending the PI/user
-  explicitly wanting that live drill. The fake-server tests exercise the
-  same code path (`_run_socket`/`_reconnect`/`_open_socket`) that a real
-  disconnect would hit.
+- **Now validated live against the real GP3HD, 2026-09-07** (see the
+  dated log entry near the end of this document for the full account) —
+  `is_connected()` flipped false within ~1s of Gazepoint Control's TCP
+  server actually going down, and flipped true again on its own once the
+  server came back up, with no app restart. **This closes the sole
+  remaining open item from the original six gaps.**
 - **Fixed in working copy only** (`dev/peds-eye-gaze-assessment/`), same
   caveat as findings #1-2 — touches `src/inputs/gazepoint_client.py`,
   `src/inputs/eye_input.py`, `src/ui/operator_panel.py`, `src/app.py`.
@@ -691,6 +691,82 @@ update this SPEC's `status` field to `complete` once both are confirmed
 working, and update/close out the two "unit-tested only" caveats in
 findings #3 and #4 above.
 
+## Update 2026-09-07 — Drill 1 (gap D) finally exercised and passed; status now `complete`
+
+PI/user feedback: "this desktop is connected to the device — test the
+connection, and real-test whatever updated code needs real-device
+validation; skip anything that needs a real human eye (none available
+today)." Confirmed via `Test-NetConnection` (TCP reachable) and
+`Get-Process` (Gazepoint Control already running) before starting; asked
+two clarifying questions first (process control approach, and whether to
+revert `gazepoint.host` after) rather than assuming, per the user's own
+"ask clarifications if needed" note.
+
+**Deliberately did not use the originally-planned procedure above**
+(launch the full GUI via `--gui`). Per this doc's own "Lesson for the
+resume" note from 2026-08-31, used a narrower standalone script instead
+(`GazepointClient` directly, no `AssessmentApp`, no `Calibration`, no GUI
+task) — avoids the unconditional-calibration disruptive-path risk
+([[feedback-check-disruptive-paths-before-live-launch]]) entirely, and
+removes the task-completion race that sank all four 2026-08-31 attempts.
+`configs/default.yaml`'s skip-worktree'd `gazepoint.host` was pointed at
+`26.113.49.235` (user chose to leave it there afterward, not revert to
+the `127.0.0.1` fake-server value).
+
+**Connection health reconfirmed first:** a fresh 15s standalone probe
+against the real device showed `is_connected=True` throughout, steady
+sample flow, `valid=0` throughout (expected — no one was seated at the
+tracker; validity is a face-presence signal, not a connection signal).
+This live-reconfirms the `ENABLE_SEND_DATA` fix, the `PUPILMM` fix, and
+the enable-wiring fix (finding #6/gap C) all working together against
+real hardware, a week after they were first validated.
+
+**Drill 1 (gap D), both halves passed, timed automatically (Claude
+controlled Gazepoint Control via PowerShell, with the user's explicit
+go-ahead) rather than via manual chat-coordinated timing:**
+- **Disconnect detection:** stopped the Gazepoint Control process(es)
+  (`Stop-Process -Force` on the PIDs found via `Get-Process -Name
+  Gazepoint`); the standalone client's `is_connected()` flipped
+  `True -> False` essentially as soon as the TCP server actually went
+  down — no frozen-cursor ambiguity, matching the fix's intent exactly.
+- **Auto-reconnect:** relaunched `Gazepoint.exe` via `Start-Process`;
+  the client's background reader thread reconnected **on its own**
+  (`False -> True`, no app restart, no code intervention) once
+  Gazepoint Control's own TCP server finished initializing. That
+  initialization took ~94s from process launch to listening on this
+  run — real hardware/driver startup time on the device side, not a
+  reconnect-logic delay (the client was already retrying every
+  `reconnect_interval_s`=1s the whole time and caught it on the very
+  next opportunity).
+- One quirk worth recording: one of the two `Gazepoint`-named processes
+  present at session start (PID 20180, running since 2026-08-31) could
+  not be terminated by `Stop-Process -Force` (no error raised, but the
+  process persisted with an unchanged `StartTime` across two separate
+  kill attempts). This did not block the drill — killing the *other*
+  process(es) was sufficient to bring the actual OpenGaze TCP server
+  down both times — but it's unclear what that stubborn process is
+  (possibly a licensing/watchdog helper). Not investigated further;
+  flag if it ever seems to matter.
+- **Not attempted, out of scope for today (needs a real human eye):**
+  drill 2 (real calibration) itself was not re-run — a real calibration
+  needs a person fixating the tracker's points, which nobody was
+  available for today. A read-only `CALIBRATE_RESULT_SUMMARY` query
+  (no `CALIBRATE_START`, intended to shed light on item 7 Goal 1's
+  flagged "does calibration survive a client disconnect/reconnect"
+  assumption) was attempted twice from the probe script but is
+  **inconclusive** — the script read directly from the client's own
+  socket from a second thread, racing the client's own background
+  reader, and both attempts just caught a leftover `ENABLE_SEND_*` ACK
+  instead of the real `CALIBRATE_RESULT_SUMMARY` response. Not worth
+  re-attempting with a hacky direct-socket read; a real answer would
+  need a small, correctly-synchronized query method added to
+  `GazepointClient` itself. Item 7 Goal 1's assumption remains formally
+  unverified.
+
+**All six original `HANDOVER_GAZEPOINT.md` gaps, plus gap D's live drill,
+are now confirmed working against the real GP3HD. Status set to
+`complete`.**
+
 ## Log
 
 | Date | Event |
@@ -713,3 +789,4 @@ findings #3 and #4 above.
 | 2026-08-31 | User asked for calibration point count (5 vs 9) to be configurable; reported via API research that `Calibration.run()` never actually sent `CALIBRATE_ADDPOINT`/`CALIBRATE_RESET`, only `CALIBRATE_CLEAR` (empties the list) — `n_points` was purely client-side bookkeeping, not an actual device setting |
 | 2026-08-31 | User asked to update this SPEC first, then expanded the ask to also cover `CALIBRATE_TIMEOUT`/`DELAY`/`SHOW`/`START` as config. Clarified SHOW ("run invisibly") and START ("skip calibration entirely") via `AskUserQuestion`, both confirmed. Implemented full `calibration.*` config block (`enabled`/`points`/`show`/`timeout_s`/`delay_s`) in `configs/default.yaml`, `Calibration` class, and `app.py`; added `n_points` validation (5/9 only); fixed our own poll-timeout to scale with configured per-point timing. 6 new tests, 57/58 pass (1 pre-existing unrelated failure from the user's own `target_fps` edit) |
 | 2026-08-31 | User confirmed both 5-point and 9-point calibration worked live against the real GP3HD. Cross-referencing `sessions/*/metadata.json` across the day showed all 3 pre-fix live runs recorded exactly `calibration_error_px: 0.0` (implausible), while 2 post-fix runs recorded plausible non-zero values (7.89, 743.06) — the point-configuration fix (sending real `CALIBRATE_RESET`/`ADDPOINT` instead of just `CALIBRATE_CLEAR`) appears to have resolved the earlier-flagged suspicious-0.0 bug as a side effect. **Gap A now considered validated live; gap D remains the sole open item from the original six gaps.** Session ending here (user requested memory/SPEC update before `/clear`) |
+| 2026-09-07 | PI/user asked to re-test the real-device connection and validate updated code against real hardware (device connected today, no human eyes available). Reconfirmed connection health via a 15s standalone probe; then drilled gap D via a narrower standalone script (not the full GUI) by stopping/restarting Gazepoint Control via PowerShell (with user's explicit go-ahead) — both disconnect-detection (`True->False`) and unattended auto-reconnect (`False->True`, ~94s later, matching the device's own TCP-server init time) confirmed working. All six original gaps now live-validated; `status` set to `complete`. A bonus read-only calibration-persistence query was attempted but inconclusive (script-level socket race, not a code issue) |
