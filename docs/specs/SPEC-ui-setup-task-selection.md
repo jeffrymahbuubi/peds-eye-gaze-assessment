@@ -54,7 +54,8 @@ pattern exactly, with no grid/breakpoint code at all.** Live-validated
 maximized: no large or awkward empty region, though a smaller ~200px
 trailing margin remains below the stack (task cards are shorter than
 Setup's form-heavy ones). §16-§18 remain in this doc as historical
-record only. **Left uncommitted.**
+record only. S16-S19 committed and pushed to `origin/main` as `74efccd`,
+after a clean `/spec-memory-audit` pass.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-08
 
@@ -2594,3 +2595,24 @@ ask-before-commit pattern — nothing from §16 through §19 is on
   they describe no longer exists.** **Left uncommitted** — nothing from
   §16 through §19 is on `origin/main` yet (last commit remains
   `4aa6a51`).
+
+- **2026-09-08, later still — `/spec-memory-audit` run (clean, no fixes
+  needed), then S16-S19 committed and pushed, via `/sparc:orchestrator`.**
+  Audit verified log chronology (§18's entry then §19's entry, both
+  correctly appended after the S14-S17 commit entry, no reordering
+  needed), every code claim against current source (grepped
+  `src/ui/tasks_page.py`: zero `QGridLayout`/`_reflow_grid`/
+  `resizeEvent`/`_GRID_BREAKPOINT_PX`/`_grid_columns` remain outside one
+  historical comment; zero leftover `setSizePolicy` from the reverted
+  §18.2 Expanding-card attempt), and a fresh pytest run (116 passed, 1
+  failed — the same pre-existing `target_fps` assertion, counted
+  precisely from the dot/F progress line since this pytest config
+  doesn't print a final summary count line). Confirmed all cross-links
+  between the touched memory files resolve. Nothing needed fixing.
+
+  All of S16-S19 then committed as one commit, `74efccd`
+  ("Fix then revert Tasks screen grid dead space; ship single-column
+  stack (S16-S19)"), and pushed to `origin/main` (`4aa6a51..74efccd`).
+  `git status` clean after push — nothing from this whole Tasks-layout
+  line of work (the grid, its fixes, and its revert) remains
+  uncommitted.
