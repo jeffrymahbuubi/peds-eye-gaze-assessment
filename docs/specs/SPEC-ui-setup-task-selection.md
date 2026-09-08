@@ -40,7 +40,7 @@ occupying only the top ~40% of the window — fixed by vertically
 centering the grid block, after a rejected row-stretch attempt and a
 rejected `setRowMinimumHeight` attempt that caused a real, confirmed-
 live runaway window-growth bug (killed safely, no lasting damage).**
-Left uncommitted.
+S14-S17 committed and pushed to `origin/main` as `8f2e82b`.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-08
 
@@ -2277,3 +2277,22 @@ whole attempt-2 code path no longer exists in any form).
   live-reflowed correctly). Full pytest suite: 116 passed, same single
   pre-existing failure, no regressions. Full account: `docs/specs/
   SPEC-ui-setup-task-selection.md` §17. **Left uncommitted.**
+
+- **2026-09-08, later still — `/spec-memory-audit` run, then S14-S17
+  committed and pushed, via `/sparc:orchestrator`.** Audit checked log
+  chronology (clean — all "2026-09-08, later still" entries verified
+  against the actual commit order and session sequence), every code
+  claim from §14-§17 against the current source (`NoFocus`, `border-top:
+  none`, `PANEL_BG`/`BORDER` imports, `wtmhPageTitle`/`wtmhSectionTitle`,
+  the vertical-centering `addStretch` pair, and confirmed no leftover
+  code from either rejected Tasks-grid attempt — all checked out), a
+  fresh pytest run (116 passed, same single pre-existing failure,
+  matching the claims), and cross-links in the touched memory files (all
+  resolved). **One real staleness issue found and fixed:** the
+  `MEMORY.md` index line for this SPEC's memory pointer still said
+  "S9-S13 all uncommitted," stale since S14 was committed earlier this
+  session and didn't mention S15-S17 at all — corrected to reflect
+  S1-S14 committed (`1404fde`/`86ccd91`/`b91cd27`/`ef8b771`/`8aac60c`)
+  and S15-S17 as the current uncommitted work. All of S14-S17 then
+  committed as one commit, `8f2e82b`, and pushed to `origin/main`
+  (`8aac60c..8f2e82b`). `git status` clean after push.
