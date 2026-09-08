@@ -13,9 +13,11 @@ cards, rounded and drop-shadowed, inset from the window edges and sized to
 their content, on a column background matched to the canvas's own colour so
 the inset blends rather than reading as a second panel; §8.9's five-card
 recolour (still accurate as this round's starting point) is what it was
-built from. Not yet committed. S4 (design system/palette) and S5
-(window-structure notes) remain reference-only for everywhere else in
-`dev/`.
+built from. Committed and pushed to `origin/main` as `6583ed5` (the full S8
+line of work) and `05c229f` (an unrelated section-numbering fix to
+SPEC-scanning-task-design-port.md), via `/sparc:devops`. S4 (design system/
+palette) and S5 (window-structure notes) remain reference-only for
+everywhere else in `dev/`.
 **Created:** 2026-09-07
 **Last updated:** 2026-09-08
 
@@ -1186,3 +1188,11 @@ round's styling work.
   confirmed the floating-card look, Skip trial tally advancing correctly,
   and a clean End-task shutdown (no leftover `*src.main*` process). **Not
   yet committed.**
+- **2026-09-08, later still (via `/sparc:devops`)** — All of §8's line of
+  work (§8.3 through §8.10: the live panel port, every styling pass, and
+  the final HUD floating-card look) committed and pushed to `origin/main` as
+  `6583ed5`. A second, unrelated commit (`05c229f`) fixed a stale
+  section-numbering gap in `docs/specs/SPEC-scanning-task-design-port.md`
+  found in the working tree at the same time. `git log --oneline
+  origin/main..HEAD` empty after the push — nothing from this line of work
+  remains uncommitted.
