@@ -217,15 +217,24 @@ class Calibration:
             # false in config): report unmeasured, skip the device entirely.
             return CalibrationResult(n_points=self.n_points, mean_error_px=None, valid=False)
 
-        if self.point_delay_s is not None:
-            sock.sendall(f'<SET ID="CALIBRATE_DELAY" VALUE="{self.point_delay_s}" />\r\n'.encode("ascii"))
-        if self.point_timeout_s is not None:
-            sock.sendall(f'<SET ID="CALIBRATE_TIMEOUT" VALUE="{self.point_timeout_s}" />\r\n'.encode("ascii"))
+        try:
+            if self.point_delay_s is not None:
+                sock.sendall(f'<SET ID="CALIBRATE_DELAY" VALUE="{self.point_delay_s}" />\r\n'.encode("ascii"))
+            if self.point_timeout_s is not None:
+                sock.sendall(f'<SET ID="CALIBRATE_TIMEOUT" VALUE="{self.point_timeout_s}" />\r\n'.encode("ascii"))
 
-        self._configure_points(sock)
-        show_state = 1 if self.show else 0
-        sock.sendall(f'<SET ID="CALIBRATE_SHOW" STATE="{show_state}" />\r\n'.encode("ascii"))
-        sock.sendall(CALIBRATE_START.encode("ascii"))
+            self._configure_points(sock)
+            show_state = 1 if self.show else 0
+            sock.sendall(f'<SET ID="CALIBRATE_SHOW" STATE="{show_state}" />\r\n'.encode("ascii"))
+            sock.sendall(CALIBRATE_START.encode("ascii"))
+        except OSError:
+            # The device dropped/refused the connection before calibration
+            # could even start (e.g. connected to a port that accepts TCP
+            # but doesn't speak the OpenGaze command protocol) -- report
+            # unmeasured rather than letting the exception escape run(),
+            # which would silently kill the caller's thread with no signal
+            # ever fired (see _CalibrationThread in setup_page.py).
+            return CalibrationResult(n_points=self.n_points, mean_error_px=None, valid=False)
         return self._poll_for_result(sock)
 
     def _configure_points(self, sock) -> None:

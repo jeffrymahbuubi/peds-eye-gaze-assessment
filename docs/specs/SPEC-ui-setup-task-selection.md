@@ -56,8 +56,16 @@ trailing margin remains below the stack (task cards are shorter than
 Setup's form-heavy ones). §16-§18 remain in this doc as historical
 record only. S16-S19 committed and pushed to `origin/main` as `74efccd`,
 after a clean `/spec-memory-audit` pass.
+**§20: a real calibration crash bug (stale local-state port +
+an unhandled socket exception crashing the whole app) found, reproduced
+live against the real device, root-caused, and fixed** — see §20.
+**§21: two real bugs in the dev-testing helper `tools/
+fake_gazepoint_server.py` (a non-venv `python` silently producing no
+output, and Ctrl+C unable to stop a blocking `accept()` on Windows)
+found from the user's own hands-on testing and fixed** — see §21.
+**Left uncommitted.**
 **Created:** 2026-09-08
-**Last updated:** 2026-09-08
+**Last updated:** 2026-09-09
 
 ## 1. Origin / what was asked
 
@@ -2134,6 +2142,202 @@ created.
 ask-before-commit pattern — nothing from §16 through §19 is on
 `origin/main` yet (last commit remains `4aa6a51`).
 
+## 20. Calibration crash bug — stale local-state port + an unhandled socket exception
+
+User feedback via `/sparc:orchestrator`: "when I do calibration it didn't
+show any calibration window from gazepoint." Two clarifying questions
+first (Gazepoint Control's location relative to what was being watched,
+and what the Calibration card actually displayed) ruled out the
+two-PC/remote-display explanation early: Gazepoint Control and the
+dashboard are on the same machine/screen, the Tracker Connection card
+said "Connected.", and the Calibration card was stuck on "Calibrating…"
+indefinitely.
+
+### 20.1 Reproduced live before touching any code
+
+Launched `python -m src.main --dashboard` with the qt-mcp probe against
+the real device. `qt_find_widget`/`qt_click` through Connect (→
+"Connected.") then Do Calibration reproduced the exact stuck state — the
+alert label stayed `"Calibrating…"` for 35+ seconds, well past the
+internal ~15s poll timeout `Calibration._poll_for_result` should have
+hit. Checking `qt_list_windows` afterward returned a probe connection
+error, and no `python.exe` process for `src.main` remained at all — the
+whole dashboard process had actually died, not just hung. The launch
+log's stderr had the real cause:
+
+```
+Error calling Python override of QThread::run(): Traceback (most recent call last):
+  File ".../src/ui/setup_page.py", line 85, in run
+    self.finished_ok.emit(calibration.run())
+  File ".../src/engine/calibration.py", line 227, in run
+    sock.sendall(f'<SET ID="CALIBRATE_SHOW" STATE="{show_state}" />\r\n'.encode("ascii"))
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+```
+
+### 20.2 Root cause #1 — stale per-machine local state pointed at the wrong port
+
+`configs/local_state.json` (gitignored, `src/engine/local_state.py`,
+§3.1.3's own per-machine host/port design) held `"port": 4243` — a
+leftover from an earlier QA round (§11.6) that deliberately ran
+`tools/fake_gazepoint_server.py` on 4243 because the real Gazepoint
+Control app was already bound to port 4242 on this same machine.
+`ipconfig` confirmed `26.113.49.235` (the "real device" host from
+[[peds-eye-gaze-assessment-config-skip-worktree-2026-09-03]]) is this
+machine's own Radmin-VPN adapter address, not a separate physical
+machine — so the two-PC theory was never in play here. `netstat -ano`
+plus `Get-CimInstance Win32_Process` confirmed the real Gazepoint
+Control process (`Gazepoint.exe`) is listening on **both** 4242 and
+4243. Port 4243 completes a TCP handshake (so `SetupPage`'s "Connected."
+status is not lying, exactly) but doesn't speak the real OpenGaze
+command protocol — sending a real command (`CALIBRATE_SHOW`) gets the
+connection aborted from the far end.
+
+**Fix:** corrected `configs/local_state.json`'s `port` back to `4242`.
+This is a local data-only fix (the file is gitignored, per its own
+design as a convenience the app doesn't depend on as a source of truth)
+— not a commit.
+
+### 20.3 Root cause #2 — the actual crash: an unhandled `OSError` in `Calibration.run()`
+
+Independent of the wrong port, this is a real code gap: `Calibration
+.run()` (`src/engine/calibration.py`) wrapped none of its `sock.sendall
+()` calls (CALIBRATE_DELAY/TIMEOUT, `_configure_points`, CALIBRATE_SHOW,
+CALIBRATE_START) in a `try/except`, unlike `_poll_for_result`, which
+already catches `OSError` on `recv()` and returns gracefully. When the
+socket aborted, the `OSError` propagated out of `Calibration.run()`,
+out of `_CalibrationThread.run()` (`src/ui/setup_page.py`) uncaught,
+and PySide6 treated it as fatal to the whole process (confirmed live:
+the entire dashboard process died, not just the QThread) — the "stuck
+on Calibrating…" the user saw was Windows holding the last-painted
+frame of the dying window on screen, not a live hang.
+
+**Fix:** wrapped the `sendall` block in `Calibration.run()` in a
+`try/except OSError`, returning `CalibrationResult(n_points=self
+.n_points, mean_error_px=None, valid=False)` on failure — the same
+"unmeasured" contract `_poll_for_result` already uses on its own
+`OSError`. This means any future device hiccup mid-calibration (not
+just this specific wrong-port scenario) degrades to the dashboard's
+existing "Calibration did not produce a valid result" error path
+instead of crashing the whole app.
+
+### 20.4 Re-validated live after both fixes
+
+Killed the crashed process, relaunched fresh with the qt-mcp probe.
+`qt_find_widget` on the Control Port spin box confirmed `4242` (no
+longer `4243`). Repeated Connect → "Connected." → Do Calibration. A
+**real desktop screenshot** (PowerShell + `System.Drawing.Graphics
+.CopyFromScreen`, not qt-mcp's `grab()`-based `qt_screenshot` — the
+same compositor-blind-spot precedent as §15) confirmed Gazepoint
+Control's actual on-screen calibration overlay appeared: a real
+10-point animated calibration screen with "LEFT/RIGHT eye: Insufficient
+valid points (0), minimum required is 4" — the already-documented
+vendor floor from
+[[peds-eye-gaze-assessment-physician-feedback-2026-09-02]], expected
+here since no human eye was present for this automated test, not a new
+bug. Dismissed the overlay with Escape; the dashboard correctly resumed
+and reported "Calibration did not produce a valid result. Try again or
+adjust point count." — no crash, no hang. Confirmed no orphan process
+remained afterward.
+
+Full pytest suite: 116 passed, the same single pre-existing failure
+only (`test_config_merges_task_over_default`, the already-documented
+`target_fps` 60-vs-150 stale assertion), no regressions.
+
+**Files changed:** `src/engine/calibration.py` (the `try/except` fix).
+`configs/local_state.json` also changed but is gitignored/local-only —
+not part of any commit.
+
+**Left uncommitted**, matching this project's established
+ask-before-commit pattern.
+
+## 21. Dev-testing workflow follow-on — two real bugs in `tools/fake_gazepoint_server.py` itself
+
+Follow-on from §20: since a real human calibration always fails without
+a subject actually looking at the screen (the same vendor floor as
+§20.4), the user asked how to test the dashboard's Tasks screen/flow at
+all. Answer: `tools/fake_gazepoint_server.py` already exists for exactly
+this (built for [[peds-eye-gaze-assessment-physician-feedback-2026-09-02]]
+item 7, reused once already in S11.6) — a minimal OpenGaze-protocol stub
+that always answers `CALIBRATE_RESULT_SUMMARY` with a fixed, valid
+result. Live-validated the intended procedure end-to-end via qt-mcp
+before handing it to the user: `python tools/fake_gazepoint_server.py
+4243` (port 4243, not 4242, for the same reason as §20 — Gazepoint
+Control already owns 4242 on this machine) → dashboard's Control Address/
+Port set to `127.0.0.1`/`4243` → Connect → Do Calibration (immediately
+valid) → Continue to Tasks → real "2 · Tasks" screen reached. Recorded as
+[[peds-eye-gaze-assessment-dashboard-testing-without-subject-2026-09-09]].
+
+**Two real bugs then surfaced in the tool itself, both found from the
+user's own hands-on use, not assumed:**
+
+### 21.1 "Nothing printed, terminal froze" — bare `python` wasn't the venv
+
+User ran `python tools/fake_gazepoint_server.py 4243` and saw zero
+output at all. Confirmed via a clarifying question this wasn't the
+expected "prints once, then blocks" behavior — genuinely nothing
+printed. Root-caused by checking what bare `python` actually resolves
+to on this machine (`where python`, `python --version` in Bash,
+PowerShell, and `cmd /c`, all three shells): a `pyenv-win` shim with no
+global version configured, which errors immediately with "No global/
+local python version has been set yet" in this session's own shells —
+plausible that the user's real interactive terminal instead fell
+through to the Windows Store's `python.exe` stub (also on `where
+python`'s output), which is well known to silently do nothing rather
+than error. Either way, the fix is the same: **use the project's own
+venv interpreter explicitly** rather than relying on what `python`
+resolves to. Also hardened the script defensively regardless of the
+exact cause: every `print()` in `tools/fake_gazepoint_server.py` now
+passes `flush=True`, so the "listening on…" message can never be
+silently delayed by output buffering once the correct interpreter is
+actually used.
+
+### 21.2 Ctrl+C didn't stop it — a real, confirmed Windows blocking-socket bug
+
+User then activated the venv correctly (prompt showed `(.venv) PS
+...>`), got the "listening on 127.0.0.1:4243 (Ctrl+C to stop)" message
+immediately (confirming §21.1's fix worked), but reported being unable
+to stop the server with Ctrl+C. Root cause, found by reading `main()`
+before assuming anything: `listener.accept()` was called with **no
+timeout**, blocking indefinitely. On Windows, CPython only services a
+pending `KeyboardInterrupt` between bytecode instructions — a thread
+blocked inside a C-level blocking socket call doesn't return control to
+the interpreter until that call itself returns, which for `accept()`
+with nothing ever connecting is never. This is the identical class of
+bug this codebase already works around elsewhere (`GazepointClient
+._run_socket`'s `recv()` loop and `Calibration._poll_for_result`'s
+`recv()` loop both already use a short socket timeout specifically so a
+blocking call can't starve signal handling / stop-event checks — this
+script's own `handle_client` even already used this pattern for its
+per-client socket, just not for the top-level listener).
+
+**Fix:** `listener.settimeout(0.5)` before the accept loop, with the
+loop catching `TimeoutError` and continuing — the interpreter now gets
+control back (and can service a pending Ctrl+C) at least every 0.5s
+even with no client ever connecting. Added a `"[fake-server] stopping"`
+message on the `KeyboardInterrupt` path so a successful Ctrl+C is
+visibly confirmed, not just silent.
+
+**Validated:** launched the fixed script directly, confirmed the
+"listening…" message printed immediately (§21.1's fix holding), then
+connected a real client via a scratch script sending `<GET
+ID="CALIBRATE_RESULT_SUMMARY" />` and confirmed the expected `<ACK ...
+AVE_ERROR="8.42" VALID_POINTS="5" />` reply still came back correctly —
+i.e. the new accept-timeout loop causes no regression in normal client
+handling. (Testing the Ctrl+C path itself end-to-end needs a real
+interactive console session sending an actual `CTRL_C_EVENT`, which
+this automated environment can't faithfully reproduce — the fix is the
+established, already-precedented pattern used elsewhere in this exact
+codebase for exactly this Windows limitation, and the surrounding
+behavior was confirmed unaffected.) Full pytest suite: 116 passed, same
+single pre-existing failure only, no regressions (this tool has no
+pytest coverage of its own — a standalone dev script, not part of the
+app).
+
+**Files changed:** `tools/fake_gazepoint_server.py` only (the `flush=
+True` prints from §21.1 plus the `settimeout`/`TimeoutError` loop from
+§21.2). **Left uncommitted**, alongside §20's `src/engine/
+calibration.py` fix — same ask-before-commit pattern.
+
 ## Log
 
 - **2026-09-08** — Session opened via `/sparc:orchestrator`; user described
@@ -2616,3 +2820,76 @@ ask-before-commit pattern — nothing from §16 through §19 is on
   `git status` clean after push — nothing from this whole Tasks-layout
   line of work (the grid, its fixes, and its revert) remains
   uncommitted.
+
+- **2026-09-09 — §20: a real calibration crash bug found, reproduced live,
+  root-caused, and fixed, via `/sparc:orchestrator`.** User feedback: "when
+  I do calibration it didn't show any calibration window from gazepoint."
+  Two clarifying questions ruled out a two-PC/remote-display explanation
+  before touching any code (Gazepoint Control confirmed on the same
+  machine/screen; Tracker Connection said "Connected."; Calibration was
+  stuck on "Calibrating…"). Reproduced live via qt-mcp against the real
+  device first: Connect → "Connected." → Do Calibration hung indefinitely,
+  and the whole dashboard process was found to have actually died (not
+  just hung) — the launch log showed an unhandled `ConnectionAbortedError`
+  inside `Calibration.run()`'s `CALIBRATE_SHOW` `sendall`.
+
+  Two independent root causes, both fixed: (1) `configs/local_state.json`
+  (gitignored per-machine state) held a stale `port: 4243` left over from
+  an earlier fake-server QA round — `26.113.49.235` is this machine's own
+  Radmin-VPN address, and the real Gazepoint Control process happens to
+  also accept a raw TCP connection on 4243 without speaking the real
+  OpenGaze protocol there, so "Connected." was misleading and any real
+  command aborted the socket; corrected to `4242`. (2) `Calibration.run()`
+  had no exception handling around its `sendall` calls (unlike
+  `_poll_for_result`, which already catches `OSError` on `recv()`), so the
+  abort's `OSError` escaped uncaught and crashed the entire app, not just
+  the calibration thread — fixed with a `try/except OSError` returning an
+  unmeasured/invalid result, matching `_poll_for_result`'s own contract.
+
+  Re-validated live after both fixes: Control Port correctly showed 4242;
+  Do Calibration now genuinely triggered Gazepoint Control's real on-screen
+  10-point calibration overlay, confirmed via a real desktop screenshot
+  (not qt-mcp's `grab()`-based `qt_screenshot`, per the §15 compositor-
+  blind-spot precedent); dismissed with Escape; the dashboard correctly
+  reported "Calibration did not produce a valid result" (expected — no
+  human eye present for the automated test, same vendor floor as
+  [[peds-eye-gaze-assessment-physician-feedback-2026-09-02]]) instead of
+  crashing or hanging. Full pytest suite: 116 passed, same single
+  pre-existing failure only, no regressions. Full account: §20. **Files
+  changed:** `src/engine/calibration.py` (committable);
+  `configs/local_state.json` (gitignored, local-only). **Left
+  uncommitted**, same ask-before-commit pattern as the rest of this SPEC.
+
+- **2026-09-09, later — §21: two real bugs in `tools/fake_gazepoint_server.py`
+  found and fixed from the user's own hands-on testing, via
+  `/sparc:orchestrator`.** User asked how to test the Tasks screen without a
+  real gaze subject (since real calibration always fails without one, per
+  §20.4) — pointed at the already-existing `tools/fake_gazepoint_server.py`,
+  live-validated the full Connect→Calibrate→Continue→Tasks flow with it
+  first. User then reported the script itself printed nothing and appeared
+  to freeze; root-caused to bare `python` not resolving to the project's
+  venv on this machine (a misconfigured `pyenv-win` shim, or the Windows
+  Store `python.exe` stub — confirmed the former errors immediately in this
+  session's own shells; recommended using the venv interpreter explicitly
+  regardless) and hardened the script's prints with `flush=True` so the
+  "listening…" message can never be silently delayed by buffering once the
+  right interpreter is used (§21.1).
+
+  User then correctly activated the venv, saw the "listening…" message
+  immediately, but reported Ctrl+C didn't stop the server. Root-caused to
+  `listener.accept()` blocking with no timeout — a well-known Windows
+  CPython limitation (a thread blocked in a C-level blocking socket call
+  can't service a pending `KeyboardInterrupt` until the call returns, which
+  for an `accept()` with nothing connecting is never), the same class of
+  bug this codebase already works around elsewhere (`GazepointClient
+  ._run_socket`, `Calibration._poll_for_result`). Fixed with
+  `listener.settimeout(0.5)` plus a `TimeoutError`-catching loop, matching
+  the existing precedent (§21.2). Validated a real client still gets a
+  correct `CALIBRATE_RESULT_SUMMARY` ACK through the new accept-timeout
+  loop (no regression); the Ctrl+C path itself follows the same
+  already-established pattern used elsewhere in this codebase for the
+  identical Windows limitation. Full pytest suite: 116 passed, same single
+  pre-existing failure only, no regressions (tool has no pytest coverage of
+  its own). Full account: §21. **Files changed:** `tools/
+  fake_gazepoint_server.py` only. **Left uncommitted**, alongside §20's
+  `src/engine/calibration.py` fix.

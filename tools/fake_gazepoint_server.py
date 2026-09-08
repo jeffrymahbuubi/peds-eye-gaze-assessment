@@ -39,7 +39,7 @@ AVE_ERROR = "8.42"
 def handle_client(conn: socket.socket) -> None:
     conn.settimeout(0.2)
     buffer = ""
-    print("[fake-server] client connected")
+    print("[fake-server] client connected", flush=True)
     while True:
         try:
             chunk = conn.recv(4096)
@@ -48,19 +48,19 @@ def handle_client(conn: socket.socket) -> None:
         except OSError:
             break
         if not chunk:
-            print("[fake-server] client disconnected")
+            print("[fake-server] client disconnected", flush=True)
             break
         buffer += chunk.decode("ascii", errors="ignore")
         while "\r\n" in buffer:
             line, buffer = buffer.split("\r\n", 1)
-            print(f"[fake-server] recv: {line}")
+            print(f"[fake-server] recv: {line}", flush=True)
             if 'ID="CALIBRATE_RESULT_SUMMARY"' in line and "<GET" in line:
                 ack = (
                     f'<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="{AVE_ERROR}" '
                     f'VALID_POINTS="{N_POINTS}" />\r\n'
                 )
                 conn.sendall(ack.encode("ascii"))
-                print(f"[fake-server] sent: {ack.strip()}")
+                print(f"[fake-server] sent: {ack.strip()}", flush=True)
 
 
 def main() -> None:
@@ -68,13 +68,25 @@ def main() -> None:
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("127.0.0.1", PORT))
     listener.listen(1)
-    print(f"[fake-server] listening on 127.0.0.1:{PORT} (Ctrl+C to stop)")
+    # A blocking accept() with no timeout can't be interrupted by Ctrl+C on
+    # Windows -- CPython only checks for a pending KeyboardInterrupt between
+    # bytecode instructions, and a C-level blocking socket call doesn't
+    # return control to the interpreter until it has something to report.
+    # With nothing ever connecting, accept() would simply never return and
+    # Ctrl+C would appear to do nothing. Polling with a short timeout (same
+    # pattern already used for the per-client socket in handle_client)
+    # gives the interpreter a chance to service the signal every 0.5s.
+    listener.settimeout(0.5)
+    print(f"[fake-server] listening on 127.0.0.1:{PORT} (Ctrl+C to stop)", flush=True)
     try:
         while True:
-            conn, _addr = listener.accept()
+            try:
+                conn, _addr = listener.accept()
+            except TimeoutError:
+                continue
             threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
     except KeyboardInterrupt:
-        pass
+        print("[fake-server] stopping", flush=True)
     finally:
         listener.close()
 
