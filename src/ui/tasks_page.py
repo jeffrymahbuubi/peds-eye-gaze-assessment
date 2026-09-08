@@ -44,7 +44,7 @@ class _TaskCard(QFrame):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(6)
+        layout.setSpacing(8)  # matches setup_page.py's card rhythm exactly
 
         title = QLabel(name)
         title.setObjectName("wtmhSectionTitle")
@@ -55,11 +55,22 @@ class _TaskCard(QFrame):
         desc.setWordWrap(True)
         layout.addWidget(desc)
 
+        status_row = QHBoxLayout()
         self.status_label = QLabel("Pending")
         self.status_label.setObjectName("wtmhBadgeNeutral")
         self.status_label.setFixedWidth(70)
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.status_label)
+        status_row.addWidget(self.status_label)
+
+        # Run-number indicator (SPEC-ui-setup-task-selection.md S11.2 finding
+        # B) -- surfaces the same run index session_naming.py's next_run_
+        # number() already computes for the on-disk session directory, which
+        # was previously never shown anywhere in the UI.
+        self.run_label = QLabel("No runs yet")
+        self.run_label.setObjectName("wtmhMuted")
+        status_row.addWidget(self.run_label)
+        status_row.addStretch(1)
+        layout.addLayout(status_row)
 
         buttons = QHBoxLayout()
         self.run_button = QPushButton("Run")
@@ -80,13 +91,26 @@ class _TaskCard(QFrame):
         buttons.addStretch(1)
         layout.addLayout(buttons)
 
+    # Full pill set per SPEC-ui-setup-task-selection.md S11.1 critique point
+    # 6 -- "Error" has no real trigger yet (S11.4 decision 2: styled and
+    # reserved this round, not wired to an actual failure path).
+    _STATUS_BADGES = {
+        "Pending": "wtmhBadgeNeutral",
+        "Running": "wtmhBadgeAccent",
+        "Complete": "wtmhBadgeSuccess",
+        "Error": "wtmhBadgeDanger",
+    }
+
     def set_status(self, status: str) -> None:
         self.status_label.setText(status)
-        object_name = "wtmhBadgeSuccess" if status == "Complete" else "wtmhBadgeNeutral"
+        object_name = self._STATUS_BADGES.get(status, "wtmhBadgeNeutral")
         self.status_label.setObjectName(object_name)
         self.status_label.style().unpolish(self.status_label)
         self.status_label.style().polish(self.status_label)
         self.analyze_button.setEnabled(status == "Complete")
+
+    def set_run_count(self, n: int) -> None:
+        self.run_label.setText(f"Run {n}")
 
     def set_run_enabled(self, enabled: bool) -> None:
         self.run_button.setEnabled(enabled)
@@ -128,6 +152,10 @@ class TasksPage(QWidget):
     def set_task_status(self, task_id: str, status: str) -> None:
         if task_id in self._cards:
             self._cards[task_id].set_status(status)
+
+    def set_task_run_number(self, task_id: str, n: int) -> None:
+        if task_id in self._cards:
+            self._cards[task_id].set_run_count(n)
 
     def set_all_runs_enabled(self, enabled: bool) -> None:
         """Disable every card's Run/Settings while one task is embedded and running."""

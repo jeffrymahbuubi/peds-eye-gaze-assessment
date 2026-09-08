@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QPushButton,
     QStackedWidget,
+    QStyleFactory,
     QVBoxLayout,
     QWidget,
 )
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
 from ..app import AssessmentApp
 from ..engine.config import CONFIG_ROOT, load_task_config
 from ..engine.calibration import CalibrationFileError
+from ..engine.session_naming import next_run_number
 from .setup_page import SetupPage
 from .task_settings_dialog import TaskSettingsDialog
 from .tasks_page import TasksPage
@@ -162,6 +164,15 @@ class DashboardWindow(QMainWindow):
 
         structural_overrides = self._task_overrides.get(task_id)
 
+        # Predict the run index the about-to-start AssessmentApp/
+        # SessionRecorder will independently compute via the same
+        # next_session_id() scan (S11.5) -- safe to compute twice since
+        # nothing else can create a session directory between these two
+        # calls in this single-threaded UI flow.
+        subject_id = self.setup_page.subject_id()
+        output_root = load_task_config(task_id).get("recording", {}).get("output_root", "sessions")
+        run_number = next_run_number(output_root, subject_id, task_id)
+
         try:
             assessment = AssessmentApp(
                 task_id=task_id,
@@ -184,6 +195,7 @@ class DashboardWindow(QMainWindow):
         self._active_assessment = assessment
         self._active_task_id = task_id
         self.tasks_page.set_task_status(task_id, "Running")
+        self.tasks_page.set_task_run_number(task_id, run_number)
         self.tasks_page.set_all_runs_enabled(False)
         self.setup_nav_button.setEnabled(False)
 
@@ -209,7 +221,35 @@ class DashboardWindow(QMainWindow):
 
 
 def run_dashboard() -> int:
-    app = QApplication.instance() or QApplication([])
+    existing = QApplication.instance()
+    app = existing or QApplication([])
+    if existing is None:
+        # Windows' native "windowsvista" QStyle (the platform default, and
+        # this app never set one before) largely ignores QSS-declared
+        # custom arrow/indicator subcontrols -- it paints its own tiny
+        # native glyph inside whatever box our stylesheet reserves,
+        # regardless of the border-triangle CSS we declare (confirmed via
+        # a zoomed qt-mcp screenshot, SPEC-ui-setup-task-selection.md
+        # S12). Fusion is the standard, reliable fix: it fully honors
+        # custom subcontrol QSS, which this app leans on heavily
+        # (wtmh_theme.py, operator_panel.py).
+        style = QStyleFactory.create("Fusion")
+        app.setStyle(style)
+        # S13: switching style alone isn't enough -- on a machine with
+        # Windows dark mode on, Qt6 auto-adopts a DARK default QPalette
+        # (confirmed: Window #1e1e1e, Button #3c3c3c) regardless of which
+        # QStyle is active. Anything our QSS doesn't explicitly cover
+        # (e.g. QCalendarWidget's weekday header, which QSS itself can't
+        # reach for this widget -- see setup_page.py's
+        # _theme_calendar_popup) silently falls back to that dark palette
+        # instead of a neutral light one, which is almost certainly the
+        # real explanation behind most of this app's "looks
+        # dark/unthemed" reports so far, not just the calendar header.
+        # Fusion's own standardPalette() is a real light default,
+        # independent of OS dark-mode inheritance -- applying it here
+        # gives every not-yet-explicitly-styled corner a sane light
+        # fallback instead of near-black.
+        app.setPalette(style.standardPalette())
     window = DashboardWindow()
     window.show()
     return app.exec()

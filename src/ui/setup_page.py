@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QThread, Qt, Signal
+from PySide6.QtCore import QDate, Qt, QThread, Signal
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QCheckBox,
     QComboBox,
     QDateEdit,
@@ -166,18 +167,55 @@ class SetupPage(QWidget):
         layout.addWidget(QLabel("Subject & Session Info"))
 
         form = QFormLayout()
+        form.setVerticalSpacing(10)
         self.subject_id_edit = QLineEdit()
         self.subject_id_edit.textChanged.connect(self._on_state_changed)
         form.addRow("Subject ID", self.subject_id_edit)
 
+        # No calendar popup (SPEC-ui-setup-task-selection.md S13, user
+        # feedback): a physician recording an assessment isn't "booking" a
+        # future date from a browsable calendar, so a plain auto-populated,
+        # still-correctable date field (segments editable via keyboard,
+        # today's date by default) fits the actual data-entry need better
+        # than a booking-style date picker -- and sidesteps entirely a
+        # QCalendarWidget theming problem this session hit real, confirmed
+        # Qt/Fusion limits on (a QHeaderView's background ignoring both
+        # ancestor-scoped and directly-applied QSS, needing a QPalette
+        # workaround that still didn't match the app's exact background).
         self.date_edit = QDateEdit(QDate.currentDate())
-        self.date_edit.setCalendarPopup(True)
         self.date_edit.dateChanged.connect(self._on_state_changed)
+        # S14: QDateEdit is a QAbstractSpinBox subclass, so even with the
+        # calendar popup removed it still paints its own native up/down
+        # step buttons on the right edge -- wtmh_theme.py's QSS never
+        # targeted QDateEdit's ::up-button/::down-button (only QSpinBox/
+        # QDoubleSpinBox get themed steppers), so those native buttons
+        # rendered unstyled as a bare vertical sliver. Disabling them
+        # outright (rather than theming them like the spin boxes) is the
+        # correct fix here: the field is meant to read as a plain,
+        # keyboard-editable text box matching Subject ID above it, not a
+        # steppable control.
+        self.date_edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         form.addRow("Assessment Date", self.date_edit)
 
         self.sex_combo = QComboBox()
         self.sex_combo.addItems(_SEX_OPTIONS)
         self.sex_combo.currentIndexChanged.connect(self._on_state_changed)
+        # S13 removed the popup's inner QAbstractItemView's own frame so
+        # wtmh_theme.py's QSS border/radius would be the only one visible.
+        # S14: that was incomplete -- the view sits inside a second, outer
+        # QFrame (Qt's undocumented QComboBoxPrivateContainer, the popup's
+        # actual top-level window) which draws its own default frame
+        # independently of the inner view's frame shape and is unreachable
+        # by QSS at all. Under Fusion that outer frame renders as a heavy
+        # black band around the whole popup. Disabling its native
+        # background/frame painting via WA_TranslucentBackground (and
+        # clearing any residual palette fill) leaves only the inner view's
+        # QSS-drawn white background/border/radius visible.
+        self.sex_combo.view().setFrameShape(QFrame.Shape.NoFrame)
+        popup_container = self.sex_combo.view().parentWidget()
+        if popup_container is not None:
+            popup_container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            popup_container.setStyleSheet("background: transparent; border: none;")
         form.addRow("Sex", self.sex_combo)
 
         self.notes_edit = QTextEdit()
@@ -233,6 +271,7 @@ class SetupPage(QWidget):
         layout.addWidget(QLabel("Calibration"))
 
         form = QFormLayout()
+        form.setVerticalSpacing(10)
         self.point_count_spin = QSpinBox()
         self.point_count_spin.setRange(1, 9)
         cal_defaults = self._defaults.get("calibration", {})
@@ -414,6 +453,33 @@ class SetupPage(QWidget):
 
     # -- gating -------------------------------------------------------------
 
+    def _missing_requirements(self) -> list[str]:
+        """Human-readable list of unmet Continue-to-Tasks gate conditions.
+
+        SPEC-ui-setup-task-selection.md S13: a real user loaded a
+        calibration file, then couldn't tell why "Continue to Tasks"
+        stayed disabled -- the gate (S5.6) has always also required a
+        connected tracker, independently of where the calibration came
+        from, but nothing in the UI ever said so. This isn't a code bug
+        (verified: `can_continue()` correctly flips True once the tracker
+        is also connected), just a missing explanation -- surfaced as a
+        tooltip on the disabled button instead of silence.
+        """
+        missing = []
+        if self._client is None or not self._client.is_connected():
+            missing.append("connect to the tracker")
+        if self._calibration_result is None:
+            missing.append("run or load a calibration")
+        if not self.subject_id():
+            missing.append("enter a Subject ID")
+        if not self.sex():
+            missing.append("select Sex")
+        return missing
+
     def _on_state_changed(self, *_args: object) -> None:
-        self.continue_button.setEnabled(self.can_continue())
+        missing = self._missing_requirements()
+        self.continue_button.setEnabled(not missing)
+        self.continue_button.setToolTip(
+            "Still needed: " + "; ".join(missing) + "." if missing else ""
+        )
         self.stateChanged.emit()
