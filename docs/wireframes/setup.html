@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>wiremd Mockup</title>
+  <style>
+a.wmd-button { text-decoration: none; color: inherit; }
+
+.wmd-tab-headers { display: flex; gap: 0; border-bottom: 2px solid #e0e0e0; margin-bottom: 12px; }
+.wmd-tab-header { display: inline-block; padding: 8px 16px; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; font-size: 14px; font-weight: 500; color: #888; background: transparent; cursor: pointer; font-family: inherit; transition: color 0.15s; }
+.wmd-tab-header:hover { color: #333; }
+.wmd-tab-header.wmd-active { border-bottom-color: currentColor; color: #333; font-weight: 600; }
+.wmd-tab-panel[hidden] { display: none; }
+.wmd-tab-panels { padding: 12px 0; }
+
+.wmd-row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.wmd-row > .wmd-grid-item { flex: 0 1 auto; min-width: 0; }
+.wmd-row.wmd-right { justify-content: flex-end; }
+.wmd-row.wmd-center { justify-content: center; }
+.wmd-align-left { margin-right: auto; }
+.wmd-align-right { margin-left: auto; }
+.wmd-align-center { margin: auto; }
+.wmd-container-button-group > .wmd-input,
+.wmd-container-button-group > .wmd-select,
+.wmd-row > .wmd-grid-item > .wmd-input,
+.wmd-row > .wmd-grid-item > .wmd-select { display: inline-block; width: auto; }
+
+.wmd-demo { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #d0d0d0; border-radius: 6px; overflow: hidden; margin: 1rem 0; }
+.wmd-demo-preview { padding: 1.5rem; border-right: 1px solid #d0d0d0; }
+.wmd-demo-code { background: #f6f8fa; overflow: auto; display: flex; flex-direction: column; }
+.wmd-demo-code-toolbar { display: flex; justify-content: flex-end; padding: 0.5rem 0.75rem 0; }
+.wmd-demo-copy { background: none; border: 1px solid #ccc; border-radius: 4px; padding: 2px 8px; font-size: 0.75em; color: #666; cursor: pointer; font-family: inherit; }
+.wmd-demo-copy:hover { background: #e8e8e8; color: #333; }
+.wmd-demo-code pre { margin: 0; padding: 0.75rem 1.5rem 1.25rem; font-size: 0.8em; font-family: 'Courier New', Courier, monospace; line-height: 1.6; white-space: pre; }
+.wmd-demo-code code { display: block; color: #444; }
+
+/* wiremd Clean Style - Minimal modern wireframes */
+* {
+  box-sizing: border-box;
+}
+
+body.wmd-root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: #ffffff;
+  color: #1a1a1a;
+  padding: 40px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* Headings */
+.wmd-h1, .wmd-h2, .wmd-h3, .wmd-h4, .wmd-h5, .wmd-h6 {
+  font-weight: 600;
+  margin: 1.5em 0 0.75em;
+  color: #000;
+  letter-spacing: -0.02em;
+}
+
+.wmd-h1 { font-size: 2.5em; border-bottom: 2px solid #e0e0e0; padding-bottom: 0.3em; }
+.wmd-h2 { font-size: 2em; }
+.wmd-h3 { font-size: 1.5em; }
+.wmd-h4 { font-size: 1.25em; }
+.wmd-h5 { font-size: 1.1em; }
+.wmd-h6 { font-size: 1em; }
+
+/* Paragraph */
+.wmd-paragraph {
+  margin: 0.75em 0;
+  color: #4a4a4a;
+}
+
+/* Buttons */
+.wmd-button {
+  display: inline-block;
+  padding: 10px 20px;
+  margin: 6px;
+  background: #f5f5f5;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wmd-button:hover {
+  background: #e8e8e8;
+  border-color: #b0b0b0;
+}
+
+.wmd-button-primary, .wmd-button.wmd-primary {
+  background: #0066cc;
+  color: #fff;
+  border-color: #0052a3;
+}
+
+.wmd-button-primary:hover, .wmd-button.wmd-primary:hover {
+  background: #0052a3;
+}
+
+.wmd-button-secondary, .wmd-button.wmd-secondary {
+  background: #fff;
+  border: 2px solid #d0d0d0;
+}
+
+.wmd-button-danger, .wmd-button.wmd-danger {
+  background: #dc3545;
+  color: #fff;
+  border-color: #c82333;
+}
+
+.wmd-button[disabled], .wmd-button.wmd-state-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Pills / Badges */
+.wmd-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  margin: 0 2px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: #e5e7eb;
+  color: #374151;
+}
+.wmd-badge-primary { background: #dbeafe; color: #1d4ed8; }
+.wmd-badge-success { background: #d1fae5; color: #065f46; }
+.wmd-badge-warning { background: #fef3c7; color: #92400e; }
+.wmd-badge-error { background: #fee2e2; color: #991b1b; }
+
+/* Inputs */
+.wmd-input, .wmd-textarea, .wmd-select {
+  display: block;
+  width: 100%;
+  max-width: 400px;
+  padding: 10px 12px;
+  margin: 6px 0;
+  font-family: inherit;
+  font-size: 14px;
+  background: #fff;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  transition: border-color 0.2s;
+}
+
+.wmd-input:focus, .wmd-textarea:focus, .wmd-select:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.wmd-input[disabled], .wmd-input.wmd-state-disabled,
+.wmd-textarea[disabled], .wmd-textarea.wmd-state-disabled,
+.wmd-select[disabled], .wmd-select.wmd-state-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #f5f5f5;
+  border-color: #e0e0e0;
+}
+
+.wmd-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* Checkboxes and Radios */
+.wmd-checkbox, .wmd-radio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+
+.wmd-checkbox input[type="checkbox"],
+.wmd-radio input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* Icons */
+.wmd-icon {
+  display: inline-block;
+  width: 1.2em;
+  height: 1.2em;
+  margin: 0 4px;
+  vertical-align: middle;
+  color: #666;
+}
+
+
+/* Containers */
+.wmd-container-hero, .wmd-container-card, .wmd-container-modal {
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 32px;
+  margin: 24px 0;
+}
+
+.wmd-container-hero {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  text-align: center;
+  padding: 60px 32px;
+}
+
+.wmd-container-card {
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.wmd-container-modal {
+  max-width: 500px;
+  margin: 40px auto;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+
+/* Radio Groups */
+.wmd-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.wmd-radio-group-inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.wmd-radio-group-inline .wmd-radio {
+  margin: 0;
+}
+
+/* Icons */
+.wmd-icon {
+  display: inline-block;
+  font-size: 1.1em;
+  line-height: 1;
+  vertical-align: middle;
+  margin: 0 0.25em;
+}
+
+/* Navigation */
+.wmd-nav {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px 24px;
+  margin: 24px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.wmd-nav-content {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.wmd-brand {
+  font-weight: 600;
+  font-size: 1.25em;
+  margin-right: auto;
+}
+
+.wmd-nav-item {
+  display: inline-block;
+  color: #4a4a4a;
+  text-decoration: none;
+  font-weight: 500;
+  padding: 8px 16px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.wmd-nav-item:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.wmd-nav-item.wmd-active {
+  background: #343a40;
+  color: #fff;
+  border-color: #343a40;
+}
+
+.wmd-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+  font-size: 0.9em;
+}
+
+.wmd-breadcrumb-item a {
+  color: #495057;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wmd-breadcrumb-current {
+  font-weight: 600;
+  color: #212529;
+}
+
+.wmd-breadcrumb-sep {
+  color: #adb5bd;
+}
+
+/* Sidebar */
+.wmd-container-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 180px;
+  padding: 12px;
+  background: #f0f8ff;
+  border: 2px solid #4682B4;
+  border-radius: 8px;
+}
+.wmd-container-sidebar .wmd-button { display: block; width: 100%; text-align: left; margin: 0; }
+.wmd-container-sidebar .wmd-h4 { margin: 12px 0 4px; font-size: 0.85em; opacity: 0.6; text-transform: uppercase; }
+.wmd-container-sidebar .wmd-separator { margin: 8px 0; }
+
+/* Layout: sidebar-main */
+.wmd-container-layout.wmd-sidebar-main {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.wmd-layout-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wmd-layout-sidebar .wmd-container-sidebar { width: 100%; }
+.wmd-layout-sidebar .wmd-button { display: block; width: 100%; text-align: left; margin: 2px 0; }
+.wmd-layout-sidebar .wmd-h4 { margin: 12px 0 4px; font-size: 0.85em; opacity: 0.6; text-transform: uppercase; }
+.wmd-layout-sidebar .wmd-separator { margin: 8px 0; }
+.wmd-layout-main { min-width: 0; }
+
+/* Grid */
+.wmd-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--grid-columns, 3), 1fr);
+  gap: 24px;
+  margin: 32px 0;
+  align-items: center;
+}
+
+.wmd-grid-item { min-width: 0; }
+
+.wmd-col-span-1 { grid-column: span 1; }
+.wmd-col-span-2 { grid-column: span 2; }
+.wmd-col-span-3 { grid-column: span 3; }
+.wmd-col-span-4 { grid-column: span 4; }
+
+.wmd-grid-item-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 24px;
+  transition: box-shadow 0.2s;
+}
+.wmd-grid-item-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+/* Lists */
+.wmd-list {
+  margin: 16px 0;
+  padding-left: 28px;
+}
+
+.wmd-list-item {
+  margin: 6px 0;
+}
+
+/* Blockquote */
+.wmd-blockquote {
+  border-left: 3px solid #0066cc;
+  padding-left: 20px;
+  margin: 20px 0;
+  color: #4a4a4a;
+}
+
+/* Code */
+.wmd-code-inline {
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.9em;
+  color: #d63384;
+}
+
+.wmd-code-block {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 16px;
+  margin: 16px 0;
+  overflow-x: auto;
+}
+
+.wmd-code-block code {
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.9em;
+  color: #1a1a1a;
+}
+
+/* Separator */
+.wmd-separator {
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  margin: 32px 0;
+}
+
+/* State Containers */
+.wmd-container-loading-state {
+  background: #f5f7fa;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  padding: 40px;
+  margin: 24px 0;
+  text-align: center;
+  position: relative;
+}
+
+.wmd-container-loading-state::before {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 20px;
+  border: 3px solid #e0e0e0;
+  border-top-color: #0066cc;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.wmd-container-empty-state {
+  background: #fafafa;
+  border: 1px dashed #d0d0d0;
+  border-radius: 8px;
+  padding: 60px 40px;
+  margin: 24px 0;
+  text-align: center;
+  color: #888;
+}
+
+.wmd-container-empty-state::before {
+  content: '📭';
+  display: block;
+  font-size: 72px;
+  margin-bottom: 20px;
+  opacity: 0.4;
+  filter: grayscale(30%);
+}
+
+.wmd-container-error-state {
+  background: #fff5f5;
+  border: 1px solid #dc3545;
+  border-radius: 8px;
+  padding: 40px;
+  margin: 24px 0;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.1);
+}
+
+.wmd-container-error-state::before {
+  content: '⚠️';
+  display: block;
+  font-size: 48px;
+  margin-bottom: 20px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  body.wmd-root {
+    padding: 20px;
+  }
+
+  .wmd-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .wmd-col-span-1,
+  .wmd-col-span-2,
+  .wmd-col-span-3,
+  .wmd-col-span-4 {
+    grid-column: span 1;
+  }
+
+  .wmd-nav-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+  </style>
+</head>
+<body class="wmd-root wmd-clean">
+  <nav class="wmd-nav">
+  <div class="wmd-nav-content">
+    <a href="#" class="wmd-nav-item"><span class="wmd-icon" data-icon="eye" aria-label="eye">●</span>Pediatric Eye-Gaze Assessment</a>
+    <a href="./setup.html" class="wmd-nav-item">Setup</a>
+    <a href="./tasks.html" class="wmd-nav-item">Tasks</a>
+  </div>
+</nav>
+<div class="wmd-row wmd-right">
+  <div class="wmd-grid-item">
+    <p class="wmd-paragraph">Session <span class="wmd-badge wmd-badge-primary">1</span>   Tracker <span class="wmd-badge wmd-badge-error">not connected</span>   Calibration <span class="wmd-badge wmd-badge-warning">none</span></p>
+  </div>
+</div>
+<h2 class="wmd-h2">1 · Setup</h2>
+<blockquote class="wmd-blockquote">
+  <div class="wmd-container-form-group">
+  <strong>Design note:</strong> status badges above reflect a fresh session (just opened, nothing connected yet). After Connect + a completed/loaded calibration, Tracker reads 
+  <span class="wmd-badge wmd-badge-success">connected</span>
+   and Calibration reads 
+  <span class="wmd-badge wmd-badge-success">fresh</span>
+   — see the Tasks page for that state.
+</div>
+</blockquote>
+<hr class="wmd-separator" />
+<h3 class="wmd-h3">Subject &amp; Session Info</h3>
+<div class="wmd-container-form-group">
+  Subject ID
+  <input type="text" class="wmd-input" required style="width: 29ch; max-width: 29ch;" />
+</div>
+<div class="wmd-container-form-group">
+  Assessment Date
+  <input type="date" class="wmd-input" placeholder="2026-09-08" style="width: 18ch; max-width: 18ch;" />
+</div>
+<div class="wmd-container-form-group">
+  Sex
+  <select class="wmd-select">
+    <option value="" disabled selected>Select</option>
+    <option value="Female">Female</option>
+    <option value="Male">Male</option>
+    <option value="Other / Prefer not to say">Other / Prefer not to say</option>
+  </select>
+</div>
+<div class="wmd-container-form-group">
+  Notes
+  <input type="text" class="wmd-input" placeholder="Free-text notes for this session..." style="width: 41ch; max-width: 41ch;" />
+</div>
+<hr class="wmd-separator" />
+<h3 class="wmd-h3">Tracker Connection</h3>
+<div class="wmd-row">
+  <div class="wmd-grid-item">
+    <div class="wmd-container-form-group">
+  Control Address
+  <input type="text" class="wmd-input" placeholder="26.113.49.235" required style="width: 19ch; max-width: 19ch;" />
+</div>
+  </div>
+  <div class="wmd-grid-item">
+    <div class="wmd-container-form-group">
+  Control Port
+  <input type="text" class="wmd-input" placeholder="4242" required style="width: 25ch; max-width: 25ch;" />
+</div>
+  </div>
+</div>
+<div class="wmd-container-button-group">
+  <button class="wmd-button wmd-button-primary">Connect</button>
+  <button class="wmd-button wmd-outline">Test Connection</button>
+</div>
+<blockquote class="wmd-blockquote">
+  <p class="wmd-paragraph"><strong>Design note:</strong> Control Address is pre-filled from the last address that connected successfully <em>on this machine</em> (saved locally, never committed to git). A brand-new machine with no history defaults to <code>127.0.0.1</code>. There is no protocol-level auto-discovery — confirmed via the vendor API corpus, nothing to poll or broadcast for.</p>
+</blockquote>
+<hr class="wmd-separator" />
+<h3 class="wmd-h3">Calibration</h3>
+<div class="wmd-container-form-group">
+  Point Count (1–9)
+  <input type="number" class="wmd-input" placeholder="5" style="width: 28ch; max-width: 28ch;" />
+</div>
+<ul class="wmd-list">
+  <label class="wmd-checkbox">
+    <input type="checkbox" checked />
+    <span>Show calibration window to the subject</span>
+  </label>
+</ul>
+<div class="wmd-row">
+  <div class="wmd-grid-item">
+    <div class="wmd-container-button-group">
+  <button class="wmd-button wmd-button-primary">Do Calibration</button>
+  <button class="wmd-button wmd-outline">Load Calibration File</button>
+</div>
+  </div>
+</div>
+<div class="wmd-container-alert">
+  <p class="wmd-paragraph">warning</p>
+  <p class="wmd-paragraph">No calibration yet for this subject — run Do Calibration or Load Calibration File before continuing.</p>
+</div>
+<blockquote class="wmd-blockquote">
+  <p class="wmd-paragraph"><strong>Do Calibration:</strong> runs a fresh calibration against the connected tracker using the point count/show-window controls above.
+<strong>Load Calibration File:</strong> file picker over a saved <code>calibration.json</code>; hard-errors if its <code>subject_id</code> doesn't match the Subject ID field above — same check the existing <code>--calibration-file</code> CLI flag already performs.
+<strong>Alternate state (not shown above):</strong> once calibration succeeds either way, this panel shows <code>::: alert success</code> — "Calibration loaded — 5 points, mean error 42px, valid" — in place of the warning.</p>
+</blockquote>
+<hr class="wmd-separator" />
+<h3 class="wmd-h3">Before You Start</h3>
+<div class="wmd-container-alert">
+  <p class="wmd-paragraph">info</p>
+  <p class="wmd-paragraph">Confirm in Gazepoint Control that Lens Focusing and Automatic Gain Sweep are enabled.</p>
+</div>
+<blockquote class="wmd-blockquote">
+  <p class="wmd-paragraph"><strong>Design note:</strong> this is a read-only reminder, not a checkbox and not a gate — neither setting can be checked or changed from this app. Gazepoint Control's own Settings dialog is the only place either one lives; the OpenGaze API has no command for either (confirmed against the vendor corpus).</p>
+</blockquote>
+<hr class="wmd-separator" />
+<button class="wmd-button wmd-state-disabled" disabled>Continue to Tasks →</button>
+<blockquote class="wmd-blockquote">
+  <div class="wmd-container-form-group">
+  <strong>Design note:</strong> disabled until Tracker shows 
+  <span class="wmd-badge wmd-badge-success">connected</span>
+   <strong>and</strong> a calibration result exists (via either path above) <strong>and</strong> Subject ID, Assessment Date, and Sex are filled. Notes is optional. The "Before You Start" reminder above does <strong>not</strong> factor into this gate.
+</div>
+</blockquote>
+</body>
+</html>
