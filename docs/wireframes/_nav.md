@@ -1,1 +1,1 @@
-[[ :eye: Pediatric Eye-Gaze Assessment | [Setup](./setup.md) | [Tasks](./tasks.md) ]]
+[[ Pediatric Eye-Gaze Assessment | [Setup](./setup.md) | [Tasks](./tasks.md) ]]

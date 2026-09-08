@@ -2,8 +2,11 @@
 
 **Status:** section lists fully resolved across two feedback rounds, and now
 also **wireframed** (`docs/wireframes/setup.md` + `tasks.md`, rendered HTML
-alongside) — see §8. **No PySide6 code implemented yet.** Ready for an
-implementation session, with a rendered reference to build against.
+alongside) — see §8. Committed and pushed to `origin/main` as `1404fde`.
+The wireframe is now also **restyled into the WTMH lab's Clinical Teal brand
+palette, with the WTMH logo placed in the titlebar** — see §9. **No PySide6
+code implemented yet.** Ready for an implementation session, with a
+rendered, on-brand reference to build against.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-08
 
@@ -271,9 +274,192 @@ states themselves (the SPEC doesn't define those as separate screens — the
 wireframe shows the entry controls and the two resulting alert states via
 annotation instead).
 
-**Not committed** — new/untracked in `git status` (`docs/specs/
-SPEC-ui-setup-task-selection.md` and `docs/wireframes/`), matching this
-project's ask-before-commit convention.
+**Committed and pushed** — see the final Log entry below (`1404fde` on
+`origin/main`).
+
+## 9. Visual design — WTMH branding + Clinical Teal palette
+
+Prompted by the user supplying two brand assets (`wtmh_logo.png`,
+`WTMH.ico` — the lab's circular WTMH badge: Wearable Technology and Mobile
+Healthcare, NCKU) and a full Clinical Teal color spec, asking (1) where to
+place the logo in "GUI window 1" and (2) to apply the palette to whichever
+theme/stylesheet in the codebase currently owns this UI's colors.
+
+**Scope-resolution, asked before touching anything (two `AskUserQuestion`
+rounds):** two real mismatches between the prompt's premises and the repo
+were found first and flagged rather than guessed past:
+
+1. `dev/`'s currently-**implemented** app (`OperatorPanel`/`MainWindow`,
+   see [[diki-design-audit-2026-09-07]] §8.10) has no cream/maroon theme
+   today — that palette only ever existed in an uncommitted intermediate
+   step and was superseded by a dark HUD-card look before being committed.
+   The prompt's button set ("Connect to tracker", "Read calibration",
+   "Continue to tasks →") matches **this SPEC's wireframe**, not the
+   running app, which has no Setup/Connect/Calibration screen at all yet.
+   **User confirmed: target the wireframe** (this SPEC/§8), not the
+   running app.
+2. "Start session" and "Check drift" don't match any existing button label
+   in either surface. **User confirmed: map to the closest existing
+   element and skip what doesn't exist** — see the button-mapping table
+   below.
+
+**"GUI window 1" = §5, the Setup tab** — confirmed directly from this
+SPEC's own section title ("Window 1 — Setup tab") and the wireframe's own
+`## 1 · Setup` heading, not a guess.
+
+### 9.1 Logo placement (the actual recommendation asked for)
+
+**Two different assets, two different jobs — not the same placement:**
+
+- **`WTMH.ico` → the OS-level window/taskbar icon**, via
+  `QMainWindow.setWindowIcon()` / `QApplication.setWindowIcon()` in the
+  eventual PySide6 implementation (an `.ico` is exactly what Windows
+  expects there — multi-resolution, shows in the taskbar, alt-tab, and the
+  window's own title bar chrome). For the wireframe itself (plain HTML,
+  no OS chrome to theme) the closest equivalent is a `<link rel="icon">`
+  favicon, added for completeness.
+- **`wtmh_logo.png` → an in-window header/brand element**, top-left of the
+  persistent titlebar/nav bar that already runs across both tabs (§8's
+  `_nav.md`), immediately to the left of the "Pediatric Eye-Gaze
+  Assessment" title text, at the opposite end from the Session/Tracker/
+  Calibration status badges (§5.1's `::: row {.right}`). This keeps a
+  standard clinical-software header band — brand mark + product name on
+  the left, live status on the right — and doesn't compete with the
+  functional `OperatorPanel` sidebar (§8.10), which stays content-only.
+
+**Implemented in the wireframe:** `docs/wireframes/_nav.md`'s `:eye:`
+placeholder icon replaced with the real logo (see §9.2 for why this
+required a markup change, not just a CSS one); `WTMH.ico` wired as the
+page favicon. Both render on `setup.html` and `tasks.html` since both
+include the shared `_nav.md` bar.
+
+### 9.2 Palette application — mechanism
+
+**Finding, checked against source, not assumed:** wiremd's 7 built-in
+styles (`sketch`/**`clean`**/`wireframe`/`material`/`tailwind`/`brutal`/
+`none`) are fixed CSS presets baked into `resources/styling/wiremd/src/
+renderer/styles.ts` — there is no custom-palette CLI flag or config. A
+brand palette has to be applied as a **post-render retint pass** over the
+CSS `wiremd` itself generates, not a wiremd feature.
+
+**New tool, not a one-off hand-edit:** `tools/apply_wtmh_wireframe_theme.py`
+— a small script holding an explicit (old CSS text → new CSS text) list,
+each entry an exact substring lifted from wiremd's real "clean"-style
+output, applied to the rendered HTML after every `wiremd ... --style
+clean` re-render. It raises loudly if an expected old string is ever
+missing (e.g. after a future wiremd upgrade changes this CSS), rather than
+silently no-op'ing. It also injects the logo `<img>` into the nav bar and
+the favicon `<link>`, since neither is expressible through wiremd's own
+Markdown syntax (§9.2's next paragraph). Usage:
+`python tools/apply_wtmh_wireframe_theme.py docs/wireframes/setup.html
+docs/wireframes/tasks.html` — run after any future `wiremd` re-render of
+either page.
+
+**Real logo image confirmed NOT insertable via wiremd's own nav syntax**
+(`[[ :icon: Label | ... ]]`) — tested directly: `:icon:` tokens always
+render as a generic bullet placeholder glyph (`data-icon="..."`), by
+design (wiremd is a low-fidelity wireframing tool; icons are deliberately
+not real assets), and an inline `![img](path)` inside the `[[ ]]` bracket
+syntax is silently dropped by the parser. The logo is therefore injected
+as a plain `<img>` by the same post-render script, not through `_nav.md`
+markup.
+
+**Real bug caught and fixed during this pass, worth remembering:**
+removing `_nav.md`'s `:eye:` icon prefix (so the real logo could take its
+place) changed which wiremd AST node the title text becomes — it now
+parses as `.wmd-brand` (a real "first plain-text segment = brand" node)
+instead of `.wmd-nav-item` (which is what it was when prefixed with an
+icon token). `.wmd-brand` has **no color rule at all** in wiremd's "clean"
+style, so once the nav bar itself was retinted dark (§9.3), the brand text
+silently inherited the page's dark ink color and was nearly invisible
+against the dark titlebar — caught by an actual Playwright screenshot
+comparison, not assumed fixed from the CSS diff alone. Fixed by adding an
+explicit `color: #CFE6EE` rule for `.wmd-brand` in the theme script.
+**How to apply:** if a future wireframe page's title text looks washed out
+against a dark header, check whether it rendered as `.wmd-brand` (needs
+its own color rule) vs. `.wmd-nav-item` (already has one) before assuming
+the retint script itself is wrong.
+
+### 9.3 Palette mapping (source of truth for a future PySide6 QSS re-implementation)
+
+| Token | Hex / value | Applied to |
+|---|---|---|
+| Accent | `#1F7A9C` | Ghost-button hover border, tab-active text, input focus border, blockquote rule, alert left-border, brand-logo accent |
+| Accent gradient | `linear-gradient(90deg, #2FA8C4, #1A6F95)` | Primary buttons (Connect, Do Calibration, Continue to Tasks) |
+| Titlebar surface | `#12374A` | `.wmd-nav` (the shared header bar) |
+| Titlebar text | `#CFE6EE` | `.wmd-brand`, `.wmd-nav-item` |
+| Soft accent | `#DCF0F5` | Secondary buttons, ghost-button hover fill, Session badge, alert background |
+| Secondary text on soft accent | `#0F5670` | Secondary-button text, Session badge text |
+| Background | `#F5F9FB` | Page body, container base bg |
+| Panel/card bg | `#FFFFFF` (unchanged from before) | Inputs, `::: card` blocks, modal |
+| Border | `#DBE6EC` | All generic borders (buttons, inputs, cards, separators, h1 rule) |
+| Ink | `#122B3A` | Body/heading text, ghost-button text, input text |
+| Muted text | `#5C7684` | Paragraph text, default/neutral badges, blockquote text |
+| Danger (kept) | `#E15353` | New `.wmd-badge-danger` (reserved, unused by these 2 pages today) + `.wmd-button-danger` |
+| Session-status green (kept) | `#2F9E6E` | `.wmd-badge-success` ("connected", "fresh", "Complete") |
+
+**A genuine semantic call, disclosed rather than silently made:** the
+prompt's own categorization puts "Tracker: not connected" and
+"Calibration: none" under **neutral** status badges ("light gray, muted
+text"), not danger/warning — but the wireframe's pre-existing markup
+tagged them `{.error}`/`{.warning}` (i.e. wiremd's red/amber badge
+classes). Rather than leave "not connected" reading as an alarming red
+pill, **`.wmd-badge-error` and `.wmd-badge-warning` were both retinted to
+the neutral gray** (`#E6EDF1`/`#5C7684`) to match the user's own stated
+semantics for these specific instances, and a new, currently-unused
+`.wmd-badge-danger` rule was added holding the real kept danger red
+(`#E15353`) for a future genuinely-urgent badge (e.g. a "SIGNAL LOST"
+state on the live gaze/signal viewer, which doesn't exist as a wireframed
+element yet). **If a future page needs an actually-alarming badge, use the
+new `.wmd-badge-danger` class, not `.wmd-badge-error`/`-warning`** — those
+two now mean "neutral/inactive" in this theme, not "problem."
+
+**Button-label mapping** (resolving the two unmatched names from the
+prompt, per the user's own chosen resolution):
+
+| Prompt's label | Maps to | Note |
+|---|---|---|
+| "Connect to tracker" | `[Connect]*` (setup.md) | exact match, wording shortened in the wireframe |
+| "Read calibration" | `[Load Calibration File]{.outline}` (setup.md) | exact match |
+| "Check drift" | *(none)* | no such feature/button exists in either surface yet; no color applied |
+| "Start session" | `[Continue to Tasks →]` (setup.md) | closest existing action; **promoted from a plain to a primary button** (added the `*` marker) so it actually receives the accent-gradient treatment the prompt asks for — previously plain/unstyled-disabled only |
+| "Continue to tasks →" | `[Continue to Tasks →]*{state:disabled}` (setup.md) | exact match, now primary |
+
+**Also retinted for consistency, though not directly named in the
+prompt:** `::: card` (task cards), `::: alert` (all three severities — see
+next paragraph), the literal `::: tabs` component (unused by these 2
+pages today, kept in sync for any future page that adds one), the unused
+`container-sidebar`/`grid-item-card` rules.
+
+**Known wiremd limitation surfaced, not fixed:** `::: alert warning` /
+`::: alert info` / `::: alert success` all render as the exact same
+`<div class="wmd-container-alert">` in "clean" style — the severity word
+is not captured as a distinguishing CSS class anywhere in the parser or
+renderer (confirmed by reading both `remark-containers.ts`'s output and
+the actual rendered HTML). All three severities therefore share **one**
+consistent accent-tinted informational card look in this palette; true
+per-severity alert coloring isn't available without a wiremd source
+change, which was out of scope here.
+
+**Verified live via Playwright** (`docs/wireframes/setup.html` +
+`tasks.html`, full-page screenshots): titlebar reads correctly with the
+logo + legible title text; Connect/Do Calibration render in the accent
+gradient; Continue-to-Tasks renders in the (dimmed, since disabled) accent
+gradient; Tracker/Calibration badges read as neutral gray when inactive
+and solid green when connected/fresh/complete; task cards, alerts, and
+inputs all read cleanly against the new light background.
+
+**Files added:** `configs/assets/branding/wtmh_logo.png`,
+`configs/assets/branding/WTMH.ico` (copied in from the top-level
+`resources/styling/` — that directory isn't part of this git repo, so the
+assets are duplicated into `dev/` for the repo to be self-contained, per
+[[feedback-no-separate-working-folder-from-repo]]), `tools/
+apply_wtmh_wireframe_theme.py`.
+**Files changed:** `docs/wireframes/_nav.md` (icon → real logo),
+`docs/wireframes/setup.md` (Continue-to-Tasks promoted to primary),
+`docs/wireframes/setup.html` + `tasks.html` (regenerated + themed).
+**Left uncommitted**, matching this project's established ask-before-
+commit pattern.
 
 ## Log
 
@@ -325,3 +511,49 @@ project's ask-before-commit convention.
   cosmetic whitespace-around-bold rendering quirk in two `::: alert` blocks.
   **Still no PySide6 code written** — this is a text-first mockup, not an
   implementation.
+
+- **2026-09-08, later still — `/spec-memory-audit` run (clean, no fixes
+  needed), then committed and pushed.** Audit checked: Log chronology
+  (correct), all `[[cross-links]]` in the two new memory files (resolve
+  both directions), `MEMORY.md` index lines (match), and every artifact
+  this SPEC/memory claims exists (`docs/wireframes/*.md`/`*.html`,
+  `.claude/skills/wireframe/`, `resources/styling/wiremd/package.json`
+  version, the README sections) — all verified present. `docs/specs/
+  SPEC-ui-setup-task-selection.md` and `docs/wireframes/` (6 files)
+  committed as `1404fde` ("Add SPEC and wiremd wireframes for the
+  Setup/Task-selection dashboard") and pushed to `origin/main`
+  (`0da595b..1404fde`). `git status` clean after push. Note: the
+  `.claude/skills/wireframe/` install and `resources/styling/wiremd/` build
+  live in the top-level workspace, which is **not** a git repo (per the
+  top-level `README.md`) — only this SPEC and the wireframe files, both
+  inside `dev/peds-eye-gaze-assessment`, were committed.
+
+- **2026-09-08, later still — wireframe restyled to WTMH Clinical Teal +
+  logo placed (§9).** Two scope mismatches between the user's prompt and
+  the repo were found and resolved via `AskUserQuestion` before any file
+  was touched (see §9's opening paragraph): the target surface is this
+  SPEC's wireframe, not the currently-implemented dark-HUD `OperatorPanel`
+  (which has no cream/maroon theme and no Setup screen to restyle); and
+  "Start session"/"Check drift" don't match any existing button, resolved
+  by mapping "Start session" onto "Continue to Tasks →" (promoted to a
+  primary button) and skipping "Check drift" (no such element exists).
+  Copied `wtmh_logo.png`/`WTMH.ico` into the repo at `configs/assets/
+  branding/`; placed the logo top-left of the shared titlebar (`_nav.md`)
+  and the `.ico` as the page favicon (documented as `setWindowIcon()`'s
+  real-app equivalent). Built `tools/apply_wtmh_wireframe_theme.py` — a
+  reusable post-render retint pass, since wiremd's styles are fixed CSS
+  presets with no custom-palette mechanism — mapping every prompt-given
+  hex onto the actual CSS selectors in wiremd's "clean" style output,
+  including a disclosed semantic call (inactive Tracker/Calibration badges
+  recolored neutral gray rather than red/amber, matching the user's own
+  stated intent, with the kept danger red reserved on a new unused
+  `.wmd-badge-danger` class for a real future alarm state). Caught and
+  fixed one real bug via Playwright screenshot (not just CSS review):
+  dropping `_nav.md`'s `:eye:` icon changed the title's wiremd node type
+  from `.wmd-nav-item` to `.wmd-brand`, which has no color rule of its own
+  and went unreadable against the newly-dark titlebar until fixed. Full
+  palette-token table, button-label mapping, and the wiremd alert/icon
+  limitations found along the way are recorded in §9. Verified live via
+  Playwright full-page screenshots of both `setup.html` and `tasks.html`.
+  **Left uncommitted**, same ask-before-commit pattern as the rest of this
+  SPEC's history.

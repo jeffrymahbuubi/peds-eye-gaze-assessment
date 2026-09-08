@@ -77,6 +77,6 @@ Confirm in Gazepoint Control that Lens Focusing and Automatic Gain Sweep are ena
 
 ---
 
-[Continue to Tasks →]{state:disabled}
+[Continue to Tasks →]*{state:disabled}
 
 > **Design note:** disabled until Tracker shows |connected|{.success} **and** a calibration result exists (via either path above) **and** Subject ID, Assessment Date, and Sex are filled. Notes is optional. The "Before You Start" reminder above does **not** factor into this gate.
