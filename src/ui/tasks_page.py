@@ -11,10 +11,8 @@ running task's view and back again.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -26,12 +24,6 @@ from ..engine.task_runner import TASK_REGISTRY
 
 # (display name, one-line description) -- text lifted from docs/wireframes/tasks.md
 # so the real UI matches the reviewed mockup, not re-worded independently.
-# S16: width, in px, above which the task grid uses 2 columns instead of
-# 1. Chosen low enough that both the 1024px default launch size and the
-# ~1500px size a user resizes to both get 2 columns -- the common cases
-# this round's dead-space fix targets -- while still degrading to a
-# single column on a genuinely narrow window.
-_GRID_BREAKPOINT_PX = 700
 
 _TASK_INFO: dict[str, tuple[str, str]] = {
     "click_static": ("Static Click", "One still target on an empty field — baseline look-and-select."),
@@ -134,7 +126,6 @@ class TasksPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._cards: dict[str, _TaskCard] = {}
-        self._grid_columns: int | None = None
         self._build_ui()
 
     def _build_ui(self) -> None:
@@ -151,66 +142,32 @@ class TasksPage(QWidget):
         self._back_button.clicked.connect(self.backToSetupRequested)
         self._outer.addWidget(self._back_button)
 
-        # S16: QGridLayout, reflowed between 1 and 2 columns by width
-        # (see _reflow_grid/_GRID_BREAKPOINT_PX) -- replaces the old
-        # single-column QVBoxLayout stack, which left ~40% of a wide
-        # window's width empty next to the cards.
-        #
-        # S17: the grid block is vertically centered (a stretch on each
-        # side) rather than grown to fill the window. Two other
-        # approaches were tried first and rejected -- see SPEC-ui-setup-
-        # task-selection.md §17 for the full account:
-        #   1. Expanding size policy + setRowStretch: empirically
-        #      under-delivered (each card grew only ~40px of the ~800px
-        #      genuinely available, nowhere close to proportional; root
-        #      cause not conclusively identified).
-        #   2. Explicitly computing and setting each row's minimum height
-        #      in resizeEvent: caused a REAL, confirmed-live runaway
-        #      feedback loop. Increasing a row's minimum height increases
-        #      the page's own required minimum size, which (per S16's own
-        #      established mechanism -- the window auto-grows to match
-        #      its content's minimum) grows the window, which fires
-        #      another resizeEvent with a larger height, which computes
-        #      an even larger minimum, forever. The real window ballooned
-        #      to over 500,000px tall before being killed. Never set a
-        #      widget's MINIMUM size from currently-available space in
-        #      this app -- S16 made the window's own size directly
-        #      dependent on content minimums, so anything that raises a
-        #      minimum in response to available space is a feedback loop
-        #      by construction, not just here.
-        # Centering via addStretch (approach the user's own prompt
-        # offered as a fallback) only ever consumes LEFTOVER space that
-        # already exists -- it cannot affect any widget's minimum size,
-        # so it cannot trigger the same class of bug.
-        self._grid = QGridLayout()
-        self._grid.setSpacing(16)
-        self._outer.addStretch(1)
-        self._outer.addLayout(self._grid)
-        self._outer.addStretch(1)
-
+        # S19: single-column card stack, one card per row via plain
+        # QVBoxLayout.addWidget() -- reverted from the 2-column QGridLayout
+        # (S16-S18) back to the pattern already used on setup_page.py's
+        # own card stack (see SetupPage._build_ui: addWidget() per card,
+        # then a single trailing addStretch(1) here). S16-S18's grid
+        # attempt chased the same "empty space at the bottom" problem
+        # through several fixes (a responsive 2/1-column breakpoint, a
+        # centered block, spacer rows) without ever fully matching Setup's
+        # own look; the user's own second-thought decision was to stop
+        # fixing the grid and just reuse Setup's simpler, already-working
+        # pattern instead. Live-validated maximized (SPEC-ui-setup-task-
+        # selection.md S19): the 4 stacked cards fill roughly 3/4 of the
+        # available height with one clean trailing margin below the last
+        # card -- Setup's own cards happen to be tall enough (forms) to
+        # reach almost to the bottom on content alone, so this is a
+        # smaller residual margin than Setup's, not a perfect pixel match
+        # -- but there is no large or awkward empty region anywhere, no
+        # internal gaps inside any card, and no leftover grid/breakpoint
+        # code, which is what this round actually asked for.
         for task_id in TASK_REGISTRY:
             card = _TaskCard(task_id)
             card.runRequested.connect(self.runRequested)
             card.settingsRequested.connect(self.settingsRequested)
             self._cards[task_id] = card
-        self._reflow_grid(self.width())
-
-    def _reflow_grid(self, width: int) -> None:
-        columns = 2 if width >= _GRID_BREAKPOINT_PX else 1
-        if columns == self._grid_columns:
-            return
-        self._grid_columns = columns
-        while self._grid.count():
-            self._grid.takeAt(0)
-        for column in range(2):
-            self._grid.setColumnStretch(column, 1)
-        for i, card in enumerate(self._cards.values()):
-            row, col = divmod(i, columns)
-            self._grid.addWidget(card, row, col)
-
-    def resizeEvent(self, event: QResizeEvent) -> None:
-        super().resizeEvent(event)
-        self._reflow_grid(event.size().width())
+            self._outer.addWidget(card)
+        self._outer.addStretch(1)
 
     def set_task_status(self, task_id: str, status: str) -> None:
         if task_id in self._cards:

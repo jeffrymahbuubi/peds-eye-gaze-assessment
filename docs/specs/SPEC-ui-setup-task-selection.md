@@ -41,6 +41,20 @@ centering the grid block, after a rejected row-stretch attempt and a
 rejected `setRowMinimumHeight` attempt that caused a real, confirmed-
 live runaway window-growth bug (killed safely, no lasting damage).**
 S14-S17 committed and pushed to `origin/main` as `8f2e82b`.
+**§18: §17's centering fix still left large dead bands at real
+maximized-window size — root-caused as a ghost-row-stretch bug (fixed)
+plus a rejected Expanding-card attempt (awkward internal card gaps,
+live-confirmed), landed instead as widget-free stretch spacer rows
+around/between the card rows, distributing leftover space evenly with
+every card kept at its natural size.** qt-mcp validation now maximizes
+the window first, going forward. **§19 (current): the whole grid line
+of work (§16-§18) was reverted by explicit user decision — Tasks is now
+a plain single-column `QVBoxLayout` card stack matching Setup's own
+pattern exactly, with no grid/breakpoint code at all.** Live-validated
+maximized: no large or awkward empty region, though a smaller ~200px
+trailing margin remains below the stack (task cards are shorter than
+Setup's form-heavy ones). §16-§18 remain in this doc as historical
+record only. **Left uncommitted.**
 **Created:** 2026-09-08
 **Last updated:** 2026-09-08
 
@@ -1915,6 +1929,210 @@ whole attempt-2 code path no longer exists in any form).
 
 **Left uncommitted.**
 
+## 18. Tasks grid dead space (§17's own fix) reported again — root cause was two bugs, not one
+
+**New process rule adopted this round, applies to every future qt-mcp
+validation in this project:** the target window is now maximized
+(`qt_invoke_slot(window_ref, "showMaximized")`) *before* any
+layout/spacing validation screenshot. §17's own centering fix was
+apparently validated at a smaller test size (~1500×800) where the
+problem read as "a moderate, roughly-even gap" — at a real maximized
+1920×1009 window the same centered grid left large, clearly dead bands
+above and below the card block. Testing at real usage size going
+forward should prevent this class of miss recurring.
+
+### 18.1 Validated the report first
+
+Launched the dashboard live, maximized, navigated to Tasks via qt-mcp.
+Confirmed: at 1920×1009, §17's `addStretch`/grid/`addStretch` centering
+left large near-symmetric empty bands above *and* below the card block
+(the report's "~60% dead space... below the grid" framing was right in
+substance, if not in exact geometry — §17's own mechanism splits it
+top/bottom rather than concentrating it below). The Setup screen at the
+same size, by contrast, filled the full window height with its stacked
+cards, `Continue to Tasks →` reaching near the very bottom. Claim
+confirmed true before writing any code.
+
+### 18.2 Attempt 1 — Expanding size policy (tried first, per instruction), and the real reason it under-delivers
+
+Gave `_TaskCard` a `QSizePolicy(Preferred, Expanding)`, gave the grid
+layout item itself `stretch=1` where added to the outer `QVBoxLayout`
+(`outer.addLayout(self._grid, stretch=1)` — §17.1's account had reported
+trying "Expanding size policy + `setRowStretch`" without this piece),
+and set `QGridLayout.setRowStretch()` on the active card rows.
+
+Root-caused, via an offscreen diagnostic script (`QT_QPA_PLATFORM=
+offscreen`, constructing `TasksPage()` directly and reading
+`QGridLayout.cellRect()`/`rowStretch()`/`rowCount()` after a resize —
+much faster than relaunching the live GUI per iteration), **why this
+still under-delivered**: `QGridLayout.rowCount()` never shrinks once a
+row index has been used. The 1-column reflow (4 rows) runs first at
+construction (before the window reaches its real maximized width), so
+rows 0-3 all get `stretch=1`; switching to the 2-column reflow (2 rows)
+removes the widgets from rows 2-3 via `takeAt()` but does **not** reset
+their stretch — those "ghost rows" kept `stretch=1` and silently split
+the surplus space 4 ways instead of 2, so the real rows only ever got
+about half of what they should have. This is very likely the same
+mechanism §17.1 hit and described as "under-delivered... root cause not
+conclusively identified" — the diagnostic script here is the first time
+it was actually pinned down with numbers rather than inferred from a
+screenshot.
+
+Fixed by explicitly zeroing stretch on every row up to the
+widest-ever-used index (`2 * len(self._cards)`) on every reflow, not
+just the rows currently in use. Confirmed via the same diagnostic
+script: cards grew from a 164px `sizeHint` to a genuine ~419px, filling
+the grid's full allocated rectangle with no leftover gap inside it.
+
+### 18.3 Attempt 1, continued — rejected live despite fixing the math, exactly as the prompt warned it might
+
+With the ghost-row bug fixed, a live qt-mcp screenshot (maximized) showed
+the fully-Expanding cards looked awkward: `_TaskCard`'s own
+`QVBoxLayout` has no `addStretch()` call, so Qt distributed each
+stretched card's ~250px of surplus height as three separate large gaps
+*between* its title, description, status row, and buttons — not as one
+trailing margin below the content. This is precisely the risk the
+prompt itself flagged ("if expanding the cards themselves looks awkward
+with sparse content..."). Confirmed live, reverted — `_TaskCard`'s size
+policy is back to the framework default (`Preferred`/`Preferred`).
+
+### 18.4 Attempt 2 — spacer rows around and between the grid rows (the prompt's offered fallback), implemented
+
+Redesigned `TasksPage._reflow_grid` to place cards on **odd** grid row
+indices (1, 3, 5, ...) and use the **even** indices (0, 2, 4, ...) as
+widget-free spacer rows, each given equal `stretch=1`:
+
+```python
+n_card_rows = -(-len(self._cards) // columns)  # ceil division
+total_rows = 2 * n_card_rows + 1  # spacer, card, spacer, card, ..., spacer
+
+max_total_rows = 2 * len(self._cards) + 1
+for row in range(max_total_rows):
+    is_spacer_row = row % 2 == 0
+    self._grid.setRowStretch(row, 1 if (is_spacer_row and row < total_rows) else 0)
+
+for i, card in enumerate(self._cards.values()):
+    card_row, col = divmod(i, columns)
+    self._grid.addWidget(card, 2 * card_row + 1, col)
+```
+
+This distributes 100% of the leftover space the outer layout hands the
+grid (`stretch=1`, kept from §18.2) as N+1 equal bands — above the
+first card row, between each pair of card rows, and below the last —
+while every card keeps its exact natural, content-driven size (correct
+height-for-width text wrapping at its real column width too, unlike the
+isolated `sizeHint()` a card reports before being placed). The same
+ghost-row-stretch reset from §18.2 still runs on every reflow, now
+covering both row parity and the widest-ever-used row count.
+
+**Live qt-mcp validation, maximized (1920×1009):** cards render with
+unchanged internal proportions, matching their pre-§18 look exactly;
+the leftover space appears as three roughly-even ~170px bands around
+and between the two card rows instead of one large dead zone at the
+bottom; no single uninterrupted empty region remains anywhere in the
+window.
+
+**1-column responsive breakpoint re-verified** — via the same offscreen
+diagnostic script at a 600×900 resize (a live qt-mcp resize of a
+top-level `QMainWindow` via `qt_set_property(ref, "geometry", "x,y,w,h")`
+did **not** actually resize the real window this session — worth noting
+as a qt-mcp limitation; the offscreen script was the reliable way to
+check a specific narrow width instead): 4 card rows + 5 spacer rows, all
+evenly distributed, no dead zone, `_GRID_BREAKPOINT_PX = 700` unaffected.
+
+### 18.5 Testing and scope
+
+Full pytest suite: 116 passed, the same single pre-existing failure only
+(`test_config_merges_task_over_default`, the already-documented
+unrelated stale `target_fps` assertion), no regressions at any point
+across both attempts. No functional/behavioral code touched — only
+`src/ui/tasks_page.py`'s layout geometry (`_TaskCard.__init__`'s size
+policy line added then removed again; `_build_ui`'s grid-construction
+comment and `stretch=1` argument; `_reflow_grid` rewritten). Run/
+Settings/Analyze buttons, status pills, run-count labels, and the
+2-col/1-col breakpoint decision itself are all unchanged in behavior,
+only in the resulting vertical spacing. No QA session ever reached a
+running task (all validation stayed on the Tasks landing screen), so no
+scratch session directories were created this round.
+
+**Files changed:** `src/ui/tasks_page.py` only.
+
+**Left uncommitted**, matching this project's established
+ask-before-commit pattern — nothing from §18 is on `origin/main` yet
+(last commit remains `4aa6a51`, per §17's own commit-status entry).
+
+## 19. Reverted the Tasks grid entirely — single-column stack, matching Setup
+
+**§16-§18 are now historical record only** — everything below describes
+the *current* Tasks screen; §16's responsive grid, §17's centering fix,
+and §18's ghost-row-stretch fix + spacer-row fallback no longer exist in
+the code. This section supersedes them by explicit user decision, not
+because anything in them was wrong on its own terms.
+
+**Trigger:** the user reconsidered the whole grid-based direction
+("on second thought I think in UI 2 instead of grid, a single-column
+stacked layout is preferred") and asked to revert the Tasks screen from
+the 2×2 `QGridLayout` back to a single-column `QVBoxLayout` stack,
+matching the pattern already used on the Setup screen — explicitly
+choosing to stop fixing the grid's empty-space problem rather than
+continue iterating on it.
+
+### 19.1 Implementation
+
+In `src/ui/tasks_page.py`:
+
+- Removed `_GRID_BREAKPOINT_PX`, the `QGridLayout` import, the
+  `QResizeEvent` import, `_grid_columns` state, `_reflow_grid()`, and
+  the `resizeEvent()` override entirely — no grid/breakpoint logic
+  remains anywhere in the file.
+- `TasksPage._build_ui()` now iterates `TASK_REGISTRY`, constructs each
+  `_TaskCard`, and calls `self._outer.addWidget(card)` directly (same
+  outer `QVBoxLayout`, same margins `(24, 20, 24, 20)` and spacing `16`
+  it already had), followed by one trailing `self._outer.addStretch(1)`
+  — the identical shape as `SetupPage._build_ui()`'s own card stack
+  (`setup_page.py`: `outer.addWidget(card)` ×4, then the Continue
+  button, then `outer.addStretch(1)`).
+- `_TaskCard`'s internal content (title, description, status pill,
+  run-count label, Run/Settings/Analyze buttons) was untouched —
+  confirmed via diff, this was a layout-container-only change as
+  instructed.
+
+### 19.2 Validation
+
+Live-validated via qt-mcp, maximized (the standing practice adopted in
+§18): at 1920×1009, the 4 stacked cards render top-to-bottom with
+clean, unchanged internal proportions, filling roughly the top 3/4 of
+the available height with one plain trailing margin below the last card
+(`Scanning Search`) — no large or awkward empty region, no gaps inside
+any card, no split top/middle/bottom bands the way the grid attempts
+left.
+
+This is a smaller fill ratio than Setup's own stack — Setup's cards are
+form-heavy enough to reach almost to the bottom on natural content
+alone, while the 4 task cards are shorter, so a real ~200px margin
+remains below the stack even with the identical pattern reused. That
+margin is a single, unremarkable trailing gap, though, not the "large
+uninterrupted empty region" §16-§18's whole line of work was about, and
+matches what was actually asked for this round: reuse Setup's approach,
+not chase pixel-perfect parity with it.
+
+Full pytest suite: 116 passed, the same single pre-existing failure
+only (`test_config_merges_task_over_default`, the already-documented
+unrelated stale `target_fps` assertion), no regressions. No functional/
+behavioral code touched beyond the layout container swap — Run/
+Settings/Analyze buttons, status pills, and run-count labels are all
+confirmed unchanged in behavior (`_TaskCard` itself, `set_task_status`,
+`set_task_run_number`, `set_all_runs_enabled` are byte-identical to
+before; only `TasksPage._build_ui`'s layout construction changed). No
+QA session reached a running task; no scratch session directories were
+created.
+
+**Files changed:** `src/ui/tasks_page.py` only.
+
+**Left uncommitted**, matching this project's established
+ask-before-commit pattern — nothing from §16 through §19 is on
+`origin/main` yet (last commit remains `4aa6a51`).
+
 ## Log
 
 - **2026-09-08** — Session opened via `/sparc:orchestrator`; user described
@@ -2296,3 +2514,83 @@ whole attempt-2 code path no longer exists in any form).
   and S15-S17 as the current uncommitted work. All of S14-S17 then
   committed as one commit, `8f2e82b`, and pushed to `origin/main`
   (`8aac60c..8f2e82b`). `git status` clean after push.
+
+- **2026-09-08, later still — Tasks grid dead space reported again after
+  §17's centering fix; root-caused as two real bugs and fixed for real
+  (§18), via `/sparc:orchestrator`.** New process rule adopted this
+  round and applied throughout: qt-mcp validation now maximizes the
+  target window first, since §17's own fix was apparently validated at
+  a smaller size where the problem read as minor. Validated the report
+  live before changing anything: at a real maximized 1920×1009 window,
+  §17's centered grid did leave large dead bands (split top/bottom by
+  its own centering mechanism), confirmed true against the Setup screen
+  filling the same window edge-to-edge.
+
+  Tried Expanding size policy + row stretch again first, per the user's
+  explicit instruction. An offscreen diagnostic script (constructing
+  `TasksPage()` directly under `QT_QPA_PLATFORM=offscreen`, faster than
+  relaunching the live GUI per iteration) found the actual root cause of
+  §17.1's "under-delivered, root cause not conclusively identified"
+  result: `QGridLayout.rowCount()` never shrinks once a row index has
+  been used, so switching from the 1-column reflow (4 rows) to
+  2-column (2 rows) left ghost rows 2-3 still carrying `stretch=1` from
+  the earlier reflow, silently halving the real rows' share of surplus
+  space. Fixed that, confirmed live that Expanding cards then genuinely
+  filled the window — but the live screenshot showed it looked awkward
+  exactly as the prompt had warned it might: each card's own
+  `QVBoxLayout` has no internal `addStretch()`, so the surplus height
+  landed as three separate gaps between title/description/status/buttons
+  rather than one trailing margin. Reverted per the prompt's own
+  fallback instruction.
+
+  Implemented the fallback instead: cards keep their natural,
+  content-driven size; the grid's even row indices become widget-free
+  spacer rows (one above the first card row, one between each pair, one
+  below the last), each with equal stretch, distributing 100% of the
+  leftover space evenly around the block without touching any card's own
+  internal layout. Live qt-mcp validation (maximized): cards visually
+  unchanged, leftover space now three even ~170px bands instead of one
+  dead zone. 1-column responsive breakpoint re-verified via the same
+  offscreen script at 600×900 (a live qt-mcp resize via
+  `qt_set_property(geometry=...)` did not actually resize the real
+  window this session — noted as a qt-mcp limitation, the offscreen
+  script is the reliable fallback for testing a specific width). Full
+  pytest suite: 116 passed, same single pre-existing failure, no
+  regressions. Only `src/ui/tasks_page.py` changed; no functional/
+  behavioral code touched. Full account: `docs/specs/
+  SPEC-ui-setup-task-selection.md` §18. **Left uncommitted** — nothing
+  from §18 is on `origin/main` yet (last commit remains `4aa6a51`).
+
+- **2026-09-08, later still — Tasks grid reverted entirely to a
+  single-column stack matching Setup, superseding §16-§18, via
+  `/sparc:orchestrator`.** User reconsidered the whole grid direction
+  ("on second thought... a single-column stacked layout is preferred")
+  and asked to stop fixing the grid's empty-space problem and instead
+  revert to a plain `QVBoxLayout` card stack matching `SetupPage`'s own
+  pattern (`addWidget()` per card, one trailing `addStretch(1)`).
+
+  Implemented exactly as asked in `src/ui/tasks_page.py`: removed
+  `_GRID_BREAKPOINT_PX`, the `QGridLayout`/`QResizeEvent` imports,
+  `_grid_columns`, `_reflow_grid()`, and the `resizeEvent()` override
+  entirely; `_build_ui()` now just stacks the 4 cards via `addWidget()`
+  plus a trailing `addStretch(1)`, identical in shape to Setup's own
+  stack. `_TaskCard`'s internal content was untouched — a layout-
+  container-only change, confirmed via diff.
+
+  Live-validated via qt-mcp, maximized: the 4 cards fill roughly the
+  top 3/4 of the window with one plain trailing margin below the last
+  card — no large or awkward empty region, no internal card gaps, no
+  split top/middle/bottom bands the way the grid attempts left. A real
+  ~200px margin remains below the stack (Setup's own cards are form-
+  heavy enough to reach almost to the bottom on content alone; the 4
+  task cards are shorter even with the identical pattern reused), but
+  it reads as a single unremarkable trailing gap, not the "large
+  uninterrupted empty region" the original §16-§18 line of work was
+  about. Full pytest suite: 116 passed, same single pre-existing
+  failure, no regressions. Only `src/ui/tasks_page.py` changed; no
+  functional/behavioral code touched. Full account: `docs/specs/
+  SPEC-ui-setup-task-selection.md` §19. **§16-§18 are now historical
+  record only — the grid, breakpoint, centering, and spacer-row code
+  they describe no longer exists.** **Left uncommitted** — nothing from
+  §16 through §19 is on `origin/main` yet (last commit remains
+  `4aa6a51`).
