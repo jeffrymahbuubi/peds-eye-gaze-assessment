@@ -24,8 +24,23 @@ plain auto-populated field per a user product decision.** **§14 fixes two
 more leftover styling bugs — an unstyled native `QDateEdit` spin-button
 sliver on Assessment Date, and §13.2's incomplete Sex-popup fix (the true
 black-band source was the outer `QComboBoxPrivateContainer`, not the
-inner view) — both via Python widget config, no QSS changes.** All six
+inner view) — both via Python widget config, no QSS changes.** Six
 rounds (§9-§14) committed and pushed to `origin/main` as `ef8b771`.
+**§15: §14.2's own Sex-popup fix regressed to a solid black popup on real
+on-screen compositing (a `WA_TranslucentBackground` limitation invisible
+to qt-mcp's `grab()`-based screenshot tool) — root-caused and fixed for
+real with an opaque background instead, validated via an actual desktop
+screenshot this time.** **§16: dead vertical space on Setup/Tasks fixed
+(a 2-column responsive Tasks grid + spacing increases that push Setup's
+window past its own launch-size floor), a real page/card title type
+scale added, and the Sex popup's remaining phantom-focus-outline and
+border-seam issues fixed** — all validated live with real desktop
+screenshots throughout. **§17: §16's Tasks grid fix left the grid
+occupying only the top ~40% of the window — fixed by vertically
+centering the grid block, after a rejected row-stretch attempt and a
+rejected `setRowMinimumHeight` attempt that caused a real, confirmed-
+live runaway window-growth bug (killed safely, no lasting damage).**
+Left uncommitted.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-08
 
@@ -1423,6 +1438,11 @@ radius (S11/§13.2, unchanged) visible. Requires importing `Qt` from
 `PySide6.QtCore` (already imported for other purposes elsewhere in the
 file).
 
+**Superseded — this specific fix rendered solid black on real on-screen
+compositing; see §15 for the root cause and the actual working fix.**
+Kept here as the original record of what shipped in `ef8b771`/`8aac60c`,
+not as current guidance.
+
 ### 14.3 Why no QSS diff — both fixes are Python-side
 
 The user's prompt asked for a before/after QSS diff for both bugs. There
@@ -1461,6 +1481,439 @@ leftover `*src.main*` process).
 **Left uncommitted**, matching this project's established
 ask-before-commit pattern — six rounds (§9-§14) now sit uncommitted
 together.
+
+## 15. Sex popup fix (§14.2) regressed to solid black — real root cause and fix
+
+After §14 was committed and pushed (`ef8b771`/`8aac60c`), the user shared a
+real screenshot of the running app (not a qt-mcp capture) showing the Sex
+popup rendering as a **solid black rectangle** — worse than §14.2's
+original black band, and a genuine regression from that round's own fix.
+
+### 15.1 Root cause
+
+§14.2's fix set `WA_TranslucentBackground` on the popup's outer container
+(`view().parentWidget()`, the `QComboBoxPrivateContainer`) plus a
+`background: transparent` stylesheet, intending the desktop compositor to
+blend it away so only the inner view's own white background showed
+through. **This is a known Qt/Windows quirk:** an alpha-enabled
+`Qt::Popup` top-level window does not reliably get proper DWM-composited
+alpha blending, and instead of rendering as transparent it renders as
+**solid black** on this machine's real on-screen output.
+
+**Why the earlier live qt-mcp validation (§14.4) missed this entirely:**
+`qt_screenshot` calls `QWidget.grab()`, which paints the widget tree
+directly into an offscreen pixmap by invoking each widget's own paint
+logic — it does **not** go through the OS window compositor at all, so a
+translucency/compositing-dependent bug is structurally invisible to it.
+The grab-based screenshot showed a clean white popup (each widget painted
+its own content correctly in isolation); only the real, composited
+on-screen window showed black. This is a new, evergreen qt-mcp
+limitation, not specific to this bug — recorded in the
+`qt-mcp-tool-reference` memory.
+
+### 15.2 Real fix — opaque background, no compositor dependency
+
+Replaced §14.2's translucency-based approach entirely. Instead of trying
+to make the outer container invisible via transparency, give it an
+ordinary **opaque** background matching the app's own white card color —
+this has no dependency on compositing succeeding, so it cannot fail the
+same way:
+
+```python
+# src/ui/setup_page.py
+from .wtmh_theme import BORDER, PANEL_BG
+...
+self.sex_combo.view().setFrameShape(QFrame.Shape.NoFrame)
+popup_container = self.sex_combo.view().parentWidget()
+if popup_container is not None:
+    popup_container.setStyleSheet(
+        f"background: {PANEL_BG}; border: 1px solid {BORDER}; border-radius: 8px;"
+    )
+```
+
+The `WA_TranslucentBackground` attribute call was removed entirely. This
+also made the `Qt` import (added in §14.2 solely for that attribute) dead
+code — removed from `setup_page.py`'s imports, and `PANEL_BG`/`BORDER`
+imported from `wtmh_theme` instead (previously removed as unused in
+§13.5, now genuinely needed again).
+
+### 15.3 Validation — a real compositor-level screenshot this time
+
+Given §14.4's validation gap, this round did **not** trust `qt_screenshot`
+alone. After relaunching the dashboard and opening the Sex popup via
+`qt_click`, a real desktop screenshot was captured independently of
+qt-mcp — PowerShell + `System.Drawing.Graphics.CopyFromScreen` over the
+full virtual screen bounds, saved to PNG and read directly — to confirm
+the actual composited on-screen output, not just the widget tree's own
+paint logic. Result: clean white popup, single thin `#DBE6EC` border,
+fully readable dark text, no black anywhere, matching the original design
+intent from the very first ask in §14.
+
+Full pytest suite: 116 passed, same single pre-existing failure
+(`test_config_merges_task_over_default`), no regressions. QA process
+killed cleanly afterward, confirmed via `Get-CimInstance Win32_Process`
+(no leftover `*src.main*`).
+
+**How to apply:** any future qt-mcp-driven visual verification of a
+translucency/compositing-dependent Qt fix (anything using
+`WA_TranslucentBackground`, layered windows, or alpha blending) must be
+cross-checked with a real screen capture, not `qt_screenshot` alone —
+`grab()`-based screenshots cannot detect this entire class of bug.
+
+**Files changed:** `src/ui/setup_page.py` only (swap the §14.2 popup-
+container fix for the opaque version above; drop the now-unused `Qt`
+import; add `PANEL_BG`/`BORDER` imports from `wtmh_theme`).
+
+**Left uncommitted.**
+
+## 16. Layout space usage, typography hierarchy, and Sex-popup polish
+
+Another external codebase-blind critique covering three areas: unused
+vertical space on both Setup and Tasks, a missing page/card typography
+scale, and remaining Sex-popup polish beyond §15's black-band fix. Per the
+user's explicit instruction, every claim was checked against the real
+source and the actually-running dashboard (both `qt_screenshot` and a real
+desktop capture, given §15's lesson about the former's blind spot) before
+writing this plan — findings below are what was confirmed, not what the
+critique assumed.
+
+### 16.1 Confirmed findings
+
+1. **Dead space, confirmed real on both screens** at the ~1500×800 size
+   from the critique's own screenshots (reproduced via a real desktop
+   capture after resizing the actual window with a `user32.dll`
+   `MoveWindow` call, not just `qt_screenshot`). Root cause on both pages:
+   `_build_ui()` ends with `outer.addStretch(1)` after the last widget —
+   confirmed in `setup_page.py` (after the Continue button) and
+   `tasks_page.py` (after the 4th task card). On Tasks specifically, the
+   4 cards stack in a single `QVBoxLayout` column, so roughly 40% of a
+   1500px-wide window's horizontal space next to the cards is unused too.
+2. **Typography hierarchy — confirmed, but not the way the critique
+   described it, and differently broken per screen:**
+   - *Setup:* all 4 card titles (`"Subject & Session Info"`,
+     `"Tracker Connection"`, `"Calibration"`, `"Before You Start"`) are
+     plain `QLabel(...)` calls with **no `objectName` set at all** —
+     confirmed by reading `setup_page.py` directly (`grep` for
+     `QLabel(`/`setObjectName` shows no object name on any of the four).
+     They inherit only the base `QWidget#wtmhDashboard QLabel { color:
+     INK }` rule — same font size/weight as every other label on the
+     page. This is a stronger version of the critique's claim: they don't
+     just "roughly match" body text, they're the exact same style.
+   - *Tasks:* the opposite problem. `_TaskCard`'s title labels (`"Static
+     Click"` etc.) already use `objectName("wtmhSectionTitle")` — **the
+     same object name as the page-level title** (`"1 · Setup"`/
+     `"2 · Tasks"`, also `wtmhSectionTitle`). Confirmed in
+     `wtmh_theme.py`: `QLabel#wtmhSectionTitle { font-size: 18px;
+     font-weight: 600; }` is one rule serving both roles today, so page
+     and card titles are pixel-identical in size/weight — confirmed
+     visually in the real screenshot too (hard to tell "2 · Tasks" apart
+     from "Static Click" at a glance).
+   - Field labels (`"Subject ID"`, etc., added via `QFormLayout.addRow`)
+     and body/description text are already visually subordinate to
+     both of the above (default label styling vs. `wtmhMuted`), so no
+     change is needed there — the fix is entirely about establishing two
+     *new*, distinct tiers above them.
+3. **Sex popup polish — 3 of 4 points confirmed, 1 needs correction:**
+   - **Confirmed, but on the wrong item:** a real screenshot of a freshly
+     opened popup (nothing clicked) shows a bare rectangular outline
+     around **"Select" (index 0)**, not "Other / Prefer not to say" (the
+     last item) as the critique described. Index 0 is also the combo's
+     actual `currentIndex()` (nothing has been chosen yet), so the
+     outline *is* landing on "the combo box's actual current value,"
+     which is what the user asked for semantically — the real bug is
+     that it renders as a bare, unfilled outline with no matching visual
+     treatment, not that it's on the wrong row. (The critique's screenshot
+     may have been taken with a stale selection or a different mouse
+     position; not chasing that further since the actual live behavior is
+     the ground truth here.)
+   - **Not reproducible as described — already correct:** item padding is
+     already `9px 12px` in `wtmh_theme.py` (`QAbstractItemView::item`),
+     inside the requested 8-10px range. No "tightly packed" items found
+     live. No change planned for this point.
+   - **Confirmed already implemented, unaffected by this round:** hover
+     state (`::item:hover { background: {SOFT_ACCENT}; }`) already
+     exists and matches the ask exactly.
+   - **Confirmed, real but minor:** a slight doubled-border look where the
+     closed field's own bottom border sits flush against the popup
+     container's own top border (from §15's opaque-background fix, which
+     gave the container a full 1px border on all 4 sides).
+
+### 16.2 Plan
+
+1. **Tasks — switch to a responsive `QGridLayout`, 2 columns above a
+   width threshold, 1 column below it.** Threshold chosen at 700px
+   content width (comfortably clears both the default 1024px launch size
+   and the ~1500px size in the critique's screenshots, so the common
+   cases both get 2 columns) — implemented via a `resizeEvent` override
+   on `TasksPage` that reflows the grid only when the column count
+   actually changes (not on every resize event). This directly shrinks
+   both the used width (cards now share the row) and the used height (2
+   rows of 2 instead of 4 rows of 1), which is the most effective lever
+   against the reported dead zone.
+2. **Setup — no structural change (deliberately, per the "not a
+   redesign" instruction and the menu of options offered); moderately
+   increase spacing/padding instead** to close some of the gap without
+   restructuring: outer layout spacing 14→16px, each card's internal
+   `QVBoxLayout` spacing 8→10px, `QFormLayout` vertical spacing stays at
+   10px (already reasonable). Combined with the new title `margin-bottom`
+   from the typography fix below, this makes the page organically taller
+   without changing its single-column, top-aligned structure.
+3. **New two-tier title scale**, added to `wtmh_theme.py`:
+   - `QLabel#wtmhPageTitle { font-size: 22px; font-weight: 700; }` — new,
+     applied to `"1 · Setup"`/`"2 · Tasks"` (both files, replacing their
+     current `wtmhSectionTitle` object name).
+   - `QLabel#wtmhSectionTitle { font-size: 16px; font-weight: 600;
+     margin-bottom: 6px; }` — resized down from 18px (so it's clearly
+     subordinate to the new page title) and applied, for the first time,
+     to all 4 of Setup's previously-unstyled card titles. The
+     `margin-bottom` addition is the "breathing room after the title"
+     ask — done once in the shared QSS rule rather than touching every
+     card-builder call site individually, so it applies uniformly to
+     every card on both screens with a single change.
+4. **Sex popup — 2 targeted fixes, 2 points left as-is (already
+   correct, see §16.1):**
+   - Try `outline: 0;`(equivalent to the existing `outline: none;`) plus
+     an explicit `border: 1px solid transparent;` on
+     `QAbstractItemView::item:focus`, to give Qt's Fusion-style focus
+     rect an explicit transparent color to paint instead of relying on
+     `outline` suppression alone. Verified live after the change (a
+     stylesheet-only guess is not trusted without a real screenshot,
+     given §15's lesson) — see §16.3 for the actual result and any
+     follow-up needed if this alone doesn't clear it.
+   - Popup container (`setup_page.py`'s direct `setStyleSheet` call on
+     `view().parentWidget()`, from §15) gets `border-top: none` added, so
+     the field's own existing bottom border is the only line at that
+     seam instead of two 1px borders sitting flush — makes it a
+     deliberate single divider rather than an accidental double one.
+
+### 16.3 Implementation, testing, and validation
+
+All of §16.2 was implemented as planned, with one correction found only
+by testing live (item 4a below) and one mechanism that turned out
+different from — but more effective than — what §16.2 predicted (item 1
+below). Every visual claim in this section is grounded in a **real
+desktop screenshot** (PowerShell + `System.Drawing.Graphics
+.CopyFromScreen`), not `qt_screenshot` alone, per §15's own lesson about
+that tool's compositing blind spot; `qt_screenshot`/`qt_find_widget` were
+still used for locating widgets and driving clicks.
+
+1. **Dead space — eliminated, not just reduced, and by a different
+   mechanism than planned.** The spacing/margin increases (outer 14→16,
+   card layout 8→10, plus the new title `margin-bottom: 6px`) raised the
+   Setup page's *natural minimum content height* from what it was before
+   this round to a point that now **exceeds** `dashboard_window.py`'s
+   hardcoded `self.resize(1024, 800)` launch call. Confirmed live: two
+   separate attempts to force the real OS window back down to 800px tall
+   via a `user32.dll` `MoveWindow` call were both silently overridden by
+   Qt back up to its content-driven minimum (1008px tall at 1484px
+   content width). Practical effect: since Qt always honors the *larger*
+   of an explicit `resize()` request and the layout's minimum, the
+   window now effectively always opens sized to fit its content exactly
+   — there is no longer a way for it to end up larger than its content
+   needs (short of a user manually dragging it bigger), which structurally
+   forecloses the "large empty area below the last card" bug rather than
+   just shrinking it. Confirmed via a real screenshot at the enforced
+   1484×1008 size: the Continue button's bottom edge sits right at the
+   window's bottom margin, no leftover gray space. `resize(1024, 800)`
+   was left as-is in code (harmless — Qt overrides it upward as needed;
+   changing the literal wouldn't add anything since the real floor is
+   layout-driven, not a fixed number).
+2. **Tasks grid — implemented as planned, substantially reduces the gap
+   (not fully eliminated, and that's expected).** The 2-column
+   `QGridLayout` (`_GRID_BREAKPOINT_PX = 700`) is live in
+   `tasks_page.py`, reflowed via `resizeEvent`. Confirmed live at
+   1484px width: all 4 cards render as a 2×2 grid, using the
+   previously-empty right half of the window. Some empty space remains
+   below the grid — expected and disclosed rather than overclaimed:
+   Tasks fundamentally has less content than Setup (4 short cards vs. 4
+   dense forms/alerts), so even a fully space-efficient 2×2 layout
+   doesn't need the same vertical extent Setup's content does. This
+   matches the user's own acceptance criterion of "eliminated **or
+   substantially reduced**," not a claim of zero remaining space.
+3. **Typography — implemented as planned.** `wtmh_theme.py` now has
+   `QLabel#wtmhPageTitle` (22px/700) and a resized `QLabel#wtmhSectionTitle`
+   (18px→16px/600, plus `margin-bottom: 6px`). `setup_page.py`'s page
+   title switched to `wtmhPageTitle`; all 4 of its card titles — which
+   had **no object name at all** before this round (see §16.1, a
+   stronger gap than the critique described) — now use a new
+   `_card_title()` helper that applies `wtmhSectionTitle`. `tasks_page.py`'s
+   page title also switched to `wtmhPageTitle` (`_TaskCard`'s own card
+   titles already used `wtmhSectionTitle` and needed no change beyond the
+   shared rule's new size). Confirmed live: page titles are now clearly
+   the largest/boldest element on both screens, and Setup's 4 card titles
+   — previously indistinguishable from body text — now read as real
+   headings.
+4. **Sex popup — 2 fixes landed, 1 needed a different approach than
+   planned, 2 confirmed already correct (no change):**
+   - **a. Phantom outline on the current item — the QSS-only attempt from
+     §16.2 did NOT work, confirmed live** (`outline: 0` + an explicit
+     `border: 1px solid transparent` on `::item:focus`: the bare outline
+     was still there on "Select" after this change, screenshotted before
+     moving on). Root cause confirmed to be Qt's own
+     `QStyle::PE_FrameFocusRect` primitive, painted independently of the
+     stylesheet-driven item delegate paint — no `::item:focus` QSS
+     property can suppress it. **Real fix:**
+     `self.sex_combo.view().setFocusPolicy(Qt.FocusPolicy.NoFocus)` in
+     `setup_page.py`, which stops the view from ever reporting
+     `State_HasFocus` at all. Confirmed live: "Select" (the actual
+     current value, index 0) shows no box of any kind on a fresh popup
+     open. Arrow-key selection is unaffected — that's driven by
+     `QComboBox`'s own key forwarding, independent of the popup view's
+     focus policy.
+   - **b. Item padding — confirmed still correct, no change** (already
+     `9px 12px`, matching §16.1's finding).
+   - **c. Hover state — confirmed still correct, no change** (already
+     `SOFT_ACCENT` on `::item:hover`, unaffected by this round).
+   - **d. Seam at the field/popup boundary — fixed as planned.** The
+     popup container's own `setStyleSheet` call (from §15) gained
+     `border-top: none`, so only the closed field's own bottom border
+     shows at that boundary. Confirmed live: a single clean line, no
+     doubled border.
+   - **Testing note, disclosed for anyone re-verifying this later:**
+     automated verification of "no stray highlight" is entangled with
+     exactly where a synthetic `qt_click` leaves the OS mouse cursor —
+     a follow-up screenshot after moving the cursor away via
+     `SetCursorPos` still showed a pale highlight on whichever row
+     happened to be under the *original* click position, because
+     `SetCursorPos` alone doesn't reliably deliver the mouse-move events
+     Qt needs to update hover state, unlike a real user's natural mouse
+     movement. This is judged to be a testing-methodology artifact, not
+     an app bug: the fix specifically targeted and resolved the
+     bare-outline artifact on the *current-value* item (confirmed gone),
+     which is the actual bug reported; a real user moving their mouse
+     naturally after opening the popup gets correct hover leave/enter
+     behavior, which is unrelated code Qt already handles.
+
+**Full pytest suite: 116 passed, same single pre-existing failure**
+(`test_config_merges_task_over_default`), no regressions, run after all
+of the above. QA process killed cleanly each round, confirmed via
+`Get-CimInstance Win32_Process` (no leftover `*src.main*`).
+
+**Files changed:** `src/ui/setup_page.py` (title helper, card titles,
+outer/card spacing, popup container `border-top`, `NoFocus` on the popup
+view, `Qt` import restored), `src/ui/tasks_page.py` (`QGridLayout` +
+`resizeEvent` reflow, page title, spacing), `src/ui/wtmh_theme.py`
+(`wtmhPageTitle`, resized `wtmhSectionTitle`, `::item:focus` tweak — this
+last one turned out insufficient alone, kept anyway since it's harmless
+and documents the attempt inline).
+
+**Left uncommitted.**
+
+## 17. Tasks grid dead space (§16's own fix) — reversed to vertical space, fixed for real
+
+§16.2's Tasks fix (a 2-column `QGridLayout`) solved the *horizontal*
+dead-space problem but left the opposite one: at the ~1500×800 test size,
+the grid only occupies roughly the top 40% of the window, leaving a
+large uninterrupted empty region below it — reported via another
+external critique, and confirmed live (real screenshot) before any
+change, per this project's standing discipline.
+
+The Setup screen was cited as the reference for "good" space usage — no
+new investigation needed there, since §16.3 already established *why*
+Setup fills its window (its natural minimum content height now exceeds
+the launch-time `resize()` call, so Qt enforces the larger, content-driven
+size). Tasks doesn't have that property: even a fully space-efficient
+2×2 grid of 4 short cards has a much smaller natural minimum height than
+Setup's dense stack of forms/alerts, so the same mechanism doesn't apply
+here — Tasks needed its own, different fix.
+
+### 17.1 Attempt 1 — Expanding size policy + row stretch (tried first, per instruction)
+
+The user explicitly asked this be tried first. Implemented: each
+`_TaskCard` given `QSizePolicy.Expanding` (both directions),
+`self._grid.setRowStretch(row, 1)` for every row, and the grid given the
+outer layout's whole stretch share (`outer.addLayout(self._grid,
+stretch=1)`, replacing the trailing `addStretch(1)`).
+
+**Empirically under-delivered — confirmed via `qt_widget_details`, not
+just a screenshot impression.** At the test size, `TasksPage`'s own
+height was 956px with ~822px genuinely available for the grid after
+subtracting title/back-button/margins; each card's `sizeHint` was
+164px tall, but the *actual* rendered height was only 202px — barely
+more than sizeHint, nowhere close to the ~400px each row should have
+gotten from a proportional 50/50 split of ~822px. The precise Qt-internal
+reason for this shortfall was not conclusively identified (several
+QGridLayout/QBoxLayout stretch-interaction theories were considered);
+rather than keep guessing, the approach was abandoned in favor of
+something verifiable.
+
+### 17.2 Attempt 2 — explicit computed row heights (rejected: real runaway bug)
+
+Tried an alternative: compute each row's target height directly from
+the page's actual height budget in `resizeEvent`, and set it via
+`setRowMinimumHeight`. Implemented and relaunched.
+
+**This caused a real, live, confirmed runaway feedback loop.**
+`qt_list_windows` immediately after landing on the Tasks screen reported
+the window as **1484×524473** — over half a million pixels tall. Root
+cause, reasoned through after the fact: raising a row's *minimum* height
+raises the page's own required minimum size; per §16.3's own finding,
+this app's window now auto-grows to match its content's minimum size
+whenever that minimum exceeds the current window size. So: computing a
+row height from "currently available space" → calling
+`setRowMinimumHeight` → growing the page's required minimum →
+the window growing to match (§16's mechanism) → firing another
+`resizeEvent` with a *larger* height → computing an even larger row
+height → forever. The process was killed immediately
+(`Stop-Process`, confirmed via `Get-CimInstance Win32_Process` afterward
+that nothing was left running) before it could do anything worse than
+consume memory/CPU on a garbage layout computation. **This combination —
+computing a size from available space and feeding it into any widget's
+*minimum* size, in an app where the window itself auto-sizes to content
+minimums — is a feedback loop by construction, not a one-off bug in this
+one spot.** Reverted entirely; `setRowMinimumHeight`/the `resizeEvent`-
+driven computation were removed, along with the row-stretch calls and
+the `Expanding` size policy from attempt 1 (no longer needed for the
+approach that replaced them).
+
+### 17.3 Real fix — vertically center the grid block (the user's own sanctioned fallback)
+
+The user's own prompt explicitly offered this as the fallback if
+expanding looked awkward or didn't pan out: "consider vertically
+centering the 2×2 grid block within the available window space rather
+than anchoring it to the top." Implemented in `tasks_page.py`:
+
+```python
+self._outer.addStretch(1)
+self._outer.addLayout(self._grid)
+self._outer.addStretch(1)
+```
+
+Title and back button stay pinned at the top (unchanged); only the grid
+block itself centers in the remaining space below them. This is safe by
+construction against the class of bug in §17.2: `addStretch()` only ever
+consumes *leftover* space that already exists — it cannot raise any
+widget's minimum size, so it cannot feed back into §16's
+window-auto-sizing mechanism the way `setRowMinimumHeight` did.
+
+**Validated live, cautiously** (process re-checked for runaway growth
+after every resize this round, not just after launch): at the ~1500×800
+test size, the grid sits centered with a moderate, roughly-even gap
+above and below it — no single large uninterrupted empty region, matching
+the user's acceptance criterion ("space should be distributed
+proportionally"). The existing 2-column/1-column responsive breakpoint
+(§16, `_GRID_BREAKPOINT_PX = 700`) was re-verified unaffected: narrowing
+the real window to 634px live-reflowed to a single stacked column
+correctly, confirmed via a real screenshot, with no runaway growth at
+any point during the resize.
+
+Per the user's own framing ("try Expanding first... pick whichever looks
+better... show me both if it's a close call"): this wasn't a close call
+between two working options — Expanding under-delivered and its
+more-aggressive variant was actively dangerous, so centering is the only
+approach carried forward, not a stylistic pick between two viable ones.
+
+Full pytest suite: 116 passed, same single pre-existing failure, no
+regressions. QA process killed cleanly, confirmed via
+`Get-CimInstance Win32_Process` (no leftover `*src.main*`, and
+specifically no leftover runaway-sized window either).
+
+**Files changed:** `src/ui/tasks_page.py` only (`_TaskCard`'s size
+policy reverted to default; `_build_ui`/`_reflow_grid` rewritten;
+`_resize_grid_rows` and its `resizeEvent` call removed entirely — the
+whole attempt-2 code path no longer exists in any form).
+
+**Left uncommitted.**
 
 ## Log
 
@@ -1724,3 +2177,103 @@ together.
   committing: 116 passed, same single pre-existing failure, no
   regressions. `git status` clean after push — nothing from this whole
   Setup/Tasks-dashboard styling line of work remains uncommitted.
+
+- **2026-09-08, later still — §14.2's Sex-popup fix regressed to solid
+  black; root-caused and fixed for real (§15), via `/sparc:orchestrator`.**
+  User shared a real screenshot of the running app (not a qt-mcp capture)
+  showing the popup as a solid black rectangle. Root cause: §14.2's
+  `WA_TranslucentBackground` + transparent-stylesheet approach relies on
+  the desktop compositor, which does not reliably alpha-blend an
+  alpha-enabled `Qt::Popup` window on this machine — it paints solid black
+  instead. This was invisible to §14.4's own qt-mcp validation because
+  `qt_screenshot` uses `QWidget.grab()`, which bypasses real window
+  compositing entirely (paints each widget's own logic into a pixmap
+  directly) — a structural blind spot for this whole bug class, not a one-
+  off miss. Fixed by dropping translucency altogether: the popup container
+  now gets an ordinary **opaque** background/border matching
+  `wtmh_theme.py`'s own `PANEL_BG`/`BORDER` tokens, which has no
+  compositor dependency to fail. This time validated with a **real desktop
+  screenshot** (PowerShell + `System.Drawing.Graphics.CopyFromScreen`,
+  independent of qt-mcp) confirming a clean white popup, no black
+  anywhere. Full pytest suite: 116 passed, same single pre-existing
+  failure, no regressions. Full account: `docs/specs/
+  SPEC-ui-setup-task-selection.md` §15; the `qt-mcp-tool-reference` memory
+  updated with the new evergreen finding about `qt_screenshot`'s blind
+  spot for compositing bugs. **Left uncommitted.**
+
+- **2026-09-08, later still — layout dead-space, title typography, and
+  further Sex-popup polish (§16), via `/sparc:orchestrator`.** Another
+  external critique covering three areas; per the user's instruction the
+  SPEC was updated with the plan (§16.1/§16.2) before any implementation,
+  every claim checked against real source/a real running dashboard first.
+  Two findings corrected the critique's own description rather than just
+  confirming it: Setup's 4 card titles had **no styling at all** (not
+  merely "roughly matching" body text), and Tasks' card titles were
+  **pixel-identical to the page title** (both used the same
+  `wtmhSectionTitle` rule) — two different manifestations of the same
+  missing-tier problem. Implemented: a new `wtmhPageTitle` tier (22px/700)
+  plus a resized `wtmhSectionTitle` (16px/600, `margin-bottom: 6px`)
+  applied consistently on both screens; a responsive 2-column
+  `QGridLayout` for the 4 task cards (`tasks_page.py`, breakpoint 700px,
+  reflowed via `resizeEvent`); modest spacing increases on Setup. The
+  dead-space fix turned out to work by a different, more effective
+  mechanism than planned: the spacing increases pushed Setup's natural
+  minimum content height above `dashboard_window.py`'s hardcoded
+  `resize(1024, 800)` call, so Qt now always enforces the *larger*,
+  content-driven size — confirmed live by two failed attempts to force
+  the real window back down to 800px tall via `MoveWindow`, both silently
+  overridden upward by Qt. Net effect: the dead zone is structurally
+  gone on Setup, not just visually reduced.
+
+  Sex-popup polish: item padding and hover state were both already
+  correct (no change); the field/popup border seam was fixed with
+  `border-top: none` on the popup container. The phantom-outline fix
+  needed two attempts — a QSS-only try (`outline: 0` + a transparent
+  `::item:focus` border) was tested live and confirmed NOT to work (Qt's
+  own `PE_FrameFocusRect` primitive paints independently of stylesheet
+  item-delegate state), so the real fix disables the popup view's focus
+  policy outright (`setFocusPolicy(Qt.FocusPolicy.NoFocus)`), confirmed
+  live to clear the outline on the actual current-value item
+  ("Select") while leaving arrow-key selection intact (handled by
+  `QComboBox` itself, not the view's focus state). Also corrected the
+  critique's own claim: the outline was landing on the combo's actual
+  current value (index 0, "Select"), not the last item as described.
+
+  Every visual claim validated with a **real desktop screenshot**
+  (PowerShell + `System.Drawing.Graphics.CopyFromScreen`), continuing
+  §15's practice, not `qt_screenshot` alone. Full pytest suite: 116
+  passed, same single pre-existing failure, no regressions. Full account:
+  `docs/specs/SPEC-ui-setup-task-selection.md` §16. **Left uncommitted.**
+
+- **2026-09-08, later still — §16's Tasks grid fix reversed the dead-
+  space problem (horizontal fixed, vertical now empty); fixed for real
+  after a rejected attempt caused a genuine runaway bug (§17), via
+  `/sparc:orchestrator`.** Another critique, confirmed live first: the
+  2×2 grid only filled the top ~40% of the Tasks window. Tried, per the
+  user's explicit instruction, an `Expanding` size-policy + row-stretch
+  approach first — confirmed via `qt_widget_details` (not just a
+  screenshot) that it badly under-delivered (cards grew from a 164px
+  sizeHint to only 202px actual, despite ~822px genuinely available).
+  Tried a second approach — computing and setting each row's minimum
+  height directly from available space in `resizeEvent` — and this
+  **caused a real, live runaway feedback loop**: `qt_list_windows`
+  reported the window at **1484×524473px** immediately after switching
+  to Tasks. Root cause: raising a row's *minimum* height raises the
+  page's own required minimum, which (per §16.3's own established
+  mechanism — this window auto-grows to match its content's minimum)
+  grows the window, firing another `resizeEvent` with a larger height,
+  computing an even larger minimum, forever. Killed the runaway process
+  immediately, confirmed no leftover process afterward, and reverted the
+  entire attempt. **Real fix:** the user's own explicitly-offered
+  fallback — vertically centering the grid block via a stretch on each
+  side of it (`addStretch(1)` / grid / `addStretch(1)`, title and back
+  button unaffected) — which only ever consumes already-existing leftover
+  space and can't raise any minimum size, so it can't trigger the same
+  bug class. Validated live and cautiously (re-checked for runaway growth
+  after every resize this round): grid now centers with a moderate,
+  roughly-even gap above and below at the ~1500×800 test size, no single
+  large dead region; the existing 2-col/1-col responsive breakpoint
+  re-verified unaffected at a real narrowed window (634px → 1 column,
+  live-reflowed correctly). Full pytest suite: 116 passed, same single
+  pre-existing failure, no regressions. Full account: `docs/specs/
+  SPEC-ui-setup-task-selection.md` §17. **Left uncommitted.**

@@ -76,7 +76,20 @@ QPushButton#wtmhNavButton[active="true"] {{
     border-bottom: 3px solid {ACCENT_GRADIENT_START};
 }}
 
-QLabel#wtmhSectionTitle {{ font-size: 18px; font-weight: 600; color: {INK}; }}
+/* S16: two-tier title scale -- wtmhPageTitle for "1 · Setup"/"2 · Tasks"
+   (largest), wtmhSectionTitle for card titles (one tier down, and now
+   also applied to Setup's 4 previously-unstyled card titles). Previously
+   both tiers shared wtmhSectionTitle at 18px, so a page title and a card
+   title were pixel-identical. margin-bottom gives every card title some
+   breathing room before its first content row, in one shared rule
+   instead of touching each card-builder call site. */
+QLabel#wtmhPageTitle {{ font-size: 22px; font-weight: 700; color: {INK}; }}
+QLabel#wtmhSectionTitle {{
+    font-size: 16px;
+    font-weight: 600;
+    color: {INK};
+    margin-bottom: 6px;
+}}
 QLabel#wtmhMuted {{ color: {MUTED}; }}
 
 QPushButton#wtmhPrimary {{
@@ -256,10 +269,17 @@ QWidget#wtmhDashboard QComboBox QAbstractItemView::item:hover {{
     outline: none;
     border: none;
 }}
+/* S16: an explicit transparent border (not just outline: none) --
+   Fusion's own PE_FrameFocusRect primitive can still paint a bare focus
+   outline around the current item on a fresh popup open even with
+   outline suppressed; giving it a real border color to paint instead
+   (rather than relying on outline suppression alone) is the fix being
+   tried here -- verified live, see SPEC-ui-setup-task-selection.md
+   §16.3 for the actual result. */
 QWidget#wtmhDashboard QComboBox QAbstractItemView::item:focus {{
     background: {SOFT_ACCENT};
-    outline: none;
-    border: none;
+    outline: 0;
+    border: 1px solid transparent;
 }}
 QWidget#wtmhDashboard QComboBox QAbstractItemView::item:selected {{
     background: {ACCENT};

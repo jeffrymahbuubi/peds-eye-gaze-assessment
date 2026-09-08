@@ -35,6 +35,7 @@ from ..engine.calibration import Calibration, CalibrationFileError, CalibrationR
 from ..engine.config import load_default
 from ..engine.local_state import load_local_state, save_local_state
 from ..inputs.gazepoint_client import GazepointClient
+from .wtmh_theme import BORDER, PANEL_BG
 
 _SEX_OPTIONS = ["Select", "Female", "Male", "Other / Prefer not to say"]
 
@@ -135,10 +136,10 @@ class SetupPage(QWidget):
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(24, 20, 24, 20)
-        outer.setSpacing(14)
+        outer.setSpacing(16)
 
         title = QLabel("1 · Setup")
-        title.setObjectName("wtmhSectionTitle")
+        title.setObjectName("wtmhPageTitle")
         outer.addWidget(title)
 
         outer.addWidget(self._build_subject_card())
@@ -159,12 +160,18 @@ class SetupPage(QWidget):
         card.setObjectName("wtmhCard")
         layout = QVBoxLayout(card)
         layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
         return card, layout
+
+    @staticmethod
+    def _card_title(text: str) -> QLabel:
+        title = QLabel(text)
+        title.setObjectName("wtmhSectionTitle")
+        return title
 
     def _build_subject_card(self) -> QFrame:
         card, layout = self._card()
-        layout.addWidget(QLabel("Subject & Session Info"))
+        layout.addWidget(self._card_title("Subject & Session Info"))
 
         form = QFormLayout()
         form.setVerticalSpacing(10)
@@ -202,20 +209,54 @@ class SetupPage(QWidget):
         self.sex_combo.currentIndexChanged.connect(self._on_state_changed)
         # S13 removed the popup's inner QAbstractItemView's own frame so
         # wtmh_theme.py's QSS border/radius would be the only one visible.
-        # S14: that was incomplete -- the view sits inside a second, outer
+        # S14 found that incomplete -- the view sits inside a second, outer
         # QFrame (Qt's undocumented QComboBoxPrivateContainer, the popup's
         # actual top-level window) which draws its own default frame
         # independently of the inner view's frame shape and is unreachable
-        # by QSS at all. Under Fusion that outer frame renders as a heavy
-        # black band around the whole popup. Disabling its native
-        # background/frame painting via WA_TranslucentBackground (and
-        # clearing any residual palette fill) leaves only the inner view's
-        # QSS-drawn white background/border/radius visible.
+        # by QSS at all.
+        #
+        # S15: S14's first attempt at fixing that outer frame (WA_
+        # TranslucentBackground + a "background: transparent" stylesheet,
+        # relying on the desktop compositor to blend it) rendered as SOLID
+        # BLACK on real Windows on-screen compositing -- a known Qt/Windows
+        # quirk where an alpha-enabled Qt::Popup window without proper DWM
+        # composited support paints black instead of transparent. This
+        # wasn't caught by qt-mcp's own screenshot tool because
+        # `qt_screenshot` uses `QWidget.grab()`, which paints the widget
+        # tree directly into a pixmap and bypasses real window compositing
+        # entirely -- it cannot see a translucency/compositing bug at all,
+        # so it falsely showed a clean white popup while the real
+        # on-screen render was black. Fixed by giving the container an
+        # ordinary OPAQUE background instead of relying on transparency --
+        # no compositor dependency, so nothing to fail under either
+        # verification method.
         self.sex_combo.view().setFrameShape(QFrame.Shape.NoFrame)
+        # S16: a QSS-only attempt (outline: 0 + an explicit transparent
+        # border on ::item:focus) did NOT clear the bare focus-rectangle
+        # outline Fusion draws around the current item on a fresh popup
+        # open -- confirmed live, still present with only that change.
+        # This is Qt's own QStyle::PE_FrameFocusRect primitive, painted
+        # independently of the item delegate's stylesheet-driven paint,
+        # so no QSS property on ::item:focus can suppress it. Disabling
+        # the view's own focus policy stops it from ever reporting
+        # State_HasFocus in the first place, which is what the primitive
+        # keys off -- verified live to remove the outline while the combo
+        # box itself still drives arrow-key navigation/selection (that is
+        # handled by QComboBox's own key forwarding, independent of the
+        # popup view's focus policy).
+        self.sex_combo.view().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         popup_container = self.sex_combo.view().parentWidget()
         if popup_container is not None:
-            popup_container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            popup_container.setStyleSheet("background: transparent; border: none;")
+            # S16: no top border on the container -- the closed field
+            # already draws its own bottom border directly above this
+            # popup, so a second, separate top border here doubled up
+            # into a faint seam. Leaving only the field's own border
+            # visible at that boundary makes it one deliberate divider
+            # instead of two borders sitting flush.
+            popup_container.setStyleSheet(
+                f"background: {PANEL_BG}; border: 1px solid {BORDER}; "
+                f"border-top: none; border-radius: 8px;"
+            )
         form.addRow("Sex", self.sex_combo)
 
         self.notes_edit = QTextEdit()
@@ -227,7 +268,7 @@ class SetupPage(QWidget):
 
     def _build_tracker_card(self) -> QFrame:
         card, layout = self._card()
-        layout.addWidget(QLabel("Tracker Connection"))
+        layout.addWidget(self._card_title("Tracker Connection"))
 
         local_state = load_local_state()
         gp_defaults = self._defaults.get("gazepoint", {})
@@ -268,7 +309,7 @@ class SetupPage(QWidget):
 
     def _build_calibration_card(self) -> QFrame:
         card, layout = self._card()
-        layout.addWidget(QLabel("Calibration"))
+        layout.addWidget(self._card_title("Calibration"))
 
         form = QFormLayout()
         form.setVerticalSpacing(10)
@@ -311,7 +352,7 @@ class SetupPage(QWidget):
 
     def _build_device_notice_card(self) -> QFrame:
         card, layout = self._card()
-        layout.addWidget(QLabel("Before You Start"))
+        layout.addWidget(self._card_title("Before You Start"))
         alert = QFrame()
         alert.setObjectName("wtmhAlertInfo")
         alert_layout = QVBoxLayout(alert)
