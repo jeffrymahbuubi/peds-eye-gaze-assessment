@@ -252,6 +252,7 @@ class AssessmentApp:
         panel = self.window.operator_panel
         panel.pause_toggled.connect(self._set_paused)
         panel.skip_requested.connect(self._skip_trial)
+        panel.end_requested.connect(self._shutdown)
         panel.setting_changed.connect(self._apply_setting)
 
     def _install_key_handler(self) -> None:
@@ -360,12 +361,20 @@ class AssessmentApp:
         )
 
         self._update_fps(t_ns)
+        # Tallied from the task's own completed-trial records rather than
+        # tracked separately, so this can never drift from what trials.csv
+        # ends up with (SPEC-diki-design-audit.md S8 -- diki's LiveCounterPanel
+        # hit/timeout counts, ported here).
+        hits = sum(1 for t in self.task.trials if t.is_hit)
+        timeouts = sum(1 for t in self.task.trials if t.is_timeout)
         self.window.operator_panel.update_status(
             self._fps,
             pointer.valid,
             result.trial_index,
             len(self.task.targets),
             connected=self.client.is_connected(),
+            hits=hits,
+            timeouts=timeouts,
         )
 
         if self.task.is_done:

@@ -30,6 +30,10 @@ class LiveSetting:
     max: float | None = None
     step: float | None = None
     applies_to: tuple[str, ...] = ()  # empty = every task
+    # Plain-language explanation shown as a widget tooltip (SPEC-diki-design-
+    # audit.md S8 -- ported from diki's per-slider tooltip pattern, e.g.
+    # "Higher = steadier cursor, slightly slower to follow a new look").
+    tooltip: str | None = None
 
     def applies(self, task_id: str) -> bool:
         return not self.applies_to or task_id in self.applies_to
@@ -57,17 +61,98 @@ class StructuralSetting:
 # a trial moves along). Both groups are always visible in OperatorPanel.
 
 LIVE_SETTINGS: list[LiveSetting] = [
-    LiveSetting("dwell.threshold_ms", "Dwell threshold (ms)", "settings", "int", 300, 2000, 50),
-    LiveSetting("dwell.visual_cursor", "Show gaze cursor", "settings", "bool"),
-    LiveSetting("dwell.progress_ring", "Show dwell progress ring", "settings", "bool"),
-    LiveSetting("dwell.instant_feedback", "Show instant on-target ring", "settings", "bool"),
-    LiveSetting("dwell.refractory_ms", "Refractory period (ms)", "settings", "int", 0, 2000, 50),
-    LiveSetting("dwell.jitter_tolerance_px", "Jitter tolerance (px)", "settings", "int", 0, 100, 5),
-    LiveSetting("dwell.smoothing.enabled", "Gaze smoothing enabled", "settings", "bool"),
-    LiveSetting("dwell.smoothing.alpha", "Smoothing alpha", "settings", "float", 0.05, 1.0, 0.05),
-    LiveSetting("task.timeout_ms", "Trial timeout (ms)", "pacing", "int", 1000, 20000, 500),
     LiveSetting(
-        "task.inter_trial_interval_ms", "Inter-trial interval (ms)", "pacing", "int", 0, 3000, 100
+        "dwell.threshold_ms",
+        "Dwell threshold (ms)",
+        "settings",
+        "int",
+        300,
+        2000,
+        50,
+        tooltip="How long the gaze must rest on the target before it counts as a"
+        " selection. Higher = fewer accidental selections, but slower to react.",
+    ),
+    LiveSetting(
+        "dwell.visual_cursor",
+        "Show gaze cursor",
+        "settings",
+        "bool",
+        tooltip="Show a dot at the child's current gaze position on screen.",
+    ),
+    LiveSetting(
+        "dwell.progress_ring",
+        "Show dwell progress ring",
+        "settings",
+        "bool",
+        tooltip="Show a filling ring around the target while the dwell timer counts up.",
+    ),
+    LiveSetting(
+        "dwell.instant_feedback",
+        "Show instant on-target ring",
+        "settings",
+        "bool",
+        tooltip="Show an immediate ring the moment gaze lands on the target,"
+        " before the dwell timer finishes.",
+    ),
+    LiveSetting(
+        "dwell.refractory_ms",
+        "Refractory period (ms)",
+        "settings",
+        "int",
+        0,
+        2000,
+        50,
+        tooltip="Minimum time after a selection before dwell can trigger again,"
+        " to stop one long look from re-selecting the same target repeatedly.",
+    ),
+    LiveSetting(
+        "dwell.jitter_tolerance_px",
+        "Jitter tolerance (px)",
+        "settings",
+        "int",
+        0,
+        100,
+        5,
+        tooltip="How far gaze can wander from the target and still count as"
+        " on-target. Higher = steadier cursor, slightly less precise selection.",
+    ),
+    LiveSetting(
+        "dwell.smoothing.enabled",
+        "Gaze smoothing enabled",
+        "settings",
+        "bool",
+        tooltip="Smooth out small frame-to-frame jitter in the raw gaze signal.",
+    ),
+    LiveSetting(
+        "dwell.smoothing.alpha",
+        "Smoothing alpha",
+        "settings",
+        "float",
+        0.05,
+        1.0,
+        0.05,
+        tooltip="Lower = steadier cursor, slightly slower to follow a new look."
+        " Higher = snappier cursor, more visible jitter.",
+    ),
+    LiveSetting(
+        "task.timeout_ms",
+        "Trial timeout (ms)",
+        "pacing",
+        "int",
+        1000,
+        20000,
+        500,
+        tooltip="How long a trial waits for a selection before it counts as a timeout.",
+    ),
+    LiveSetting(
+        "task.inter_trial_interval_ms",
+        "Inter-trial interval (ms)",
+        "pacing",
+        "int",
+        0,
+        3000,
+        100,
+        tooltip="Pause between one trial ending and the next one's target appearing.",
     ),
     LiveSetting(
         "motion.speed_frac_per_s",
@@ -78,6 +163,8 @@ LIVE_SETTINGS: list[LiveSetting] = [
         1.0,
         0.05,
         applies_to=("follow_moving",),
+        tooltip="How fast the moving target travels across the screen."
+        " Higher = harder to track.",
     ),
 ]
 

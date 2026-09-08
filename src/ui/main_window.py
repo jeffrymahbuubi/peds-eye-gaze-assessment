@@ -1,4 +1,4 @@
-"""Main window hosting the subject canvas and the operator panel."""
+"""Main window hosting the subject canvas and the operator sidebar."""
 
 from __future__ import annotations
 
@@ -24,6 +24,10 @@ class MainWindow(QMainWindow):
         central = QWidget(self)
         layout = QHBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
+        # Qt's default inter-widget spacing otherwise leaves a gap between
+        # canvas and sidebar where this unstyled central widget's raw (black)
+        # background shows through (SPEC-diki-design-audit.md S8.7).
+        layout.setSpacing(0)
 
         self.canvas = TaskCanvas(theme=theme)
         self.operator_panel = OperatorPanel(task_id=task_id, initial_values=initial_settings)

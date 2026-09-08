@@ -96,3 +96,14 @@ class SliderSpinRow(QWidget):
 
     def setValue(self, value: float) -> None:  # noqa: N802 (Qt naming)
         self._spin.setValue(value if self._kind == "float" else int(value))
+
+    def setToolTip(self, text: str) -> None:  # noqa: N802 (Qt naming)
+        """Also apply to the slider/spin children, not just this container.
+
+        A tooltip set only on the container never shows: the mouse is always
+        over one of the two child widgets, which have no tooltip of their
+        own by default (SPEC-diki-design-audit.md S8's ported tooltips).
+        """
+        super().setToolTip(text)
+        self._slider.setToolTip(text)
+        self._spin.setToolTip(text)
