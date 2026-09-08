@@ -18,6 +18,9 @@ htmlcov/
 sessions/
 *.mp4
 
+# Per-machine local state (e.g. last-known-good tracker host) -- not project config
+configs/local_state.json
+
 # OS / editor
 .DS_Store
 .idea/

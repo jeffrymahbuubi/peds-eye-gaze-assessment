@@ -141,6 +141,8 @@ class SessionMetadata:
     calibration_points: int | None = None
     tasks: list[str] = field(default_factory=list)
     notes: str = ""
+    assessment_date: str = ""
+    sex: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {f.name: getattr(self, f.name) for f in fields(self)}

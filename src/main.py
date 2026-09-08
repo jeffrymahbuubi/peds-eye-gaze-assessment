@@ -4,9 +4,17 @@ Headless replay demo (no tracker, no GUI required)::
 
     python -m src.main --task click_static --replay tests/fixtures/gaze_replay_click_static.jsonl
 
-Live GUI (requires the ``gui`` extra and a Gazepoint tracker or replay)::
+Live GUI, one task per process (requires the ``gui`` extra and a Gazepoint
+tracker or replay)::
 
     python -m src.main --task click_static --gui
+
+Persistent Setup/Task-selection dashboard -- tracker connection and
+calibration made once in Setup carry over to every task Run
+(SPEC-ui-setup-task-selection.md); an additional entry point, not a
+replacement for ``--task ... --gui`` above::
+
+    python -m src.main --dashboard
 """
 
 from __future__ import annotations
@@ -35,6 +43,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", default="sessions", help="Session output root dir.")
     parser.add_argument("--gui", action="store_true", help="Launch the PySide6 GUI.")
     parser.add_argument(
+        "--dashboard",
+        action="store_true",
+        help=(
+            "Launch the persistent Setup/Task-selection dashboard instead of "
+            "a single task. Ignores --task/--replay/--subject/--calibration-file/"
+            "--skip-task-settings; the dashboard collects those interactively."
+        ),
+    )
+    parser.add_argument(
         "--calibration-file",
         metavar="PATH",
         help=(
@@ -58,6 +75,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.dashboard:
+        try:
+            from .ui.dashboard_window import run_dashboard
+        except ImportError as exc:  # pragma: no cover - GUI optional
+            print(f"GUI dependencies not available: {exc}", file=sys.stderr)
+            print("Install with: pip install -e '.[gui]'", file=sys.stderr)
+            return 2
+        return run_dashboard()
 
     if args.gui:
         try:

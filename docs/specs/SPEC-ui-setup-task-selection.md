@@ -4,9 +4,9 @@
 also **wireframed** (`docs/wireframes/setup.md` + `tasks.md`, rendered HTML
 alongside) — see §8. Committed and pushed to `origin/main` as `1404fde`.
 The wireframe is now also **restyled into the WTMH lab's Clinical Teal brand
-palette, with the WTMH logo placed in the titlebar** — see §9. **No PySide6
-code implemented yet.** Ready for an implementation session, with a
-rendered, on-brand reference to build against.
+palette, with the WTMH logo placed in the titlebar** — see §9. **Now
+implemented in PySide6 and live-validated** (`DashboardWindow`,
+`src/ui/dashboard_window.py` + `setup_page.py` + `tasks_page.py`) — see §10.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-08
 
@@ -461,6 +461,160 @@ apply_wtmh_wireframe_theme.py`.
 **Left uncommitted**, matching this project's established ask-before-
 commit pattern.
 
+## 10. Implementation (PySide6) — `DashboardWindow`
+
+Built the real dashboard from §5/§6/§9: a persistent window replacing the
+one-task-per-process launch model for interactive use, wired to the
+already-existing engine (`GazepointClient`, `Calibration`, `AssessmentApp`,
+`TaskSettingsDialog`) rather than duplicating any of it. Added as an
+**additional** entry point (`python -m src.main --dashboard`) — the
+standalone `--task X --gui` CLI path is untouched and behaves exactly as
+before (verified: same public `MainWindow` attributes, same default
+parameter values, full pytest suite unchanged except the one pre-existing
+failure).
+
+**Core architectural problem, and how it was resolved:** `AssessmentApp`
+always built its own `MainWindow` (a top-level `QMainWindow`) and always
+connected + calibrated its own `GazepointClient` in its constructor — the
+opposite of §3.1.7's decision that Run "embeds ... into this same window
+... nothing gets relaunched." Rather than forking a second implementation
+of the task-run loop for the dashboard, `AssessmentApp` and `MainWindow`
+were both split instead:
+
+- `src/ui/main_window.py`: the canvas+sidebar content was extracted into a
+  new `TaskRunView(QWidget)`; `MainWindow(QMainWindow)` is now a thin
+  wrapper around one, unchanged in every public attribute
+  (`.canvas`/`.operator_panel`) from before the split.
+- `src/app.py`: `AssessmentApp.__init__` gained four new, all-optional
+  parameters — `client`, `preset_calibration_result`, `embedded`,
+  `on_finished` (plus `assessment_date`/`sex`/`notes` for the metadata
+  fields finalized in §4) — every one defaulting to the exact standalone
+  behavior (own client, own calibration, own top-level window, quit on
+  end) it always had. When the dashboard supplies `client`+
+  `preset_calibration_result`, `connect()`/`Calibration.run()` are skipped
+  entirely (the socket is never reopened, no second calibration UI ever
+  shows); `client.stop()` is only called if this instance opened the
+  client itself (`_owns_client`), never a dashboard-owned one that other
+  task runs still need. `embedded=True` builds a bare `TaskRunView`
+  instead of a fullscreen `MainWindow`, and `_shutdown` calls
+  `on_finished()` instead of `QApplication.quit()` — a `_shutdown_done`
+  guard was added since the End button and `task.is_done` can now both
+  fire in the same tick without one of them trying to tear down an
+  already-torn-down session.
+- `DashboardWindow` (`src/ui/dashboard_window.py`) owns a `QStackedWidget`
+  with the Setup page, the Tasks page, and (added/removed per run) the
+  active `AssessmentApp`'s `.view`. Run constructs `AssessmentApp(...,
+  client=self.setup_page.client, preset_calibration_result=self.setup_page
+  .calibration_result, embedded=True, on_finished=self._on_task_finished)`
+  and keeps the whole `AssessmentApp` instance alive in
+  `self._active_assessment` (it owns the `QTimer` driving the task) until
+  `on_finished` fires, at which point the view is removed, the task's card
+  is marked Complete, and the Tasks tab is shown again.
+
+**Same-day re-run collision, fixed generally, not just for the dashboard:**
+`AssessmentApp`'s session-dir naming had no run/time component
+(`<date>_<subject>_<task>`), and `SessionRecorder` creates its directory
+with `exist_ok=True` — a second same-day run would have silently reused,
+and overwritten, the first's directory. Rather than scope the §3.1.8
+run-index decision to only the embedded path, `next_session_id()`
+(`src/engine/session_naming.py`, Qt-free, unit-tested) was applied
+unconditionally in `AssessmentApp`, so `--task X --gui` gets the same
+overwrite protection. No test or tool in this repo asserted the old
+naming (checked via grep before changing it).
+
+**New Setup-tab pieces:**
+
+- `src/ui/setup_page.py` — Subject & Session Info, Tracker Connection,
+  Calibration, and the read-only device notice, matching §5 exactly. The
+  two device operations that block on real socket I/O (`GazepointClient
+  .connect()`'s 5s timeout on a bad host; a real calibration's several
+  seconds of point-by-point polling) each run on a small `QThread` worker
+  so the whole dashboard doesn't freeze — the same concurrency budget
+  `GazepointClient`'s own reader thread already spends. "Test Connection"
+  reuses the same worker with `keep=False`: it connects, immediately
+  closes the throwaway client, and never touches the page's real
+  connection or its Tracker badge.
+- `src/engine/local_state.py` (Qt-free, unit-tested) persists the last
+  host/port that connected successfully to `configs/local_state.json`
+  (gitignored — added to `.gitignore` this round), per §3.1.3's "defaults
+  to `127.0.0.1` on a fresh machine, not the checked-in device address."
+- Continue-to-Tasks gating (`SetupPage.can_continue()`) matches §5.6
+  exactly: tracker connected AND a calibration result exists (either path)
+  AND Subject ID/Assessment Date/Sex filled — the device notice never
+  factors in.
+
+**New Tasks-tab pieces:** `src/ui/tasks_page.py` — one card per
+`TASK_REGISTRY` entry (name/description text lifted verbatim from
+`docs/wireframes/tasks.md`, not re-worded), Run/Settings/Analyze buttons
+(Analyze stays disabled — deferred per §6.2, not a bug), "Back to Setup".
+**Settings vs. Run, resolved as two genuinely separate actions** (not
+flagged as open in §7, but the wireframe's own separate buttons implied
+it): Settings opens `TaskSettingsDialog` and stores whatever overrides
+were accepted in `DashboardWindow._task_overrides[task_id]`; Run applies
+whatever was last stored (or the task's own YAML defaults, if Settings was
+never opened) without popping the dialog again — a real UX decision, not
+just reusing the CLI's always-ask-at-launch behavior, since a clinical
+operator running the same task repeatedly shouldn't see a config dialog
+every time.
+
+**Bug caught by live testing, not by review:** the dashboard froze
+mid-task the first time "End task" was clicked, live-verified via the
+Qt console log (`qt-mcp` doesn't surface Python tracebacks in its own
+tools; the redirected stdout/stderr log file did) — `on_finished=lambda:
+self._on_task_finished(task_id)` passed an argument `_on_task_finished`
+doesn't take (it already reads the task id off `self._active_task_id`).
+Because this raised *after* `self.timer.stop()`, the first click actually
+did stop the tick loop and close the recorder, and the exception itself
+just prevented the dashboard-side cleanup from running — the frozen
+canvas was `_shutdown`'s own `_shutdown_done` guard silently no-op'ing the
+second click. Fixed by passing `self._on_task_finished` directly (no
+lambda, no argument). **How to apply:** a `QThread`/callback wiring bug in
+this codebase can look exactly like "the button did nothing" or "it
+froze" — check the redirected stdout/stderr log before assuming a Qt- or
+timing-level cause.
+
+**Second bug caught by live testing:** the "Show calibration window to the
+subject" checkbox's label text was completely invisible against its white
+card in the actual running app, despite `qt_widget_details` confirming the
+text was set correctly — root cause was the OS's dark-mode default
+`QCheckBox` text color, which every *other* widget in `wtmh_theme.py`'s
+stylesheet had an explicit `color:` override for except `QCheckBox`
+(matching a gotcha `operator_panel.py`'s own docstring already flags for
+this codebase). Fixed by adding `QWidget#wtmhDashboard QCheckBox { color:
+... }`. **How to apply:** any future widget type added to this dashboard
+needs its own explicit text-color rule in `wtmh_theme.py` — nothing here
+inherits a usable color from the OS palette by default.
+
+**Live-validated end-to-end via qt-mcp**, against `tools/
+fake_gazepoint_server.py` (no real device needed): typed Subject ID,
+selected Sex, connected to `127.0.0.1:4242`, ran a real calibration
+(measured 5 points/8px via the fake server's fixed response, not a stub),
+confirmed Continue-to-Tasks correctly gated and then enabled, ran Static
+Click embedded-in-place (confirmed via screenshot: same titlebar, same
+window, task canvas + the existing `OperatorPanel` HUD sidebar both
+rendering inside the dashboard, trial count advancing), ended it cleanly
+(returned to the Tasks tab, card marked Complete, no leftover process),
+and re-ran the same task a second time to confirm the run-index naming
+(`_run1`/`_run2`/`_run3` on disk, no collisions). Confirmed
+`assessment_date`/`sex`/`notes` all reach `metadata.json` correctly after
+the fix above. Full pytest suite: 113 passed, the same single pre-existing
+failure (`test_config_merges_task_over_default`) — no regressions from
+either the `AssessmentApp`/`MainWindow` split or the `SessionMetadata`
+field additions (checked: no test asserts on `SessionMetadata`'s exact
+field set). Added `tests/test_dashboard_helpers.py` (6 tests) for the two
+Qt-free helpers.
+
+**Files added:** `src/ui/dashboard_window.py`, `src/ui/setup_page.py`,
+`src/ui/tasks_page.py`, `src/ui/wtmh_theme.py`, `src/engine/
+session_naming.py`, `src/engine/local_state.py`,
+`tests/test_dashboard_helpers.py`.
+**Files changed:** `src/app.py`, `src/ui/main_window.py`, `src/main.py`
+(new `--dashboard` flag), `src/data/schema.py` (`SessionMetadata` gained
+`assessment_date`/`sex`), `.gitignore` (`configs/local_state.json`),
+`README.md` (new dashboard section, corrected stale pytest count 80→114).
+**Left uncommitted**, matching this project's established ask-before-
+commit pattern.
+
 ## Log
 
 - **2026-09-08** — Session opened via `/sparc:orchestrator`; user described
@@ -557,3 +711,24 @@ commit pattern.
   Playwright full-page screenshots of both `setup.html` and `tasks.html`.
   **Left uncommitted**, same ask-before-commit pattern as the rest of this
   SPEC's history.
+
+- **2026-09-08, later still — implemented in PySide6 and live-validated
+  (§10), via `/sparc:orchestrator`.** User: "proceed to the implementation
+  of the UI in Qt based on the wireframe." Split `AssessmentApp`/
+  `MainWindow` so a task run can embed into an existing window with a
+  reused `GazepointClient`/calibration instead of always owning both
+  (§3.1.7's design finally implemented, not just decided); built
+  `DashboardWindow`+`SetupPage`+`TasksPage`; added a general same-day
+  re-run collision fix (`next_session_id`, applied to `--task ... --gui`
+  too, not just the dashboard); added `assessment_date`/`sex` to
+  `SessionMetadata` for §4's finalized fields. Live-validated end-to-end
+  via `qt-mcp` against `tools/fake_gazepoint_server.py` (connect,
+  calibrate, gate, embed-in-place run, clean end-and-return, a same-day
+  re-run). Two real bugs were caught by that live run (not by code review)
+  and fixed: an `on_finished` callback argument mismatch that froze the
+  embedded task on "End task", and an invisible `QCheckBox` label caused
+  by the OS's dark-mode default text color. Full pytest suite: 113 passed,
+  same single pre-existing failure, no regressions; added 6 new tests for
+  the two new Qt-free helpers. Full account, file list, and the "how to
+  apply" notes for both bugs are in §10. **Left uncommitted**, same
+  ask-before-commit pattern as the rest of this SPEC's history.

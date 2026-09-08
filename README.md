@@ -125,6 +125,28 @@ inter-trial interval, and — for `follow_moving` only — target speed). Every
 control applies instantly, mid-task, with no restart needed — useful both to
 adapt to a child in the moment and for your own debugging.
 
+## Run the Setup/Task-selection dashboard (needs the `gui` extra)
+
+```bash
+python -m src.main --dashboard
+```
+
+A persistent window (SPEC-ui-setup-task-selection.md) instead of one task
+per process: connect to the tracker and calibrate once in the **Setup**
+tab, then run any of the four tasks from the **Tasks** tab — each **Run**
+embeds the task canvas + operator sidebar into this same window in place of
+the task list (no new window, no subprocess) and returns to the task list,
+marked Complete, when the task ends. The tracker connection and calibration
+result are reused across every run in the session; re-running the same task
+for the same subject on the same day gets its own `_run<N>`-suffixed
+session folder rather than overwriting the prior attempt. This is an
+additional entry point alongside `--task ... --gui` above, not a
+replacement — the two don't interact.
+
+The Control Address field remembers the last host that connected
+successfully on this machine (`configs/local_state.json`, gitignored — a
+fresh machine defaults to `127.0.0.1`).
+
 ## Testing `--calibration-file` without a device
 
 `--calibration-file PATH` skips a fresh calibration and reuses a previously
@@ -252,7 +274,7 @@ re-run the task to feel the new pacing. Full diagnosis behind these settings:
 ## Tests & lint
 
 ```bash
-pytest        # 80 tests, all headless
+pytest        # 114 tests, all headless
 ruff check .
 ```
 

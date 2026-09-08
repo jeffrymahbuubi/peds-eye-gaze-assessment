@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -22,18 +23,20 @@ from .data.schema import SessionMetadata
 from .engine.calibration import (
     Calibration,
     CalibrationFileError,
+    CalibrationResult,
     load_calibration_result,
     save_calibration_result,
 )
 from .engine.config import CONFIG_ROOT, deep_merge, load_task_config, load_theme
 from .engine.feedback import FeedbackBus
 from .engine.latency import LatencyTracker
+from .engine.session_naming import next_session_id
 from .engine.task_runner import build_task
 from .inputs.base import Pointer
 from .inputs.eye_input import DwellConfig, EyeInput, SmoothingConfig
 from .inputs.gazepoint_client import GazepointClient
 from .inputs.switch_input import SwitchInput
-from .ui.main_window import MainWindow
+from .ui.main_window import MainWindow, TaskRunView
 from .ui.settings_registry import initial_live_values
 from .ui.task_settings_dialog import TaskSettingsDialog
 
@@ -100,7 +103,31 @@ class AssessmentApp:
         subject_id: str,
         calibration_file: str | None = None,
         structural_overrides: dict | None = None,
+        client: GazepointClient | None = None,
+        preset_calibration_result: CalibrationResult | None = None,
+        embedded: bool = False,
+        on_finished: Callable[[], None] | None = None,
+        assessment_date: str = "",
+        sex: str = "",
+        notes: str = "",
     ) -> None:
+        """Build one task run.
+
+        ``client``/``preset_calibration_result`` let a caller that already
+        owns a connected :class:`GazepointClient` and a completed
+        calibration (the Setup tab's dashboard, SPEC-ui-setup-task-
+        selection.md S3.1.7) hand both in directly instead of this class
+        connecting/calibrating again on every task run -- "nothing gets
+        relaunched" was the explicit design decision. ``embedded`` builds a
+        plain :class:`~src.ui.main_window.TaskRunView` (for the dashboard's
+        ``QStackedWidget``) instead of a fullscreen
+        :class:`~src.ui.main_window.MainWindow`, and routes end-of-task to
+        ``on_finished`` instead of quitting the whole application. All four
+        default to the exact standalone-launch behavior this class always
+        had (own client, own calibration, own top-level window, quit on
+        end) when omitted, so ``python -m src.main --task X --gui`` is
+        unaffected.
+        """
         self.config = load_task_config(task_id)
         self.task_id = task_id
         if structural_overrides:
@@ -113,18 +140,23 @@ class AssessmentApp:
         self.theme = load_theme(theme_name)
         self.input_mode = self.config.get("input", {}).get("mode", "eye")
 
+        # A run-index suffix (SPEC-ui-setup-task-selection.md S3.1.8) so a
+        # same-day re-run of the same task for the same subject -- which the
+        # dashboard's embed-in-place Run explicitly supports -- gets its own
+        # directory instead of silently reusing (and overwriting) a prior
+        # run's (SessionRecorder creates its directory with exist_ok=True).
         # Computed up front (not after calibration, as before) because an
         # auto-saved calibration.json needs the session dir to already be
         # known before Calibration.run() executes.
-        session_id = time.strftime("%Y-%m-%d_") + f"{subject_id}_{task_id}"
         output_root = self.config.get("recording", {}).get("output_root", "sessions")
+        session_id = next_session_id(output_root, subject_id, task_id)
         session_dir = Path(output_root) / session_id
 
         # A --calibration-file is loaded and subject-checked before touching
         # the device at all, so a bad path or subject mismatch fails fast
         # without opening a socket or showing any calibration UI
         # (SPEC-2026-09-02.md item 7, Goal 1).
-        preset_calibration = None
+        preset_calibration = preset_calibration_result
         if calibration_file is not None:
             saved = load_calibration_result(calibration_file)
             if saved.subject_id != subject_id:
@@ -135,25 +167,41 @@ class AssessmentApp:
             preset_calibration = saved.result
 
         gp_cfg = self.config.get("gazepoint", {})
-        # `enable` here is the gazepoint.enable.* block (default.yaml keys:
-        # time/pog_fix/pog_best/pupil_left/pupil_right/cursor) -- wiring it
-        # through lets a therapist disable a data field via YAML instead of
-        # it silently doing nothing (GazepointClient defaults to all-True
-        # when enable=None, which is why this was harmless until now).
-        self.client = GazepointClient(replay_path=replay_path, enable=gp_cfg.get("enable"))
-        self.client.connect(host=gp_cfg.get("host", "127.0.0.1"), port=int(gp_cfg.get("port", 4242)))
+        # An externally-provided client is already connected (and possibly
+        # already streaming, from a prior task run in the same dashboard
+        # session) -- connect()/start_streaming() must not be called again
+        # on it: connect() unconditionally reopens the socket and re-sends
+        # every ENABLE_SEND_* command, which would be wasteful at best and
+        # disruptive to an in-progress stream at worst. This class never
+        # owns (and must never .stop()) a client it didn't create itself.
+        self._owns_client = client is None
+        if client is not None:
+            self.client = client
+        else:
+            # `enable` here is the gazepoint.enable.* block (default.yaml keys:
+            # time/pog_fix/pog_best/pupil_left/pupil_right/cursor) -- wiring it
+            # through lets a therapist disable a data field via YAML instead of
+            # it silently doing nothing (GazepointClient defaults to all-True
+            # when enable=None, which is why this was harmless until now).
+            self.client = GazepointClient(replay_path=replay_path, enable=gp_cfg.get("enable"))
+            self.client.connect(host=gp_cfg.get("host", "127.0.0.1"), port=int(gp_cfg.get("port", 4242)))
 
         # Calibration must run before start_streaming(): it reads the socket
         # directly to poll CALIBRATE_RESULT_SUMMARY, and once the background
         # reader thread is consuming the same socket it will race for (and
-        # can silently swallow) that response.
+        # can silently swallow) that response. A preset result (whether from
+        # --calibration-file or handed in directly by the dashboard) skips
+        # this device interaction entirely -- there's nothing to poll for.
         cal_cfg = self.config.get("calibration", {})
         if preset_calibration is not None:
-            # --calibration-file wins over calibration.enabled: false -- it's
-            # a separate, explicit request to reuse a real prior measurement,
-            # not the config's own dev/no-hardware stub toggle.
-            calibration = Calibration(self.client, preset_result=preset_calibration)
-            cal = calibration.run()
+            cal = preset_calibration
+            # Recorded into THIS run's own session dir too, even though it
+            # wasn't measured this run -- every session directory carries its
+            # own self-contained calibration record, matching the fresh-
+            # calibration branch below, and lets --calibration-file work
+            # against any individual run's folder later.
+            session_dir.mkdir(parents=True, exist_ok=True)
+            save_calibration_result(session_dir / "calibration.json", subject_id, cal)
         else:
             calibration = Calibration(
                 self.client,
@@ -172,7 +220,7 @@ class AssessmentApp:
                 session_dir.mkdir(parents=True, exist_ok=True)
                 save_calibration_result(session_dir / "calibration.json", subject_id, cal)
 
-        self.client.start_streaming()
+        self.client.start_streaming()  # idempotent (GazepointClient no-ops if already streaming)
 
         # Single source of truth for every live-settings-panel field's
         # starting value (SPEC-live-settings-panel.md section 5.1) -- used
@@ -194,13 +242,23 @@ class AssessmentApp:
         )
         self.switch = SwitchInput()
 
-        self.window = MainWindow(
-            theme=self.theme,
-            task_id=task_id,
-            initial_settings=lv,
-            fullscreen=bool(self.config.get("app", {}).get("fullscreen", True)),
-        )
-        self.canvas = self.window.canvas
+        self._embedded = embedded
+        self._on_finished = on_finished
+        if embedded:
+            # No top-level window at all -- the caller (DashboardWindow)
+            # inserts .view into its own QStackedWidget page.
+            self.window = None
+            self.view = TaskRunView(theme=self.theme, task_id=task_id, initial_settings=lv)
+        else:
+            self.window = MainWindow(
+                theme=self.theme,
+                task_id=task_id,
+                initial_settings=lv,
+                fullscreen=bool(self.config.get("app", {}).get("fullscreen", True)),
+            )
+            self.view = self.window.view
+        self.canvas = self.view.canvas
+        self.operator_panel = self.view.operator_panel
         self.canvas.show_cursor = bool(lv["dwell.visual_cursor"])
         self.canvas.show_progress_ring = bool(lv["dwell.progress_ring"])
         self.canvas.show_instant_feedback = bool(lv["dwell.instant_feedback"])
@@ -211,6 +269,9 @@ class AssessmentApp:
             started_ns=time.time_ns(),
             input_mode=self.input_mode,
             tasks=[task_id],
+            assessment_date=assessment_date,
+            sex=sex,
+            notes=notes,
         )
         self.recorder = SessionRecorder(self.metadata, output_root=output_root)
         self.recorder.open()
@@ -249,7 +310,7 @@ class AssessmentApp:
     # -- wiring ------------------------------------------------------------
 
     def _wire_operator(self) -> None:
-        panel = self.window.operator_panel
+        panel = self.operator_panel
         panel.pause_toggled.connect(self._set_paused)
         panel.skip_requested.connect(self._skip_trial)
         panel.end_requested.connect(self._shutdown)
@@ -367,7 +428,7 @@ class AssessmentApp:
         # hit/timeout counts, ported here).
         hits = sum(1 for t in self.task.trials if t.is_hit)
         timeouts = sum(1 for t in self.task.trials if t.is_timeout)
-        self.window.operator_panel.update_status(
+        self.operator_panel.update_status(
             self._fps,
             pointer.valid,
             result.trial_index,
@@ -400,11 +461,19 @@ class AssessmentApp:
             )
 
     def _shutdown(self) -> None:
+        if getattr(self, "_shutdown_done", False):
+            return  # End button + task.is_done can both fire in the same tick
+        self._shutdown_done = True
         self.timer.stop()
         self.recorder.write_trials(self.task.trials)
         self.recorder.close()
-        self.client.stop()
-        QApplication.quit()
+        if self._owns_client:
+            self.client.stop()
+        if self._embedded:
+            if self._on_finished is not None:
+                self._on_finished()
+        else:
+            QApplication.quit()
 
 
 def run_gui(
