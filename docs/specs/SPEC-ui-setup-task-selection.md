@@ -24,9 +24,8 @@ plain auto-populated field per a user product decision.** **§14 fixes two
 more leftover styling bugs — an unstyled native `QDateEdit` spin-button
 sliver on Assessment Date, and §13.2's incomplete Sex-popup fix (the true
 black-band source was the outer `QComboBoxPrivateContainer`, not the
-inner view) — both via Python widget config, no QSS changes.** Left
-uncommitted, same ask-before-commit pattern as the rest of this SPEC —
-six rounds (§9-§14) uncommitted together.
+inner view) — both via Python widget config, no QSS changes.** All six
+rounds (§9-§14) committed and pushed to `origin/main` as `ef8b771`.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-08
 
@@ -1716,3 +1715,12 @@ together.
   pytest suite: 116 passed, same single pre-existing failure, no
   regressions. **Left uncommitted** — six rounds (§9-§14) now sit
   uncommitted together.
+
+- **2026-09-08, later still — §9-§14 committed and pushed, via
+  `/sparc:devops`.** User: "Commit this along with §9-§13" (§14 landed
+  the same session, bundled in). All six accumulated rounds committed as
+  one commit, `ef8b771`, and pushed to `origin/main`
+  (`b91cd27..ef8b771`). Full pytest suite re-run immediately before
+  committing: 116 passed, same single pre-existing failure, no
+  regressions. `git status` clean after push — nothing from this whole
+  Setup/Tasks-dashboard styling line of work remains uncommitted.
