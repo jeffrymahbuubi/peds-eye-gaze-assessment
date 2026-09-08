@@ -1,19 +1,19 @@
 # SPEC-scanning-task-design-port — Port diki's scene_spec() Design (all 4 tasks)
 
 **Status:** **all four tasks now ported, plus a post-port theme-consistency
-fix (§8).** `scanning` (pilot, §3), `click_grid` (§6.1), and `follow_moving`
-(§6.2) each implemented and live-validated via qt-mcp against the
+fix (§6).** `scanning` (pilot, §3), `click_grid` (§5.1), and `follow_moving`
+(§5.2) each implemented and live-validated via qt-mcp against the
 actually-running GUI; `click_static` needed no change (diki gives it no
 dedicated scene either — stays `{"mode": "single"}`). All four tasks now
-also share the same `forest` theme (§8 — `click_grid`/`follow_moving` were
+also share the same `forest` theme (§6 — `click_grid`/`follow_moving` were
 still on the pre-existing `space` theme, an unrelated per-task config value
 the port never touched, until the user's own visual audit caught it). Full
 pytest suite green except the one pre-existing, already-documented
 `test_config_merges_task_over_default` failure (unrelated `target_fps` stale
-assertion). **Not yet committed** — left as working-tree changes pending the
-user's go-ahead, matching this project's established commit norm. Filename
-kept from the original pilot per this project's SPEC convention (one
-cumulative doc per task, not renamed mid-stream).
+assertion). **Committed and pushed to `origin/main`**: `7958ba1` (this SPEC's
+companion audit doc), `43ee2a1` (the scene_spec port, §1-§5), `712c29f` (the
+theme fix, §6). Filename kept from the original pilot per this project's SPEC
+convention (one cumulative doc per task, not renamed mid-stream).
 **Created:** 2026-09-07
 **Last updated:** 2026-09-07
 
@@ -130,7 +130,7 @@ grid rendering.
 
 - `tests/test_task_pipeline.py`: 5 new tests (at the time of the pilot) —
   `test_default_scene_spec_is_single` (originally covered all 3 not-yet-ported
-  tasks; narrowed to just `click_static` once §6 ported the other two —
+  tasks; narrowed to just `click_static` once §5 ported the other two —
   see that test's current form),
   `test_scanning_scene_spec_is_icons_with_shapes_and_slots`,
   `test_scanning_grid_arrangement_is_two_dimensional` (guards against a
@@ -206,7 +206,7 @@ Windows-specific pattern already on record in
 [[peds-eye-gaze-assessment-physician-feedback-2026-09-02]] for killing a
 detached background process by real PID, not `tasklist`).
 
-## 6. `click_grid` and `follow_moving` (rest of the port)
+## 5. `click_grid` and `follow_moving` (rest of the port)
 
 User: "proceed with porting the rest of the tas[ks], validated for each port
 with qt-mcp." No new clarifying question was needed — the pattern was already
@@ -217,7 +217,7 @@ task's `build_targets()`/hit-testing math changed — both ports are purely
 additive rendering, so no config defaults changed and no fixtures needed
 regenerating.
 
-### 6.1 `click_grid` -> `"grid"` mode
+### 5.1 `click_grid` -> `"grid"` mode
 
 - `src/tasks/click_grid.py`: now stores `self.rows`/`self.cols`/`self.cells`/
   `self.cell_w`/`self.cell_h` (identical cell-centre math as before, just
@@ -248,7 +248,7 @@ regenerating.
   `qt_messages(level="warning")` showed only the same two already-known
   `QSoundEffect` warnings, nothing new.
 
-### 6.2 `follow_moving` -> `"moving"` mode
+### 5.2 `follow_moving` -> `"moving"` mode
 
 - `src/tasks/follow_moving.py`: new `scene_spec()` returns `{"mode":
   "moving", "path": self.path, "speed": self.speed}` — `self.path`/
@@ -276,7 +276,7 @@ regenerating.
   window ring and gaze cursor dot. `qt_messages(level="warning")` — same two
   already-known warnings only.
 
-### 6.3 Process notes for this round
+### 5.3 Process notes for this round
 
 Same qt-mcp launch pattern as §4.2 (`QT_MCP_PROBE=1 QT_MCP_PORT=9142`,
 kill any leftover `*src.main*` python process between task launches via
@@ -286,7 +286,7 @@ the `click_grid` launch — matches the already-documented
 [[qt-mcp-tool-reference]] gotcha (retry once rather than assuming the probe
 setup broke); the retry succeeded immediately.
 
-## 7. Post-port theme-consistency fix
+## 6. Post-port theme-consistency fix
 
 User's own visual audit of the ported tasks: "I audit[ed] the click_grid and
 follow_moving task, the theme background color is differ with the other two
@@ -294,7 +294,7 @@ task, it still used the old one."
 
 **Root cause, confirmed by reading the configs before changing anything**
 (not assumed): each task YAML has always carried its own `theme:` key,
-untouched by any of §3-§6's work — `click_static.yaml`/`scanning.yaml` were
+untouched by any of §3-§5's work — `click_static.yaml`/`scanning.yaml` were
 already `theme: forest` (light green `#e8f5e9`), `click_grid.yaml`/
 `follow_moving.yaml` were already `theme: space` (dark navy `#0d1b2a`). This
 predates the whole scene_spec port; nothing in this SPEC's own changes
@@ -316,20 +316,23 @@ bug fix. **User chose: unify all four to `forest`.**
   shows the light `forest` background with the 3x3 rounded-rect grid in
   forest's palette (green cursor dot, red target) instead of the previous
   dark navy; `follow_moving` screenshot likewise shows the light background
-  with the motion trail (§6.2) still rendering correctly in forest's red
+  with the motion trail (§5.2) still rendering correctly in forest's red
   target colour. `qt_messages(level="warning")` — same two already-known
   `QSoundEffect` warnings only, both times, confirming the forest sound
   assets loaded without error.
 
-## 8. Not done / open items
+## 7. Not done / open items
 
-- **Not committed.** All 11 changed files (`configs/tasks/click_grid.yaml`,
-  `configs/tasks/follow_moving.yaml`, `configs/tasks/scanning.yaml`,
-  `src/app.py`, `src/tasks/base_task.py`, `src/tasks/click_grid.py`,
-  `src/tasks/follow_moving.py`, `src/tasks/scanning.py`, `src/ui/canvas.py`,
-  `tests/fixtures/gaze_replay_scanning.jsonl`, `tests/test_task_pipeline.py`)
-  are working-tree only. User has not yet been asked/confirmed whether to
-  commit — do that before assuming this is "done" in the git-history sense.
+- **Committed and pushed** to `origin/main` as three commits: `7958ba1`
+  (`docs/specs/SPEC-diki-design-audit.md`), `43ee2a1` (the scene_spec port —
+  `configs/tasks/scanning.yaml`, `src/app.py`, `src/tasks/base_task.py`,
+  `src/tasks/click_grid.py`, `src/tasks/follow_moving.py`,
+  `src/tasks/scanning.py`, `src/ui/canvas.py`,
+  `tests/fixtures/gaze_replay_scanning.jsonl`, `tests/test_task_pipeline.py`,
+  and this SPEC), `712c29f` (the theme fix —
+  `configs/tasks/click_grid.yaml` + `follow_moving.yaml`). Confirmed via
+  `git log --oneline origin/main..HEAD` returning empty (nothing ahead) after
+  the push. Nothing from this line of work remains uncommitted.
 - **All four tasks' `scene_spec()` rendering is now ported** — this item
   from the original pilot's open list is resolved; nothing left on the
   rendering-mechanism side of SPEC-diki-design-audit.md S3.
@@ -354,14 +357,13 @@ bug fix. **User chose: unify all four to `forest`.**
   shapes, and correct active/distractor rendering against the
   actually-running GUI.
 - **2026-09-07, later** — `click_grid` and `follow_moving` ported the same
-  way, each live-validated via qt-mcp individually. Full account in §6.
+  way, each live-validated via qt-mcp individually. Full account in §5.
   Headless hit/timeout counts for both are bit-identical to pre-port (purely
   additive rendering change, no hit-testing/build_targets math touched).
   Live: `click_grid` screenshot confirmed real rounded-rect grid cells;
   `follow_moving` screenshot confirmed a real fading motion trail behind the
   live target. No new Qt warnings in either case. All four tasks' scene
-  rendering is now ported end-to-end. Still not committed — pending user
-  go-ahead, same as the pilot.
+  rendering is now ported end-to-end.
 - **2026-09-07, later still** — User's own visual audit caught
   `click_grid`/`follow_moving` still rendering the pre-existing `space`
   (dark) theme instead of `forest` (light), unlike `click_static`/`scanning`.
@@ -372,5 +374,7 @@ bug fix. **User chose: unify all four to `forest`.**
   suite still green (1 pre-existing failure only); both tasks individually
   re-validated live via qt-mcp — screenshots confirm the light background
   now applies and each task's ported scene (grid cells / motion trail) still
-  renders correctly under it; no new Qt warnings. Full account in §7. Still
-  not committed.
+  renders correctly under it; no new Qt warnings. Full account in §6.
+- **2026-09-07, later still (via `/sparc:devops`)** — All of the above
+  committed as three commits (`7958ba1`, `43ee2a1`, `712c29f`) and pushed to
+  `origin/main`. Nothing from this SPEC remains uncommitted.
