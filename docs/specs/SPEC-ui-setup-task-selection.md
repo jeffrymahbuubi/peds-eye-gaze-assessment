@@ -82,7 +82,8 @@ via `AskUserQuestion`, IMPLEMENTED and live-validated (§23.1).**
 **§24: real-device audit follow-up — NONE/0 placeholder filtering, a
 Re-check action, a USB2/60Hz warning banner, and a real device
 sample-rate meter distinct from the render-loop FPS — all IMPLEMENTED
-and live-validated (§24.5).**
+and live-validated (§24.5).** **§23-§24 committed and pushed to
+`origin/main` as `5f7ef96`**, after a `/spec-memory-audit` pass.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-09
 
@@ -3618,3 +3619,30 @@ this project's ask-before-commit pattern.
   processes and the scratch session directory cleaned up, confirmed via
   `netstat`. **Left uncommitted**, per this project's ask-before-commit
   pattern.
+
+- **2026-09-09, later — `/spec-memory-audit` pass (one real fix), then
+  §23-§24 committed and pushed, via `/sparc:orchestrator`.** Audit
+  checked the Log's chronological order (clean, strictly sequential),
+  every §23-§24 code claim against current source (`DeviceInfo`,
+  `_clean_placeholder`, `is_streaming`/`refresh_device_info`,
+  `SampleRateTracker`, `device_rate_label`, `_apply_device_info`, and
+  every other named symbol — all confirmed present via `grep`), a fresh
+  pytest count (133 passed, 1 pre-existing failure, 134 collected —
+  matched the SPEC's own already-correct claim exactly), and both
+  `[[cross-links]]` added this session in the touched memory file (both
+  resolve). **Found and fixed one real discrepancy:** the MAIN POINTER
+  memory file for this SPEC
+  (`peds-eye-gaze-assessment-ui-setup-task-selection-2026-09-08.md`) and
+  its `MEMORY.md` index line only covered through §22.6 — §23 and §24
+  existed in this SPEC but had no memory record at all, meaning a future
+  `/memory-restore` would have been blind to them. Fixed by extending
+  that memory file's body and frontmatter description, and its index
+  line.
+
+  §23-§24 (all 9 files: `src/inputs/gazepoint_client.py`, `src/ui/
+  setup_page.py`, `src/engine/sample_rate.py`, `src/app.py`, `src/ui/
+  operator_panel.py`, `tests/test_gazepoint_client.py`,
+  `tests/test_sample_rate.py`, `tools/fake_gazepoint_server.py`, and this
+  SPEC doc) committed as one commit, `5f7ef96`, pushed to `origin/main`
+  (`1eb1086..5f7ef96`). `git status` clean after push — nothing from
+  this whole device-info/rate-meter line of work remains uncommitted.
