@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -151,17 +152,43 @@ class SetupPage(QWidget):
         title.setObjectName("wtmhPageTitle")
         outer.addWidget(title)
 
-        outer.addWidget(self._build_subject_card())
-        outer.addWidget(self._build_tracker_card())
-        outer.addWidget(self._build_calibration_card())
-        outer.addWidget(self._build_device_notice_card())
+        # Expanding the calibration-details table (below) can push the card
+        # stack taller than the window -- scrolling the cards (rather than
+        # the whole page) keeps "Continue to Tasks" pinned as a fixed footer
+        # outside the scroll area, so it's always reachable regardless of
+        # scroll position or how much detail is showing.
+        scroll = QScrollArea()
+        scroll.setObjectName("wtmhSetupScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+
+        scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(16)
+        scroll_layout.addWidget(self._build_subject_card())
+        scroll_layout.addWidget(self._build_tracker_card())
+        scroll_layout.addWidget(self._build_calibration_card())
+        scroll_layout.addWidget(self._build_device_notice_card())
+        scroll_layout.addStretch(1)
+        scroll.setWidget(scroll_content)
+        # QScrollArea.setWidget() turns on autoFillBackground for both the
+        # viewport and the content widget, painting them with the inherited
+        # QPalette::Window color (black in this app's Fusion palette) --
+        # invisible under the cards themselves but exposed as black bands in
+        # the spacing gaps between them. The QSS transparent rule below only
+        # reaches the viewport (a direct QScrollArea child), not this content
+        # widget (a grandchild via the viewport), so both need autofill
+        # disabled explicitly here.
+        scroll.viewport().setAutoFillBackground(False)
+        scroll_content.setAutoFillBackground(False)
+        outer.addWidget(scroll, stretch=1)
 
         self.continue_button = QPushButton("Continue to Tasks →")
         self.continue_button.setObjectName("wtmhPrimary")
         self.continue_button.setEnabled(False)
         self.continue_button.clicked.connect(self.continueRequested)
         outer.addWidget(self.continue_button)
-        outer.addStretch(1)
 
     @staticmethod
     def _card() -> tuple[QFrame, QVBoxLayout]:

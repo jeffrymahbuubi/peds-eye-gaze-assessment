@@ -65,6 +65,16 @@ output, and Ctrl+C unable to stop a blocking `accept()` on Windows)
 found from the user's own hands-on testing and fixed** — see §21.
 **§20-§21 committed and pushed to `origin/main` as `45908cb`** after a
 clean `/spec-memory-audit` pass.
+**§22: expanding "View Calibration Details" pushed "Continue to Tasks"
+off-window (no `QScrollArea` anywhere in the page) — fixed by scrolling
+the card stack with Continue to Tasks pinned as a sticky footer, live-
+validated via qt-mcp.** **§22.5: that same scroll area exposed a black
+background between cards (a `QScrollArea.setWidget()` autoFillBackground
+side effect) — root-caused and fixed with explicit
+`setAutoFillBackground(False)` calls, live-validated.** **§22.6: themed
+the scrollbar itself (slim rounded translucent-teal thumb, no native
+arrow buttons) to match the app, live-validated.** **Left
+uncommitted** — see §22-§22.6.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-09
 
@@ -2339,6 +2349,177 @@ True` prints from §21.1 plus the `settimeout`/`TimeoutError` loop from
 §21.2). **Left uncommitted**, alongside §20's `src/engine/
 calibration.py` fix — same ask-before-commit pattern.
 
+## 22. Calibration-details expansion pushed "Continue to Tasks" off-window
+
+User feedback via `/sparc:orchestrator`, from auditing the GUI over the
+localhost (`127.0.0.1`) fake-server connection: clicking "View
+Calibration Details" on the Setup page pushed the "Continue to Tasks"
+button downward and off the visible window, with no way to reach it
+except collapsing the details section again.
+
+### 22.1 Root cause
+
+`SetupPage` (`src/ui/setup_page.py`) stacked all four cards (Subject,
+Tracker, Calibration, Device Notice) plus the Continue button in one
+plain `QVBoxLayout`, with no `QScrollArea` anywhere in the page — or
+anywhere else in this codebase. `DashboardWindow` (`src/ui/
+dashboard_window.py:94`) only calls `self.resize(1024, 800)` once at
+startup; it does not auto-grow afterward in response to a child
+widget's visibility changing (S16's "window grows to the layout's
+minimum" mechanism applies to genuine minimum-size increases, which a
+`QTableWidget`'s small `minimumSizeHint` does not trigger — only its
+much larger `sizeHint`, which the layout happily satisfies within
+whatever room is actually available, pushing later widgets down
+instead). The calibration-details `QTableWidget` (added `setup_page.py
+:371`, populated by `_populate_calibration_details()`) has no maximum
+height set, so toggling it visible consumes space inside the
+already-fixed window and pushes the Device Notice card and the Continue
+button past the visible bottom edge, with no scrollbar anywhere to
+reach them.
+
+### 22.2 Fix decision
+
+Two options were presented via `AskUserQuestion`: (1) cap the
+per-point table's own height (minimal change, keeps today's single,
+non-scrolling page); (2) wrap the page's cards in a `QScrollArea` with
+"Continue to Tasks" pinned as a sticky footer outside the scroll area
+(more robust against any future card growth, changes the page's feel).
+**User picked (2).**
+
+### 22.3 Implementation
+
+`src/ui/setup_page.py`'s `_build_ui()`: the four cards now live inside
+a new `QScrollArea` (`objectName="wtmhSetupScroll"`,
+`setWidgetResizable(True)`, `QFrame.Shape.NoFrame`) added to the outer
+layout with `stretch=1`; "Continue to Tasks" is added to the outer
+layout directly after the scroll area, outside it, so it is always
+pinned at a fixed position regardless of scroll offset or how much
+detail is expanded. `src/ui/wtmh_theme.py` gained a matching QSS rule
+(`QScrollArea#wtmhSetupScroll, QScrollArea#wtmhSetupScroll > QWidget {
+background: transparent; border: none; }`) so the scroll viewport
+doesn't paint an opaque native background over the page's own tinted
+`{BACKGROUND}` (previously unnecessary since no `QScrollArea` existed
+anywhere in the app).
+
+### 22.4 Validated live
+
+`tools/fake_gazepoint_server.py` on port `4244` (`4242`/`4243` were
+both already bound locally by the real Gazepoint Control app, same
+reasoning as §20/§21) + the dashboard maximized first via qt-mcp:
+Connect → filled Subject ID + Sex → Do Calibration (immediately valid,
+5 points / 8px) → confirmed via `qt_widget_details` that the Continue
+button's geometry (`24,905 1872x32`) was **identical before and after**
+clicking "View Calibration Details" — it never moves. Confirmed
+visually via `qt_screenshot` (card stack scrolls under its own
+scrollbar; the button renders as a full-width pinned footer). Clicked
+Continue to Tasks immediately after expanding details and confirmed it
+correctly navigated to the real "2 · Tasks" screen — a functional
+check, not just a static geometry one. Full pytest suite: 125 passed,
+1 pre-existing failure only (`test_config_merges_task_over_default`,
+126 collected total), no regressions. *(Corrected 2026-09-09 during a
+`/spec-memory-audit` pass — this and the two counts below were
+originally misstated as "116 passed," carried over from before
+Result-logic's `9d6e8d3` added new tests; a precise re-count shows 125
+passed / 1 pre-existing failure / 126 collected, matching `SPEC-
+result-logic.md` §9.3's own already-corrected figure.)*
+
+QA processes (dashboard + fake server on `4244`) killed cleanly
+afterward, confirmed via `netstat` no leftover listeners on
+`4244`/`9142`. `configs/local_state.json` now holds `127.0.0.1:4244`
+from this session's testing (gitignored, not part of any commit, same
+pattern as §21).
+
+**Files changed:** `src/ui/setup_page.py`, `src/ui/wtmh_theme.py`.
+**Left uncommitted**, matching this project's established
+ask-before-commit pattern — nothing from this round is on
+`origin/main` yet (last commit remains `743a0bc`).
+
+### 22.5 Follow-on regression — §22's own scroll area exposed a black background
+
+User feedback via `/sparc:orchestrator`, with a real desktop screenshot:
+after §22's fix, thick black bands appeared in the spacing gaps between
+the Setup page's cards — "out of place, making the UI ugly."
+
+**Root cause, confirmed via `qt_object_tree`/`qt_widget_details` before
+touching any code (not assumed):** `QScrollArea.setWidget()` turns on
+`autoFillBackground` on both the viewport and the content widget passed
+to it. Inspecting the live widget tree confirmed this directly: the
+plain `QWidget` used as `scroll_content` (child of `qt_scrollarea_
+viewport`, itself a child of `wtmhSetupScroll`) had `autoFillBackground:
+True` with an unresolved (inherited) palette whose `Window` role
+resolved to black. §22's QSS rule (`QScrollArea#wtmhSetupScroll,
+QScrollArea#wtmhSetupScroll > QWidget { background: transparent; }`)
+only reaches the viewport — a *direct* child of the `QScrollArea` — not
+`scroll_content`, which sits one level deeper (inside the viewport). The
+black fill was invisible wherever a white `wtmhCard` painted over it,
+but showed through directly in the 16px spacing gaps between cards —
+exactly the bands in the user's screenshot.
+
+**Fix:** `src/ui/setup_page.py`, immediately after `scroll.setWidget
+(scroll_content)`: `scroll.viewport().setAutoFillBackground(False)` and
+`scroll_content.setAutoFillBackground(False)`. This is the standard,
+documented fix for this exact Qt behavior — disabling the automatic
+palette-based fill lets the real ancestor background (`wtmhDashboard`'s
+QSS-styled `{BACKGROUND}`) show through instead of an inherited black
+`QPalette::Window`. The existing QSS transparency rule was left in place
+(harmless, no longer load-bearing on its own).
+
+**Validated live** via qt-mcp + `tools/fake_gazepoint_server.py` (port
+`4244`, dashboard maximized): a real screenshot of the plain Setup page
+showed a clean, uniform light background between all four cards, no
+black anywhere; repeated the full Connect → fill Subject ID + Sex → Do
+Calibration (valid) → View Calibration Details flow and confirmed the
+same clean background with the details table expanded and "Continue to
+Tasks" still correctly pinned. Full pytest suite: 125 passed, 1
+pre-existing failure only (126 collected total; see §22.4's correction
+note), no regressions. QA processes killed cleanly afterward, confirmed
+via `netstat` no leftover listeners.
+
+**Files changed:** `src/ui/setup_page.py` only. **Left uncommitted**,
+alongside §22's own changes — nothing from §22/§22.5 is on `origin/main`
+yet (last commit remains `743a0bc`).
+
+### 22.6 Follow-on polish — themed the scrollbar itself
+
+User feedback via `/sparc:orchestrator`, with a real screenshot: after
+§22.5's fix removed the black background, the scrollbar track/thumb
+itself still rendered in the native Windows style (square arrow
+buttons, flat opaque gray/black thumb) — visually out of place against
+this app's soft, rounded, teal-accented theme. User asked whether the
+scrollbar could be styled to match, suggesting opacity as one option.
+
+This is this app's **first scrollbar** (the first `QScrollArea` added
+anywhere was §22 itself), so there was no prior scrollbar-theming
+convention to extend.
+
+**Fix:** added a global `QScrollBar` QSS block to `src/ui/wtmh_theme.py`
+(applies to every `QScrollBar` under `wtmhDashboard` — Setup's card
+scroll, and any future/existing `QTextEdit`/`QPlainTextEdit` internal
+scrollbar such as Notes or the Results Session Log): a slim 10px track,
+a rounded pill-shaped thumb filled with `ACCENT` at 35% opacity (55% on
+hover) via a new `ACCENT_RGB` constant + `rgba()`, transparent
+track/page regions, and the native up/down (and left/right) arrow
+buttons removed entirely (`height: 0px`/`width: 0px` on `::add-line`/
+`::sub-line`) rather than replaced with custom arrow icons — sidesteps
+the already-documented Qt/PySide6 limitation (S12) where the CSS
+border-triangle trick doesn't reliably render as a triangle in this
+build, since here no arrow is drawn at all.
+
+**Validated live** via qt-mcp + `tools/fake_gazepoint_server.py`
+(dashboard maximized, same Connect → Subject ID/Sex → Do Calibration →
+View Calibration Details flow as §22.4/§22.5 to force the scroll range
+non-zero): a real screenshot showed a slim, rounded, translucent teal
+thumb with no arrow buttons and a transparent track, replacing the
+stark native bar. Full pytest suite: 125 passed, 1 pre-existing
+failure only (126 collected total; see §22.4's correction note), no
+regressions (this is a pure QSS change, no widget-tree/behavioral code
+touched).
+
+**Files changed:** `src/ui/wtmh_theme.py` only (`ACCENT_RGB` constant +
+the `QScrollBar` rule block). **Left uncommitted**, alongside §22/§22.5
+— nothing from this whole scroll-fix line of work (§22-§22.6) is on
+`origin/main` yet (last commit remains `743a0bc`).
+
 ## Log
 
 - **2026-09-08** — Session opened via `/sparc:orchestrator`; user described
@@ -2914,3 +3095,82 @@ calibration.py` fix — same ask-before-commit pattern.
   `configs/local_state.json` (currently `127.0.0.1:4243`, from §21's live
   fake-server testing) is gitignored and intentionally not part of this or
   any commit.
+
+- **2026-09-09, later still — §22: "Continue to Tasks" pushed off-window by
+  the calibration-details table, fixed and live-validated, via
+  `/sparc:orchestrator`.** User's own GUI audit over the localhost fake-
+  server connection found the bug; root-caused to `SetupPage` having no
+  `QScrollArea` anywhere (§22.1). Two fixes were offered via
+  `AskUserQuestion` — cap the table's height, or make the page scroll with
+  Continue to Tasks pinned as a sticky footer — user chose the sticky-
+  footer approach (§22.2). Implemented: cards now live in a new
+  `QScrollArea` (`wtmhSetupScroll`), Continue to Tasks pinned outside it
+  (§22.3). Live-validated via qt-mcp + `tools/fake_gazepoint_server.py`
+  (port `4244`): Continue button's geometry confirmed byte-for-byte
+  identical before/after expanding details, and clicking it immediately
+  after expansion correctly reached the "2 · Tasks" screen (§22.4). Full
+  pytest suite: 125 passed, 1 pre-existing failure, 126 collected total
+  (corrected during the audit below — originally misstated as "116
+  passed" here), no regressions. **Files changed:** `src/ui/
+  setup_page.py`, `src/ui/wtmh_theme.py`. **Left uncommitted** —
+  nothing from §22 is on `origin/main` yet (last commit remains
+  `743a0bc`).
+
+- **2026-09-09, later still — §22.5: §22's own scroll area exposed a black
+  background between cards, root-caused and fixed, via
+  `/sparc:orchestrator`.** User reported (with a real screenshot) thick
+  black bands between Setup's cards after §22's fix. Root-caused via
+  `qt_object_tree`/`qt_widget_details` before touching code: `QScrollArea.
+  setWidget()` enables `autoFillBackground` on both the viewport and the
+  content widget, and the content widget's inherited palette `Window` role
+  resolved to black; §22's QSS transparency rule only reached the viewport
+  (a direct `QScrollArea` child), not the content widget one level deeper.
+  Fixed with `scroll.viewport().setAutoFillBackground(False)` +
+  `scroll_content.setAutoFillBackground(False)` in `src/ui/setup_page.py`.
+  Live-validated via qt-mcp: real screenshots of both the plain Setup page
+  and with Calibration Details expanded showed a clean, uniform background,
+  no black anywhere. Full pytest suite: 125 passed, 1 pre-existing
+  failure, 126 collected total (corrected during the audit below —
+  originally misstated as "116 passed" here), no regressions. **Files
+  changed:** `src/ui/setup_page.py` only. **Left uncommitted**, alongside
+  §22 — nothing from §22/§22.5 is on `origin/main` yet (last commit
+  remains `743a0bc`).
+
+- **2026-09-09, later still — §22.6: themed the scrollbar itself to match
+  the app, via `/sparc:orchestrator`.** User reported (with a real
+  screenshot) that the scrollbar's native Windows appearance (square arrow
+  buttons, flat opaque gray/black thumb) looked out of place, and asked
+  whether opacity could tone it down — this app's first-ever scrollbar, no
+  prior theming convention existed. Added a global `QScrollBar` QSS block
+  to `src/ui/wtmh_theme.py`: slim 10px track, rounded pill thumb in
+  `ACCENT` at 35%/55% (hover) opacity via a new `ACCENT_RGB` constant,
+  transparent track, and the native arrow buttons removed entirely rather
+  than replaced with custom-icon arrows (sidesteps S12's already-documented
+  CSS-triangle-doesn't-render limitation by not drawing an arrow at all).
+  Live-validated via qt-mcp: real screenshot confirmed a slim, rounded,
+  translucent teal thumb with no arrow buttons. Full pytest suite: 125
+  passed, 1 pre-existing failure, 126 collected total (corrected during
+  this same `/spec-memory-audit` pass — this entry and the two before it
+  had all misstated the count as "116 passed," a stale carryover from
+  before Result-logic's `9d6e8d3` added new tests; a precise re-count via
+  script matches `SPEC-result-logic.md` §9.3's own already-corrected
+  125/126 figure), no regressions (pure QSS change). **Files changed:**
+  `src/ui/wtmh_theme.py` only. **Left uncommitted** — nothing from
+  §22-§22.6 is on `origin/main` yet (last commit remains `743a0bc`).
+
+- **2026-09-09, later still — `/spec-memory-audit` pass (one real fix),
+  via `/sparc:orchestrator`.** Audit
+  checked the Log's chronological order (clean — §20→§21→audit→
+  §22→§22.5→§22.6, strictly sequential), every §22-§22.6 code claim against
+  current source (`src/ui/setup_page.py`'s `QScrollArea`/
+  `setAutoFillBackground` calls, `src/ui/wtmh_theme.py`'s `ACCENT_RGB` +
+  `QScrollBar` rules — both matched exactly), and cross-links in the
+  touched memory files (all resolve). **Found and fixed one real
+  discrepancy:** §22.4, §22.5, and §22.6 had all stated "116 passed" —
+  stale, carried over from before Result-logic's `9d6e8d3` commit added
+  new tests earlier this same day; a precise re-count (via script, not
+  eyeballing progress dots) confirmed **125 passed, 1 pre-existing
+  failure, 126 collected total**, matching `SPEC-result-logic.md` §9.3's
+  own already-corrected figure. All three body sections and their
+  matching Log entries corrected above (the underlying "no regressions"
+  verdict was still correct, only the raw counts were off).

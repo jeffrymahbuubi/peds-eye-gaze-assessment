@@ -29,6 +29,7 @@ from ..engine.config import CONFIG_ROOT
 _ICONS_DIR = (CONFIG_ROOT / "assets" / "icons").as_posix()
 
 ACCENT = "#1F7A9C"
+ACCENT_RGB = "31, 122, 156"  # ACCENT as r, g, b -- for rgba() opacity blends
 ACCENT_GRADIENT_START = "#2FA8C4"
 ACCENT_GRADIENT_END = "#1A6F95"
 TITLEBAR_BG = "#12374A"
@@ -61,6 +62,66 @@ QWidget#wtmhDashboard QCheckBox {{ color: {INK}; }}
 QWidget#wtmhTitleBar {{ background: {TITLEBAR_BG}; }}
 QWidget#wtmhTitleBar QLabel {{ color: {TITLEBAR_TEXT}; }}
 QLabel#wtmhBrandTitle {{ font-size: 15px; font-weight: 600; }}
+
+/* Setup page's card stack scrolls independently of the pinned "Continue to
+   Tasks" footer (SPEC-ui-setup-task-selection.md S22) -- the scroll area
+   and its viewport otherwise paint an opaque native background over the
+   page's own {BACKGROUND} tint. */
+QScrollArea#wtmhSetupScroll, QScrollArea#wtmhSetupScroll > QWidget {{
+    background: transparent;
+    border: none;
+}}
+
+/* Themed scrollbar (SPEC-ui-setup-task-selection.md S22.6) -- this app's
+   first scrollbar rendered with the native OS style (square arrow buttons,
+   flat opaque gray/black thumb), out of place against this soft, rounded
+   theme. Slim, rounded thumb in ACCENT at reduced opacity instead, no
+   arrow buttons, transparent track -- applies to every QScrollBar under
+   wtmhDashboard (Setup's new card scroll, and any QTextEdit/QPlainTextEdit
+   internal scrollbar such as Notes or the Results Session Log). */
+QScrollBar:vertical {{
+    background: transparent;
+    width: 10px;
+    margin: 2px 2px 2px 0px;
+}}
+QScrollBar::handle:vertical {{
+    background: rgba({ACCENT_RGB}, 0.35);
+    min-height: 24px;
+    border-radius: 5px;
+}}
+QScrollBar::handle:vertical:hover {{
+    background: rgba({ACCENT_RGB}, 0.55);
+}}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+    height: 0px;
+    background: transparent;
+    border: none;
+}}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+    background: transparent;
+}}
+
+QScrollBar:horizontal {{
+    background: transparent;
+    height: 10px;
+    margin: 0px 2px 2px 2px;
+}}
+QScrollBar::handle:horizontal {{
+    background: rgba({ACCENT_RGB}, 0.35);
+    min-width: 24px;
+    border-radius: 5px;
+}}
+QScrollBar::handle:horizontal:hover {{
+    background: rgba({ACCENT_RGB}, 0.55);
+}}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+    width: 0px;
+    background: transparent;
+    border: none;
+}}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+    background: transparent;
+}}
 
 QPushButton#wtmhNavButton {{
     color: {TITLEBAR_TEXT};
