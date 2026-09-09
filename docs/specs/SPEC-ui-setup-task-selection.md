@@ -63,7 +63,8 @@ live against the real device, root-caused, and fixed** — see §20.
 fake_gazepoint_server.py` (a non-venv `python` silently producing no
 output, and Ctrl+C unable to stop a blocking `accept()` on Windows)
 found from the user's own hands-on testing and fixed** — see §21.
-**Left uncommitted.**
+**§20-§21 committed and pushed to `origin/main` as `45908cb`** after a
+clean `/spec-memory-audit` pass.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-09
 
@@ -2893,3 +2894,23 @@ calibration.py` fix — same ask-before-commit pattern.
   its own). Full account: §21. **Files changed:** `tools/
   fake_gazepoint_server.py` only. **Left uncommitted**, alongside §20's
   `src/engine/calibration.py` fix.
+
+- **2026-09-09, later still — a clean `/spec-memory-audit` pass, then §20
+  and §21 committed and pushed, via `/sparc:orchestrator`.** Audit checked
+  the Log's chronological order (clean), every §20/§21 code claim against
+  current source (`Calibration.run()`'s `try/except OSError`, `tools/
+  fake_gazepoint_server.py`'s `flush=True` prints and `settimeout`/
+  `TimeoutError` accept loop, `configs/local_state.json`'s current value),
+  all cross-links in the two new memory files (all resolved), and a fresh
+  pytest run — confirmed precisely 116 passed / 1 pre-existing failure
+  (counted via a small script rather than eyeballing dot-progress lines,
+  since a naive count of `.`/`F` characters miscounts by matching the word
+  "FAILED" in the summary line as a second failure — corrected during this
+  audit, not a real second failure). Nothing needed fixing.
+
+  Committed as `45908cb` ("Fix calibration crash and fake-server testing
+  tool bugs (SPEC S20-21)") and pushed to `origin/main` (`4c28a29..45908cb`).
+  `git status` clean after push — nothing from §20/§21 remains uncommitted.
+  `configs/local_state.json` (currently `127.0.0.1:4243`, from §21's live
+  fake-server testing) is gitignored and intentionally not part of this or
+  any commit.
