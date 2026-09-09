@@ -20,6 +20,15 @@ from src.inputs.gazepoint_client import (
     rec_to_sample,
 )
 
+# Canned replies for the connect-time device-info GET queries
+# (SPEC-ui-setup-task-selection.md S23) -- keyed by GET ID.
+_DEVICE_INFO_REPLIES = {
+    "PRODUCT_ID": '<ACK ID="PRODUCT_ID" VALUE="GP3HD" BUS="USB3" RATE="150" />\n',
+    "SERIAL_ID": '<ACK ID="SERIAL_ID" VALUE="GP3HD-TEST-0001" />\n',
+    "CAMERA_SIZE": '<ACK ID="CAMERA_SIZE" WIDTH="752" HEIGHT="480" />\n',
+    "API_ID": '<ACK ID="API_ID" VALUE="2.0" />\n',
+}
+
 
 class FakeGazepointServer:
     """Minimal loopback stand-in for Gazepoint Control's TCP server.
@@ -29,7 +38,7 @@ class FakeGazepointServer:
     the connection to simulate a real disconnect.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, reply_to_device_info_queries: bool = True) -> None:
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.bind(("127.0.0.1", 0))
         self._listener.listen(1)
@@ -37,6 +46,7 @@ class FakeGazepointServer:
         self.port = self._listener.getsockname()[1]
         self._conn: socket.socket | None = None
         self._received = bytearray()
+        self._reply_to_device_info_queries = reply_to_device_info_queries
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._accept_loop, daemon=True)
         self._thread.start()
@@ -54,7 +64,9 @@ class FakeGazepointServer:
             threading.Thread(target=self._drain, args=(conn,), daemon=True).start()
 
     def _drain(self, conn: socket.socket) -> None:
-        """Continuously record whatever the client sends (SET/GET commands)."""
+        """Continuously record whatever the client sends (SET/GET commands),
+        optionally replying to the connect-time device-info GET queries."""
+        buffer = ""
         while not self._stop.is_set():
             try:
                 chunk = conn.recv(4096)
@@ -65,6 +77,21 @@ class FakeGazepointServer:
             if not chunk:
                 return
             self._received.extend(chunk)
+            if not self._reply_to_device_info_queries:
+                continue
+            buffer += chunk.decode("ascii", errors="ignore")
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                parsed = parse_attrs(line)
+                if parsed is None:
+                    continue
+                tag, attrs = parsed
+                reply = _DEVICE_INFO_REPLIES.get(attrs.get("ID", "")) if tag == "GET" else None
+                if reply is not None:
+                    try:
+                        conn.sendall(reply.encode("ascii"))
+                    except OSError:
+                        return
 
     def received_text(self) -> str:
         return bytes(self._received).decode("ascii", errors="ignore")
@@ -98,6 +125,16 @@ class FakeGazepointServer:
 @pytest.fixture
 def fake_server():
     server = FakeGazepointServer()
+    yield server
+    server.close()
+
+
+@pytest.fixture
+def silent_fake_server():
+    """A fake server that accepts a connection but never replies to
+    anything -- exercises the device-info query's timeout/None-fields path.
+    """
+    server = FakeGazepointServer(reply_to_device_info_queries=False)
     yield server
     server.close()
 
@@ -311,3 +348,53 @@ def test_client_stop_is_prompt_during_reconnect_wait(fake_server):
     client.stop()
     # stop() must not block for the (long) reconnect interval.
     assert time.monotonic() - start < 2.5
+
+
+def test_connect_populates_device_info_from_get_replies(fake_server):
+    """SPEC-ui-setup-task-selection.md S23: a successful connect should query
+    PRODUCT_ID/SERIAL_ID/CAMERA_SIZE/API_ID and expose them via device_info."""
+    client = GazepointClient()
+    client.connect(host="127.0.0.1", port=fake_server.port)
+    try:
+        info = client.device_info
+        assert info is not None
+        assert info.model == "GP3HD"
+        assert info.bus == "USB3"
+        assert info.rate_hz == 150
+        assert info.serial == "GP3HD-TEST-0001"
+        assert info.camera_width == 752
+        assert info.camera_height == 480
+        assert info.api_version == "2.0"
+    finally:
+        client.stop()
+
+
+def test_device_info_fields_stay_none_when_queries_go_unanswered(silent_fake_server):
+    """A device that never answers a GET must not fail the connection --
+    every device_info field should just stay None."""
+    client = GazepointClient()
+    client.connect(host="127.0.0.1", port=silent_fake_server.port)
+    try:
+        assert client.is_connected() is True
+        info = client.device_info
+        assert info is not None
+        assert info.model is None
+        assert info.serial is None
+        assert info.rate_hz is None
+        assert info.camera_width is None
+        assert info.api_version is None
+    finally:
+        client.stop()
+
+
+def test_device_info_none_before_any_connect():
+    client = GazepointClient()
+    assert client.device_info is None
+
+
+def test_device_info_none_in_replay_mode(tmp_path: Path):
+    fixture = tmp_path / "g.jsonl"
+    fixture.write_text('{"t_ns": 0, "x": 0.5, "y": 0.5, "valid": true}', encoding="utf-8")
+    client = GazepointClient(replay_path=fixture)
+    client.connect()
+    assert client.device_info is None

@@ -160,8 +160,16 @@ class OperatorPanel(QWidget):
         status_card, status_layout = self._make_card()
         self._add_subheading(status_layout, "Status")
         self.fps_label = QLabel("FPS: --")
+        # Distinct from fps_label: this is the tracker's real measured
+        # incoming-sample rate (SampleRateTracker, keyed off each sample's
+        # own capture timestamp), not the app's own poll/render-loop rate
+        # -- see SPEC-ui-setup-task-selection.md S24.4 for why the two can
+        # read very differently (e.g. polling at 150 while a GP3 HD capped
+        # at 60 Hz over USB 2.0 delivers new samples much more slowly).
+        self.device_rate_label = QLabel("Device: -- Hz")
         self.validity_label = QLabel("Gaze: --")
         status_layout.addWidget(self.fps_label)
+        status_layout.addWidget(self.device_rate_label)
         status_layout.addWidget(self.validity_label)
 
         # "Live" section -- ported from diki's LiveCounterPanel (SPEC-diki-
@@ -320,8 +328,12 @@ class OperatorPanel(QWidget):
         connected: bool = True,
         hits: int = 0,
         timeouts: int = 0,
+        device_rate_hz: float | None = None,
     ) -> None:
         self.fps_label.setText(f"FPS: {fps:.0f}")
+        self.device_rate_label.setText(
+            "Device: -- Hz" if device_rate_hz is None else f"Device: {device_rate_hz:.0f} Hz"
+        )
         if not connected:
             status = "DISCONNECTED"
         elif gaze_valid:

@@ -4,11 +4,12 @@ connection without a real GP3HD attached.
 Accepts a connection the same way Gazepoint Control does, and answers
 ``CALIBRATE_RESULT_SUMMARY`` queries with a fixed, immediately-valid result
 -- enough for ``Calibration.run()`` to complete and for ``AssessmentApp`` to
-auto-save ``calibration.json`` (SPEC-2026-09-02.md item 7, Goal 1). Sends no
-``REC`` gaze data, so the on-screen cursor stays "no gaze" -- this is for
-exercising the *connection/calibration* path, not for simulating a moving
-gaze signal (use ``--replay`` with ``tools/make_replay_fixture.py`` output
-for that instead).
+auto-save ``calibration.json`` (SPEC-2026-09-02.md item 7, Goal 1). Once
+``ENABLE_SEND_DATA`` is set, streams a fixed-position ``REC`` at
+``REC_RATE_HZ`` (SPEC-ui-setup-task-selection.md S24.4 QA: enough for the
+Operator Panel's device-sample-rate meter to show a real, non-placeholder
+number) -- not a moving gaze signal (use ``--replay`` with ``tools/
+make_replay_fixture.py`` output for that instead).
 
 Usage::
 
@@ -30,37 +31,90 @@ from __future__ import annotations
 import socket
 import sys
 import threading
+import time
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 4242
 N_POINTS = 5
 AVE_ERROR = "8.42"
+REC_RATE_HZ = 20.0
+
+# Canned replies for the connect-time device-info GET queries
+# (SPEC-ui-setup-task-selection.md S23). Deliberately reproduces the real
+# GP3HD audit's exact reported values (S24) -- NONE/0 placeholders and a
+# sub-150 rate -- so this fake server doubles as a QA fixture for S24.1's
+# placeholder filter and S24.3's rate-warning banner, not just the happy
+# path. Keyed by GET ID.
+DEVICE_INFO_REPLIES = {
+    "PRODUCT_ID": '<ACK ID="PRODUCT_ID" VALUE="NONE" BUS="USB2" RATE="60" />\r\n',
+    "SERIAL_ID": '<ACK ID="SERIAL_ID" VALUE="0" />\r\n',
+    "CAMERA_SIZE": '<ACK ID="CAMERA_SIZE" WIDTH="752" HEIGHT="480" />\r\n',
+    "API_ID": '<ACK ID="API_ID" VALUE="2.8" />\r\n',
+}
+
+
+def send_rec_loop(conn: socket.socket, stop_event: threading.Event) -> None:
+    """Streams a fixed-position, always-valid REC at REC_RATE_HZ until the
+    connection drops or stop_event is set (SPEC S24.4 QA support)."""
+    t0 = time.monotonic()
+    interval_s = 1.0 / REC_RATE_HZ
+    while not stop_event.wait(interval_s):
+        elapsed = time.monotonic() - t0
+        line = (
+            f'<REC TIME="{elapsed:.3f}" FPOGX="0.5" FPOGY="0.5" FPOGV="1" '
+            f'BPOGX="0.5" BPOGY="0.5" BPOGV="1" LPMM="3.0" RPMM="3.0" />\r\n'
+        )
+        try:
+            conn.sendall(line.encode("ascii"))
+        except OSError:
+            return
 
 
 def handle_client(conn: socket.socket) -> None:
     conn.settimeout(0.2)
     buffer = ""
+    stop_rec = threading.Event()
+    rec_thread: threading.Thread | None = None
     print("[fake-server] client connected", flush=True)
-    while True:
-        try:
-            chunk = conn.recv(4096)
-        except socket.timeout:
-            continue
-        except OSError:
-            break
-        if not chunk:
-            print("[fake-server] client disconnected", flush=True)
-            break
-        buffer += chunk.decode("ascii", errors="ignore")
-        while "\r\n" in buffer:
-            line, buffer = buffer.split("\r\n", 1)
-            print(f"[fake-server] recv: {line}", flush=True)
-            if 'ID="CALIBRATE_RESULT_SUMMARY"' in line and "<GET" in line:
-                ack = (
-                    f'<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="{AVE_ERROR}" '
-                    f'VALID_POINTS="{N_POINTS}" />\r\n'
-                )
-                conn.sendall(ack.encode("ascii"))
-                print(f"[fake-server] sent: {ack.strip()}", flush=True)
+    try:
+        while True:
+            try:
+                chunk = conn.recv(4096)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            if not chunk:
+                print("[fake-server] client disconnected", flush=True)
+                break
+            buffer += chunk.decode("ascii", errors="ignore")
+            while "\r\n" in buffer:
+                line, buffer = buffer.split("\r\n", 1)
+                print(f"[fake-server] recv: {line}", flush=True)
+                if 'ID="CALIBRATE_RESULT_SUMMARY"' in line and "<GET" in line:
+                    ack = (
+                        f'<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="{AVE_ERROR}" '
+                        f'VALID_POINTS="{N_POINTS}" />\r\n'
+                    )
+                    conn.sendall(ack.encode("ascii"))
+                    print(f"[fake-server] sent: {ack.strip()}", flush=True)
+                    continue
+                if 'ID="ENABLE_SEND_DATA"' in line and 'STATE="1"' in line and rec_thread is None:
+                    rec_thread = threading.Thread(
+                        target=send_rec_loop, args=(conn, stop_rec), daemon=True
+                    )
+                    rec_thread.start()
+                    print(f"[fake-server] streaming REC at {REC_RATE_HZ:.0f} Hz", flush=True)
+                    continue
+                if "<GET" in line:
+                    for query_id, reply in DEVICE_INFO_REPLIES.items():
+                        if f'ID="{query_id}"' in line:
+                            conn.sendall(reply.encode("ascii"))
+                            print(f"[fake-server] sent: {reply.strip()}", flush=True)
+                            break
+    finally:
+        stop_rec.set()
+        if rec_thread is not None:
+            rec_thread.join(timeout=1.0)
 
 
 def main() -> None:

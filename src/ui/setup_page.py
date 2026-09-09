@@ -44,10 +44,59 @@ from ..engine.calibration import (
 )
 from ..engine.config import load_default
 from ..engine.local_state import load_local_state, save_local_state
-from ..inputs.gazepoint_client import GazepointClient
+from ..inputs.gazepoint_client import DeviceInfo, GazepointClient
 from .wtmh_theme import BORDER, PANEL_BG
 
 _SEX_OPTIONS = ["Select", "Female", "Male", "Other / Prefer not to say"]
+
+
+def _format_device_info(info: DeviceInfo | None) -> str:
+    """Build the post-connect device-info text (SPEC-ui-setup-task-
+    selection.md S23) -- up to two lines, each field independently optional
+    since it was queried independently and may not have answered in time.
+    Returns "" (hide the label) if nothing came back at all.
+    """
+    if info is None:
+        return ""
+
+    identity_parts = []
+    if info.model:
+        identity_parts.append(info.model)
+    if info.rate_hz:
+        identity_parts.append(f"{info.rate_hz} Hz")
+    if info.bus:
+        identity_parts.append(info.bus)
+    if info.serial:
+        identity_parts.append(f"SN {info.serial}")
+
+    detail_parts = []
+    if info.camera_width and info.camera_height:
+        detail_parts.append(f"{info.camera_width}×{info.camera_height}")
+    if info.api_version:
+        detail_parts.append(f"API v{info.api_version}")
+
+    lines = []
+    if identity_parts:
+        lines.append("Device: " + " · ".join(identity_parts))
+    if detail_parts:
+        lines.append("Camera: " + " · ".join(detail_parts))
+    return "\n".join(lines)
+
+
+def _format_rate_warning(info: DeviceInfo | None) -> str:
+    """Build the USB2/60 Hz warning text (SPEC-ui-setup-task-selection.md
+    S24.3). Sourced from ``rate_hz`` alone -- a rate genuinely below 150 is
+    never a false alarm, regardless of exact model. Returns "" (hide the
+    banner) when the rate is unknown or already at full HD rate.
+    """
+    if info is None or info.rate_hz is None or info.rate_hz >= 150:
+        return ""
+    bus_text = f" over {info.bus}" if info.bus else ""
+    return (
+        f"Tracker is running at {info.rate_hz} Hz{bus_text}. The GP3 HD only "
+        "reaches 150 Hz on a USB 3.0 connection — move the data cable to a "
+        "USB 3.0 port and reconnect for full-rate data."
+    )
 
 
 class _ConnectThread(QThread):
@@ -81,6 +130,28 @@ class _ConnectThread(QThread):
             self.succeeded.emit(client)
 
 
+class _DeviceInfoRefreshThread(QThread):
+    """Re-queries device info over an already-open connection (SPEC-ui-
+    setup-task-selection.md S24.2), off the UI thread since it's still a
+    blocking socket round trip even though it's usually fast.
+    """
+
+    succeeded = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, client: GazepointClient, parent=None) -> None:
+        super().__init__(parent)
+        self._client = client
+
+    def run(self) -> None:
+        try:
+            info = self._client.refresh_device_info()
+        except (RuntimeError, OSError) as exc:
+            self.failed.emit(str(exc))
+            return
+        self.succeeded.emit(info)
+
+
 class _CalibrationThread(QThread):
     finished_ok = Signal(object)
 
@@ -104,6 +175,7 @@ class SetupPage(QWidget):
         self._client: GazepointClient | None = None
         self._calibration_result: CalibrationResult | None = None
         self._connect_thread: _ConnectThread | None = None
+        self._recheck_thread: _DeviceInfoRefreshThread | None = None
         self._calibration_thread: _CalibrationThread | None = None
         self._defaults = load_default()
         self._build_ui()
@@ -341,6 +413,43 @@ class SetupPage(QWidget):
         self.tracker_status_label = QLabel("Not connected.")
         self.tracker_status_label.setObjectName("wtmhMuted")
         layout.addWidget(self.tracker_status_label)
+
+        # Populated from GazepointClient.device_info on a successful
+        # connect; hidden whenever there's nothing to show (SPEC S23).
+        # "Re-check" (S24.2) re-queries it without a full reconnect -- only
+        # safe before any task has streamed this session (see
+        # GazepointClient.refresh_device_info's own docstring), so a click
+        # after that point fails gracefully via device_info_status_label
+        # rather than racing the reader thread.
+        device_info_row = QHBoxLayout()
+        self.device_info_label = QLabel("")
+        self.device_info_label.setObjectName("wtmhMuted")
+        self.device_info_label.setVisible(False)
+        device_info_row.addWidget(self.device_info_label, stretch=1)
+
+        self.recheck_device_info_button = QPushButton("Re-check")
+        self.recheck_device_info_button.setObjectName("wtmhGhost")
+        self.recheck_device_info_button.setVisible(False)
+        self.recheck_device_info_button.clicked.connect(self._on_recheck_device_info_clicked)
+        device_info_row.addWidget(self.recheck_device_info_button)
+        layout.addLayout(device_info_row)
+
+        self.device_info_status_label = QLabel("")
+        self.device_info_status_label.setObjectName("wtmhMuted")
+        self.device_info_status_label.setWordWrap(True)
+        self.device_info_status_label.setVisible(False)
+        layout.addWidget(self.device_info_status_label)
+
+        # S24.3: shown whenever a connected device reports a rate below
+        # 150 Hz -- the same visual pattern as calibration_alert below.
+        self.rate_warning_alert = QFrame()
+        self.rate_warning_alert.setObjectName("wtmhAlertWarning")
+        self.rate_warning_alert.setVisible(False)
+        rate_alert_layout = QVBoxLayout(self.rate_warning_alert)
+        self.rate_warning_label = QLabel("")
+        self.rate_warning_label.setWordWrap(True)
+        rate_alert_layout.addWidget(self.rate_warning_label)
+        layout.addWidget(self.rate_warning_alert)
         return card
 
     def _build_calibration_card(self) -> QFrame:
@@ -447,11 +556,29 @@ class SetupPage(QWidget):
 
     # -- tracker connection ---------------------------------------------
 
+    def _apply_device_info(self, info: DeviceInfo | None) -> None:
+        """Render device_info_label + rate_warning_alert from a DeviceInfo
+        -- shared by both a fresh connect and a S24.2 re-check, so the two
+        paths can never drift apart in how they display the same data.
+        """
+        device_info_text = _format_device_info(info)
+        self.device_info_label.setText(device_info_text)
+        self.device_info_label.setVisible(bool(device_info_text))
+        self.recheck_device_info_button.setVisible(True)
+
+        rate_warning_text = _format_rate_warning(info)
+        self.rate_warning_label.setText(rate_warning_text)
+        self.rate_warning_alert.setVisible(bool(rate_warning_text))
+
     def _on_connect_clicked(self) -> None:
         if self._connect_thread is not None:
             return
         self.connect_button.setEnabled(False)
         self.tracker_status_label.setText("Connecting…")
+        self.device_info_label.setVisible(False)
+        self.recheck_device_info_button.setVisible(False)
+        self.device_info_status_label.setVisible(False)
+        self.rate_warning_alert.setVisible(False)
         self._connect_thread = _ConnectThread(
             self.address_edit.text().strip() or "127.0.0.1", self.port_spin.value(), keep=True, parent=self
         )
@@ -465,6 +592,8 @@ class SetupPage(QWidget):
         self._client = client
         self.connect_button.setEnabled(True)
         self.tracker_status_label.setText("Connected.")
+        self.device_info_status_label.setVisible(False)
+        self._apply_device_info(client.device_info)
         self.do_calibration_button.setEnabled(True)
         save_local_state({"host": self.address_edit.text().strip(), "port": self.port_spin.value()})
         self._on_state_changed()
@@ -473,6 +602,38 @@ class SetupPage(QWidget):
         self._connect_thread = None
         self.connect_button.setEnabled(True)
         self.tracker_status_label.setText(f"Connection failed: {message}")
+        self.device_info_label.setVisible(False)
+        self.recheck_device_info_button.setVisible(False)
+        self.device_info_status_label.setVisible(False)
+        self.rate_warning_alert.setVisible(False)
+
+    def _on_recheck_device_info_clicked(self) -> None:
+        if self._recheck_thread is not None or self._client is None:
+            return
+        self.recheck_device_info_button.setEnabled(False)
+        self.device_info_status_label.setText("Re-checking…")
+        self.device_info_status_label.setVisible(True)
+        self._recheck_thread = _DeviceInfoRefreshThread(self._client, parent=self)
+        self._recheck_thread.succeeded.connect(self._on_recheck_succeeded)
+        self._recheck_thread.failed.connect(self._on_recheck_failed)
+        self._recheck_thread.finished.connect(self._recheck_thread.deleteLater)
+        self._recheck_thread.start()
+
+    def _on_recheck_succeeded(self, info: DeviceInfo) -> None:
+        self._recheck_thread = None
+        self.recheck_device_info_button.setEnabled(True)
+        self.device_info_status_label.setVisible(False)
+        self._apply_device_info(info)
+
+    def _on_recheck_failed(self, message: str) -> None:
+        self._recheck_thread = None
+        self.recheck_device_info_button.setEnabled(True)
+        # Last-known-good device_info_label/rate_warning_alert are left
+        # exactly as they were -- a failed re-check (most commonly: a task
+        # has already streamed this session, see refresh_device_info's own
+        # docstring) doesn't mean the device info shown is now wrong.
+        self.device_info_status_label.setText(f"Re-check unavailable: {message}")
+        self.device_info_status_label.setVisible(True)
 
     def _on_test_connection_clicked(self) -> None:
         if self._connect_thread is not None:

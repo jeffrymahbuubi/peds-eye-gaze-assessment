@@ -27,6 +27,7 @@ import socket
 import threading
 import time
 from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..data.schema import GazeSample
@@ -97,6 +98,107 @@ def _to_float(attrs: dict[str, str], key: str) -> float | None:
 
 def _to_bool(attrs: dict[str, str], key: str) -> bool:
     return attrs.get(key, "0") == "1"
+
+
+def _parse_int(raw: str | None) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+@dataclass(frozen=True)
+class DeviceInfo:
+    """Static device identity read once on connect (SPEC-ui-setup-task-
+    selection.md S23) -- every field is optional since each is queried
+    independently and a slow/missing reply must not fail the connection."""
+
+    model: str | None = None
+    bus: str | None = None
+    rate_hz: int | None = None
+    serial: str | None = None
+    camera_width: int | None = None
+    camera_height: int | None = None
+    api_version: str | None = None
+
+
+_DEVICE_INFO_QUERY_IDS = ("PRODUCT_ID", "SERIAL_ID", "CAMERA_SIZE", "API_ID")
+_DEVICE_INFO_TIMEOUT_S = 0.5
+
+
+def _query_device_info(sock: socket.socket) -> DeviceInfo:
+    """Query PRODUCT_ID/SERIAL_ID/CAMERA_SIZE/API_ID over an already-open
+    socket, for the Setup page's post-connect device-info line.
+
+    Must run before :meth:`GazepointClient.start_streaming` spawns the
+    background reader thread -- both would otherwise call ``recv()`` on the
+    same socket concurrently (the same ordering constraint documented on
+    ``Calibration.run()`` in ``engine/calibration.py``). Any field whose ACK
+    doesn't arrive within the deadline is left ``None`` rather than raising
+    or blocking the connection -- only a real socket failure (``OSError``,
+    not a timeout) propagates to the caller.
+    """
+    original_timeout = sock.gettimeout()
+    sock.settimeout(0.2)
+    pending = set(_DEVICE_INFO_QUERY_IDS)
+    fields: dict[str, dict[str, str]] = {}
+    buffer = ""
+    try:
+        for query_id in _DEVICE_INFO_QUERY_IDS:
+            sock.sendall(f'<GET ID="{query_id}" />\r\n'.encode("ascii"))
+        deadline = time.monotonic() + _DEVICE_INFO_TIMEOUT_S
+        while pending and time.monotonic() < deadline:
+            try:
+                chunk = sock.recv(4096)
+            except TimeoutError:
+                continue
+            if not chunk:
+                break
+            buffer += chunk.decode("ascii", errors="ignore")
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                parsed = parse_attrs(line)
+                if parsed is None:
+                    continue
+                tag, attrs = parsed
+                query_id = attrs.get("ID")
+                if tag == "ACK" and query_id in pending:
+                    fields[query_id] = attrs
+                    pending.discard(query_id)
+    finally:
+        sock.settimeout(original_timeout)
+
+    product = fields.get("PRODUCT_ID", {})
+    serial = fields.get("SERIAL_ID", {})
+    camera = fields.get("CAMERA_SIZE", {})
+    api = fields.get("API_ID", {})
+    return DeviceInfo(
+        model=_clean_placeholder(product.get("VALUE"), placeholders=("NONE",)),
+        bus=product.get("BUS") or None,
+        rate_hz=_parse_int(product.get("RATE")),
+        serial=_clean_placeholder(serial.get("VALUE"), placeholders=("0",)),
+        camera_width=_parse_int(camera.get("WIDTH")),
+        camera_height=_parse_int(camera.get("HEIGHT")),
+        api_version=api.get("VALUE") or None,
+    )
+
+
+def _clean_placeholder(raw: str | None, *, placeholders: tuple[str, ...]) -> str | None:
+    """Treat a known placeholder/sentinel reply (e.g. a real GP3HD returning
+    ``PRODUCT_ID.VALUE="NONE"`` or ``SERIAL_ID.VALUE="0"`` when it hasn't
+    fully identified the tracker yet) the same as an unanswered field --
+    ``None``, not a distracting literal string in the UI (SPEC-ui-setup-
+    task-selection.md S24.1). ``BUS``/``RATE`` are never filtered this way:
+    unlike model/serial they're informative even when they indicate a real
+    problem (see S24.3's warning banner).
+    """
+    if raw is None or raw == "":
+        return None
+    if raw.strip().upper() in placeholders:
+        return None
+    return raw
 
 
 def rec_to_sample(attrs: dict[str, str], t_ns: int) -> GazeSample:
@@ -246,6 +348,7 @@ class GazepointClient:
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._latest: GazeSample | None = None
+        self._device_info: DeviceInfo | None = None
         # Replay mode has no socket to lose, so it's always "connected".
         self._connected = replay_path is not None
 
@@ -268,6 +371,7 @@ class GazepointClient:
         sock = socket.create_connection((self._host, self._port), timeout=5.0)
         try:
             sock.settimeout(1.0)
+            self._device_info = _query_device_info(sock)
             for key, enabled in self._enable.items():
                 record_id = _ENABLE_RECORDS.get(key)
                 if record_id and enabled:
@@ -291,6 +395,41 @@ class GazepointClient:
         look identical to a live, valid gaze that just isn't moving.
         """
         return self._connected
+
+    @property
+    def device_info(self) -> DeviceInfo | None:
+        """Static device identity read during the most recent successful
+        connect (``None`` in replay mode, or before any connect attempt)."""
+        return self._device_info
+
+    def is_streaming(self) -> bool:
+        """Whether the background reader thread has ever been started for
+        this client (never reset back to False by a later ``stop()`` --
+        this asks "is/was a reader thread ever running", the fact
+        :meth:`refresh_device_info` needs, not "is it running right now").
+        """
+        return self._thread is not None
+
+    def refresh_device_info(self) -> DeviceInfo:
+        """Re-query device info over the existing live connection (SPEC-
+        ui-setup-task-selection.md S24.2) -- lets the Setup page recover
+        from a one-time race at connect time without a full reconnect.
+
+        Raises ``RuntimeError`` if not connected, in replay mode, or if
+        :meth:`start_streaming` has ever been called: once the background
+        reader thread is running, a second, direct ``recv()`` here would
+        race it for the same bytes -- the same hazard documented on
+        :meth:`_open_socket`/``Calibration.run()`` for the original,
+        connect-time query.
+        """
+        if self._replay_path is not None:
+            raise RuntimeError("refresh_device_info() is not meaningful in replay mode")
+        if self._sock is None:
+            raise RuntimeError("refresh_device_info() requires an open connection")
+        if self.is_streaming():
+            raise RuntimeError("refresh_device_info() cannot run while streaming is active")
+        self._device_info = _query_device_info(self._sock)
+        return self._device_info
 
     @property
     def is_live(self) -> bool:

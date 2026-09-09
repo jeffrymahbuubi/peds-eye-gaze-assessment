@@ -31,6 +31,7 @@ from .engine.calibration import (
 from .engine.config import CONFIG_ROOT, deep_merge, load_task_config, load_theme
 from .engine.feedback import FeedbackBus
 from .engine.latency import LatencyTracker
+from .engine.sample_rate import SampleRateTracker
 from .engine.session_naming import next_session_id
 from .engine.task_runner import build_task
 from .inputs.base import Pointer
@@ -322,6 +323,7 @@ class AssessmentApp:
         # against a live tracker, never a replay fixture (see
         # GazepointClient.is_live).
         self._latency = LatencyTracker(window_size=int(self.config.get("app", {}).get("target_fps", 60)))
+        self._device_rate = SampleRateTracker()
 
         fps = int(self.config.get("app", {}).get("target_fps", 60))
         self.timer = QTimer()
@@ -426,6 +428,7 @@ class AssessmentApp:
             self.recorder.record_gaze(sample)
         if sample is not None and self.client.is_live:
             self._record_latency(sample.t_ns, t_ns)
+            self._device_rate.update(sample.t_ns, t_ns)
 
         result = self.task.update(t_ns, pointer)
 
@@ -457,6 +460,7 @@ class AssessmentApp:
             connected=self.client.is_connected(),
             hits=hits,
             timeouts=timeouts,
+            device_rate_hz=self._device_rate.rate_hz if self.client.is_live else None,
         )
 
         if self.task.is_done:

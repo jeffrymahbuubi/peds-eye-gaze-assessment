@@ -76,6 +76,13 @@ the scrollbar itself (slim rounded translucent-teal thumb, no native
 arrow buttons) to match the app, live-validated.** **§22-§22.6
 committed and pushed to `origin/main` as `ca5dec4`**, after a
 `/spec-memory-audit` pass that corrected a stale pytest-count claim.
+**§23: a device-info line on the Setup connect flow (model, sampling
+rate, USB bus, serial, camera resolution, API version) — design decided
+via `AskUserQuestion`, IMPLEMENTED and live-validated (§23.1).**
+**§24: real-device audit follow-up — NONE/0 placeholder filtering, a
+Re-check action, a USB2/60Hz warning banner, and a real device
+sample-rate meter distinct from the render-loop FPS — all IMPLEMENTED
+and live-validated (§24.5).**
 **Created:** 2026-09-08
 **Last updated:** 2026-09-09
 
@@ -2521,6 +2528,359 @@ the `QScrollBar` rule block). **Left uncommitted**, alongside §22/§22.5
 — nothing from this whole scroll-fix line of work (§22-§22.6) is on
 `origin/main` yet (last commit remains `743a0bc`).
 
+## 23. Device-info line on successful connect (plan)
+
+User feedback via `/sparc:orchestrator`: "I'd like to have a small update
+when user Connecting to the Device... the API exposed some information
+when connected to the device, like Rate (FPS), Device ID like Serial/
+Product or other information... relevant when a connection to the real
+device is established successfully." Asked explicitly to be shown the
+options and given a chance to decide before any SPEC update or
+implementation.
+
+**Researched first, against the verified API corpus, not assumed.**
+`docs/gazepoints/synthesis/api-reference.md`'s configuration-commands
+table lists five read-only fields queryable via `<GET ID="..." />` +
+parsing the matching `<ACK ID="..." .../>` reply:
+
+| Field | Values | Included? |
+|---|---|---|
+| `PRODUCT_ID` | `VALUE` (`GP3`/`GP3HD`), `BUS` (`USB2`/`USB3`), `RATE` (`60`/`150`) | Yes |
+| `SERIAL_ID` | `VALUE` — hardware serial number | Yes |
+| `CAMERA_SIZE` | `WIDTH`, `HEIGHT` — sensor resolution, e.g. 752×480 | Yes |
+| `API_ID` | `VALUE` — OpenGaze API version | Yes |
+| `COMPANY_ID` | `VALUE` — always `"GAZEPOINT"` | No — constant, not useful |
+
+**Real gap confirmed in the current client before proposing a fix:**
+`GazepointClient` (`src/inputs/gazepoint_client.py`) only ever *sends*
+`SET ENABLE_SEND_*`/`ENABLE_SEND_DATA` commands in `_open_socket()` — it
+has no code path that sends a `GET` and reads back the `ACK`. The
+request/response pattern already exists one file over, in
+`Calibration.run()` (`src/engine/calibration.py`): `sendall` a
+`<GET ID="..." />`, poll `recv()` for the matching `<ACK ID="..." .../>`
+line, parse with the shared `parse_attrs` helper — and that class's own
+docstring already documents *why* this has to happen before the
+background reader thread starts consuming the same socket (its `recv()`
+would otherwise race the reader thread's `recv()` for the same bytes).
+
+**Presented to the user via `AskUserQuestion` before writing this
+section**, two questions:
+
+1. *Field set* — "Model + Rate + Serial" (recommended minimal) vs. "Full
+   technical set" (adds USB bus, camera resolution, API version) vs.
+   "Rate only". **User chose Full technical set** — all five fields
+   above.
+2. *Placement* — a new muted line under the existing
+   `tracker_status_label` status text (recommended) vs. appending the
+   info inline into that same label. **User chose the new line under
+   status.**
+
+**Design decided from those answers:**
+
+- `GazepointClient._open_socket()` sends `<GET ID="PRODUCT_ID" />`,
+  `<GET ID="SERIAL_ID" />`, `<GET ID="CAMERA_SIZE" />`, and
+  `<GET ID="API_ID" />` synchronously, right after the existing
+  `ENABLE_SEND_*` subscription calls and before `ENABLE_SEND_DATA`/before
+  `start_streaming()` spawns the background reader thread — same
+  race-avoidance reasoning as `Calibration.run()`. Each `GET` is followed
+  by polling `recv()` for its matching `ACK` line, parsed via the
+  existing `parse_attrs` helper (imported the same way
+  `calibration.py` already imports it).
+- **Replay mode is naturally skipped** — `connect()` already returns
+  before calling `_open_socket()` when `replay_path` is set, so no
+  device-info query path is needed there at all.
+- A new small data holder, e.g. `DeviceInfo` (model, bus, rate_hz,
+  serial, camera_width, camera_height, api_version — every field
+  `Optional`), surfaced off `GazepointClient` as a `device_info`
+  property. **Any individual `GET` that fails or times out degrades
+  gracefully** — that one field stays `None`, nothing raises, and the
+  connection itself never fails because a device-info query didn't come
+  back.
+- `setup_page.py`: a new second muted `QLabel` (e.g.
+  `device_info_label`) placed directly under `tracker_status_label`,
+  populated in `_on_connect_succeeded` once the info is available off the
+  connect-worker thread. Two lines to avoid one very long line — e.g.
+  `"Device: GP3HD · 150 Hz · USB3 · SN 8842211"` then
+  `"Camera: 752×480 · API v2.0"` — **exact wording/line-split is an
+  implementation detail to confirm against a live screenshot, not locked
+  by this plan.** Cleared/hidden on disconnect, on a failed connection,
+  and before a fresh `Connect` click — the same lifecycle
+  `tracker_status_label`'s own text already follows.
+
+**This section is a PLAN only.** No code has been written yet —
+implementation follows immediately after this SPEC update, in the same
+session. A future session should not read §23 as done; check for a
+follow-on `§23.x` (or this section being marked implemented/committed)
+before assuming otherwise.
+
+### 23.1 Implemented and live-validated
+
+Built exactly the §23 plan, no deviations. `src/inputs/gazepoint_client.py`
+gained a frozen `DeviceInfo` dataclass (`model`, `bus`, `rate_hz`, `serial`,
+`camera_width`, `camera_height`, `api_version`, all `Optional`) and a
+module-level `_query_device_info(sock)` helper: sends the four `GET`s,
+polls `recv()` against a 0.5s deadline (short — the real device answers in
+milliseconds per the already-measured 3.26ms mean latency, and a fake/
+non-replying server in tests shouldn't cost more than necessary), parses
+replies with the existing `parse_attrs`, and leaves any field `None` on a
+timeout rather than raising. `GazepointClient._open_socket()` calls it
+right after opening the socket and before the `ENABLE_SEND_*` subscription
+calls; a new `device_info` property exposes the result (`None` before any
+connect, and in replay mode, since `connect()` already short-circuits
+before `_open_socket()` there). `setup_page.py` gained a second muted
+`QLabel` (`device_info_label`) under `tracker_status_label`, populated by
+a new `_format_device_info()` helper in `_on_connect_succeeded` and
+hidden/cleared in `_on_connect_clicked` (before a fresh attempt) and
+`_on_connect_failed`.
+
+**Tests:** 4 new cases in `tests/test_gazepoint_client.py` — device info
+populated correctly from a fake server's `GET`/`ACK` exchange, fields stay
+`None` (not raising, not blocking `is_connected()`) when a fake server
+never replies, `device_info is None` before any connect, and `None` in
+replay mode. The shared `FakeGazepointServer` test fixture gained
+`GET`-reply support (a new `reply_to_device_info_queries` flag, default
+on) so it now answers the same way a real device would; a
+`silent_fake_server` fixture variant covers the never-replies path. Full
+pytest suite: **129 passed, 1 pre-existing failure, 130 collected total**
+(the long-known `test_config_merges_task_over_default` `target_fps`
+60-vs-150 drift — see
+[[peds-eye-gaze-assessment-config-skip-worktree-2026-09-03]]), no
+regressions.
+
+**Live-validated against `tools/fake_gazepoint_server.py`**, which also
+gained canned `GET`-reply support for the same four fields (matching the
+test fixture's values), run on port `4246` (`4242`/`4243` both already
+bound locally by the real Gazepoint Control app + a leftover listener —
+same recurring trap as
+[[peds-eye-gaze-assessment-calibration-crash-2026-09-09]]). Via qt-mcp,
+maximized first: Connect → the new line rendered exactly as designed,
+`"Device: GP3HD · 150 Hz · USB3 · SN FAKE-0001"` /
+`"Camera: 752×480 · API v2.0"`, directly under `"Connected."` — confirmed
+both via `qt_find_widget`'s returned text and a real screenshot. Then
+pointed Control Port at an unused port (`4999`, nothing listening) and
+clicked Connect again: `tracker_status_label` correctly showed
+`"Connection failed: ..."` and the device-info label disappeared entirely
+(`qt_find_widget` found zero matches) — the clear-on-failed-attempt path
+works as designed. QA processes cleaned up; confirmed via `netstat` no
+leftover listeners on `4246`/`9142` afterward.
+
+**Files changed:** `src/inputs/gazepoint_client.py`, `src/ui/
+setup_page.py`, `tests/test_gazepoint_client.py`, `tools/
+fake_gazepoint_server.py`, this SPEC doc. **Left uncommitted**, matching
+this project's ask-before-commit pattern.
+
+## 24. Real-device audit follow-up: placeholder values, a re-check action, a rate warning, and a real device-rate meter (plan)
+
+User audited §23.1 against the real GP3HD and reported the device-info
+line reading `Device: NONE 60Hz USB2 SN0`, asked what governs the
+device's FPS (wanting 150 Hz "from the get-go"), called `NONE`
+distracting, and separately noticed the Operator Panel's `FPS:` readout
+during a task run sits around 160 — asking whether that's a bug.
+Explicitly scoped this round to investigation + a written proposal, no
+code — recorded in the prior message's report, not duplicated here.
+This section is that proposal turned into a plan, after the user picked
+which of 5 proposed fixes to build.
+
+**Investigation findings (grounding for the plan below):**
+
+- Ruled out a stale `configs/local_state.json` pointing at a leftover
+  test stub (the same bug class as
+  [[peds-eye-gaze-assessment-calibration-crash-2026-09-09]]) — checked
+  directly: it correctly targets `26.113.49.235:4242`, and only the real
+  `Gazepoint.exe` process is listening there.
+- `BUS=USB2 RATE=60` is a real, meaningful reading, not a bug — the
+  verified corpus (`docs/gazepoints/synthesis/gp3-hd-specifications.md`,
+  "The 150 Hz trap") documents this exact symptom as the data cable being
+  on a USB 2.0 port. `RATE`/`BUS` are read-only over the API (confirmed
+  against the full command table) — no `SET` verb exists for either, so
+  "prefer 150 Hz" cannot be a software fix, only a cabling one.
+- `VALUE="NONE"` / `SERIAL_ID VALUE="0"` look like placeholder/unset
+  defaults, best explained (not provable) as a timing race — §23's
+  design queries `PRODUCT_ID`/`SERIAL_ID` synchronously, immediately on
+  socket-open, which can run ahead of Gazepoint Control's own internal
+  camera-identification step. Asked the user to cross-check against
+  Control's own status bar at the same moment; Control's UI doesn't
+  surface model/serial at all (only the USB bus type), so this can't be
+  confirmed or ruled out that way — a re-check action (below) is the
+  practical alternative.
+- The Operator Panel's `FPS:` label (`operator_panel.py:162`,
+  `app.py:465-470`) counts the app's own `QTimer` poll/render-loop ticks
+  — its interval comes from `configs/default.yaml`'s `app.target_fps`
+  (currently `150` in this machine's local, gitignored copy per
+  [[peds-eye-gaze-assessment-config-skip-worktree-2026-09-03]]), **not**
+  the tracker's real incoming-sample rate. QTimer overshoots its nominal
+  interval slightly under light load, which is why it reads ~160 rather
+  than exactly 150 — expected, harmless jitter, unrelated to the device.
+  The real problem: this readout can't reveal a USB2/60Hz tracker at
+  all, since it never looks at actual `REC` arrival cadence — when the
+  poll loop runs faster than the device delivers new samples, most poll
+  ticks just re-read and re-paint the same stale sample.
+
+**User picked 4 of the 5 proposed fixes** (via `AskUserQuestion`);
+explicitly deferred auto-deriving `target_fps` from the device's own
+`RATE` (the 5th, most invasive proposal — touches timing, latency-window
+sizing, and the replay/headless fallback path) for a future round.
+
+### 24.1 Filter `NONE`/`0` placeholder values
+
+`_query_device_info()` (`src/inputs/gazepoint_client.py`) treats a
+literal `PRODUCT_ID.VALUE` of `"NONE"` and a `SERIAL_ID.VALUE` of `"0"`
+as unavailable, same as a field that timed out — normalized at the data
+layer (not the UI) so `DeviceInfo.model`/`.serial` are already `None`
+in these cases, consistent with how a timed-out query already produces
+`None`. `BUS`/`RATE` are left untouched — they're informative even when
+they indicate a problem (that's exactly what §24.3's warning banner
+uses).
+
+### 24.2 "Re-check" action on Setup
+
+Adds a way to re-query device info without a full reconnect, so a
+one-time race (§24 investigation) doesn't require reconnecting to
+recover from.
+
+**Concurrency constraint, found while designing this:** `_query_device_info`
+reads directly off the raw socket. `SetupPage` never calls
+`GazepointClient.start_streaming()` itself (confirmed via `grep` — only
+`app.py:224`'s task-run path does, reusing the same client instance
+across the session per §3.1.5's embed-in-place design), so the socket is
+safe to read directly while Setup is showing *and no task has run yet
+this session*. Once a task has run, the background reader thread is
+permanently active (the client is never re-created or `stop()`-ed
+between runs) — a second, direct `recv()` at that point would race it
+for the same bytes, the exact hazard `Calibration.run()`'s own docstring
+already documents for `_open_socket()`.
+
+**Design:** `GazepointClient` gains `is_streaming()`
+(`self._thread is not None`) and `refresh_device_info()`, which raises
+`RuntimeError` if not connected, in replay mode, or if `is_streaming()`
+— enforcing the constraint inside the client itself (not just as a UI
+gate) as the actual safety guarantee. `SetupPage` adds a small "Re-check"
+`QPushButton` next to `device_info_label`, driving a new background
+`_DeviceInfoRefreshThread` (same `QThread` pattern as `_ConnectThread`).
+On success, the same rendering path §23 already built
+(`_format_device_info` + the new §24.3 warning check, factored into one
+shared `_apply_device_info()` method used by both the connect-succeeded
+and recheck-succeeded handlers) re-populates the label. On failure
+(including the `RuntimeError` case, e.g. clicked after a task has
+already run this session), a small transient status note explains why,
+without touching the last-known-good info still displayed above it.
+
+### 24.3 USB2/60 Hz warning banner
+
+A new `wtmhAlertWarning` frame (matching the existing calibration-alert/
+device-notice visual pattern), shown whenever `device_info.rate_hz is
+not None and device_info.rate_hz < 150` — sourced from `PRODUCT_ID.RATE`
+alone, which is never a false alarm (a rate genuinely below 150 always
+means the tracker isn't at full HD rate, regardless of exact model).
+Hidden when `rate_hz` is `None` (query failed/unavailable) — never shown
+without real evidence. Text names the GP3 HD and the USB 3.0 fix
+directly, mirroring the corpus's own "150 Hz trap" wording, e.g.:
+*"Tracker is running at 60 Hz over USB2. The GP3 HD only reaches 150 Hz
+on a USB 3.0 connection — move the data cable to a USB 3.0 port and
+reconnect for full-rate data."* Updated by the same `_apply_device_info()`
+helper as §24.2, so both a fresh connect and a re-check keep it current.
+
+### 24.4 Real device sample-rate meter
+
+Scoped to the task-run Operator Panel HUD specifically, since that's
+where the user's own question arose — **not** added to Setup, since
+Setup deliberately stays non-streaming for §24.2's safety property above.
+
+New `SampleRateTracker` (`src/engine/sample_rate.py`, parallel in shape
+to the existing `LatencyTracker` in `src/engine/latency.py`, but a
+1-second rolling window rather than a sample-count window, since "Hz" is
+the natural unit here): counts a *new* sample only when a poll's
+`GazeSample.t_ns` differs from the previous poll's — `t_ns` is stamped
+once per socket receive event by `GazepointClient._run_socket`, not
+regenerated by `latest()`, so repeated polls of the same stale sample
+correctly contribute nothing. `app.py._tick()` feeds it the same
+`(sample.t_ns, t_ns)` pair `_record_latency` already receives, gated the
+same way (`sample is not None and self.client.is_live` — meaningless
+against a replay fixture's virtual clock). `OperatorPanel.update_status()`
+gains a `device_rate_hz: float | None` parameter and a new label
+directly under the existing `FPS:` line — `"Device: -- Hz"` before the
+first window completes or in replay mode, else the measured rate. The
+existing `FPS:` label is left as-is (still useful as a "is the render
+loop keeping up" signal) — the new label is additive, not a replacement,
+so a future reader isn't left wondering which one is "real."
+
+**Plan only — no code written yet.** Implementation follows immediately
+in this same session.
+
+### 24.5 Implemented and live-validated
+
+Built exactly the §24.1-§24.4 plan, no deviations.
+
+- **§24.1:** `_clean_placeholder()` in `src/inputs/gazepoint_client.py`,
+  applied to `PRODUCT_ID.VALUE` (`"NONE"`) and `SERIAL_ID.VALUE` (`"0"`)
+  inside `_query_device_info()`.
+- **§24.2:** `GazepointClient.is_streaming()` + `refresh_device_info()`
+  (raising `RuntimeError` for replay mode / not connected / already
+  streaming); `setup_page.py` gained `_DeviceInfoRefreshThread`, a
+  "Re-check" button next to `device_info_label`, a new
+  `device_info_status_label` for transient re-check status, and a shared
+  `_apply_device_info()` helper now used by both the connect-succeeded
+  and recheck-succeeded paths.
+- **§24.3:** `_format_rate_warning()` in `setup_page.py` + a new
+  `rate_warning_alert` (`wtmhAlertWarning`) frame, updated by the same
+  `_apply_device_info()` helper.
+- **§24.4:** new `SampleRateTracker` (`src/engine/sample_rate.py`,
+  1-second rolling window, counts a *new* sample only when
+  `GazeSample.t_ns` changes between polls); wired into `app.py._tick()`
+  alongside the existing latency tracking (same `is_live` gate); new
+  `device_rate_hz` parameter on `OperatorPanel.update_status()` and a
+  `device_rate_label` ("Device: -- Hz") placed directly under the
+  existing `FPS:` label — additive, not a replacement.
+
+**Tests:** 4 new cases in `tests/test_sample_rate.py` (rate `None` before
+the first window, repeated-timestamp polls correctly contribute zero,
+correct Hz computed from distinct timestamps over a window, window resets
+after completing). Full pytest suite: **133 passed, 1 pre-existing
+failure, 134 collected total** (the long-known `target_fps` 60-vs-150
+drift — see
+[[peds-eye-gaze-assessment-config-skip-worktree-2026-09-03]]), no
+regressions.
+
+**Live-validated via qt-mcp**, maximized, against `tools/
+fake_gazepoint_server.py` on port `4247` (`4242`/`4243` both already
+bound locally by the real Gazepoint Control app). The fake server was
+extended for this round: its canned `PRODUCT_ID`/`SERIAL_ID` replies now
+deliberately reproduce the real audit's exact reported values
+(`VALUE="NONE"`, `BUS="USB2"`, `RATE="60"`, `SERIAL_ID VALUE="0"`) so it
+doubles as a fixture for §24.1/§24.3, and it now streams a fixed-position
+`REC` at a real 20 Hz once `ENABLE_SEND_DATA` is set, for §24.4.
+
+Confirmed live: Connect rendered `"Device: 60 Hz · USB2"` /
+`"Camera: 752×480 · API v2.8"` — `NONE` and `SN 0` correctly absent
+(§24.1) — with the rate-warning banner showing the exact designed text
+(§24.3), both via `qt_find_widget` text and a real screenshot. Clicking
+Re-check (§24.2) re-populated the same info without error (client not
+yet streaming at that point in the flow, so the safe path). Then ran a
+full Connect → Subject ID/Sex → Do Calibration → Continue to Tasks → Run
+(`click_static`) flow: the Operator Panel showed **`FPS: 167` next to
+`Device: 16 Hz`** on first read, settling to **`FPS: 19` / `Device: 15
+Hz`** shortly after — concretely demonstrating the exact mismatch this
+work exists to reveal (the poll/render rate and the tracker's real
+sample-delivery rate are genuinely different numbers, not the same stat
+under two labels). The observed Device Hz tracked below the fake
+server's configured 20 Hz because, once the render loop itself dropped
+to ~19 fps under this task's live-recording workload, the poll rate
+became the binding constraint on how many *distinct* samples this
+tracker can ever observe per second — an inherent, expected property of
+sampling-by-polling, not a bug in `SampleRateTracker`. The render-loop
+slowdown itself (167→19 fps once a task actually started recording) is a
+pre-existing characteristic of this QA harness, untouched by this
+change, and out of scope for this round. Ended the task cleanly via "End
+task"; QA processes and the scratch session directory
+(`sessions/2026-09-09_QA24DEMO_click_static_run1`, gitignored) were
+cleaned up afterward, confirmed via `netstat`.
+
+**Files changed:** `src/inputs/gazepoint_client.py`, `src/ui/
+setup_page.py`, `src/engine/sample_rate.py` (new), `src/app.py`, `src/ui/
+operator_panel.py`, `tests/test_sample_rate.py` (new), `tools/
+fake_gazepoint_server.py`, this SPEC doc. **Left uncommitted**, matching
+this project's ask-before-commit pattern.
+
 ## Log
 
 - **2026-09-08** — Session opened via `/sparc:orchestrator`; user described
@@ -3183,3 +3543,78 @@ the `QScrollBar` rule block). **Left uncommitted**, alongside §22/§22.5
   empty, accidentally-created stray file from this session's own shell
   usage was found alongside the real changes and deleted before staging
   — never part of any commit.)
+
+- **2026-09-09, later — §23: device-info-on-connect feature requested,
+  researched, and planned, via `/sparc:orchestrator`.** User asked for a
+  small operator-facing update on a successful device connection (Rate/
+  FPS, Device ID/Serial, "or other information") and explicitly asked to
+  be shown the options before any SPEC change or code. Checked the
+  verified `docs/gazepoints/synthesis/api-reference.md` corpus (not
+  assumed) and found five read-only `GET`-able fields (`PRODUCT_ID`,
+  `SERIAL_ID`, `CAMERA_SIZE`, `API_ID`, `COMPANY_ID` — the last excluded
+  as a useless constant), and confirmed `GazepointClient` currently has
+  no `GET`/`ACK` request-response code path at all (only `Calibration.run()`
+  has that pattern today). Reported this to the user, then resolved the
+  two open design questions via `AskUserQuestion`: field set (user chose
+  the full technical set — all four useful fields) and placement (user
+  chose a new muted line under the existing tracker-status label, not
+  appended inline). Recorded the resulting plan in §23. **No code written
+  yet** — implementation is the very next step this same session.
+
+- **2026-09-09, later — §23.1: implemented and live-validated, via
+  `/sparc:orchestrator`.** Built the §23 plan exactly: a `DeviceInfo`
+  dataclass + `_query_device_info()` GET/ACK helper in
+  `src/inputs/gazepoint_client.py`, called from `_open_socket()` before
+  the reader thread starts; a new `device_info_label` under
+  `tracker_status_label` in `setup_page.py`, populated on connect and
+  cleared on a fresh attempt/failure. 4 new tests added (including a
+  `FakeGazepointServer` GET-reply upgrade and a never-replies variant);
+  full pytest suite: 129 passed, 1 pre-existing failure, 130 collected
+  total, no regressions. Live-validated via qt-mcp against
+  `tools/fake_gazepoint_server.py` (also upgraded to answer the same
+  queries) on port 4246: the device-info line rendered correctly
+  (`"Device: GP3HD · 150 Hz · USB3 · SN FAKE-0001"` /
+  `"Camera: 752×480 · API v2.0"`) under "Connected.", confirmed via both
+  widget text and a real screenshot; verified it also disappears
+  correctly on a failed connection attempt. QA processes cleaned up,
+  confirmed via `netstat`. **Left uncommitted**, per this project's
+  ask-before-commit pattern.
+
+- **2026-09-09, later — §24: real-device audit found NONE/60Hz/USB2/SN0,
+  investigated, and turned into 4 implemented fixes, via
+  `/sparc:orchestrator`.** User audited §23.1 against the real GP3HD and
+  reported `Device: NONE 60Hz USB2 SN0`, asked what governs the device's
+  FPS (preferring 150 Hz "from the get-go"), called `NONE` distracting,
+  and separately asked whether the Operator Panel's ~160 FPS readout
+  during a task run was a bug. First round, explicitly scoped to
+  investigation only (no code): ruled out a stale `local_state.json`
+  (checked directly — correct), confirmed `BUS=USB2 RATE=60` is a real
+  hardware/cabling finding per the verified corpus's "150 Hz trap" (not
+  software-fixable, `RATE`/`BUS` are read-only over the API), traced the
+  `NONE`/`SN 0` values to a plausible connect-time query race (unresolved
+  — Gazepoint Control's own UI doesn't expose model/serial to cross-check
+  against), and traced the Operator Panel's `FPS:` label to the app's own
+  `QTimer` poll-loop rate, not the tracker's real sample-delivery rate.
+  Reported 5 proposed fixes; user picked 4 via `AskUserQuestion`
+  (deferred auto-deriving `target_fps` from the device for a future
+  round). Recorded the investigation + plan as §24-§24.4.
+
+  Implemented and live-validated all 4 same session (§24.5): placeholder
+  filtering (`_clean_placeholder`), a "Re-check" action
+  (`GazepointClient.is_streaming()`/`refresh_device_info()` + a new
+  Setup button, gated against racing the background reader thread once
+  streaming has started), a USB2/60Hz warning banner, and a new
+  `SampleRateTracker` feeding a `Device: -- Hz` label in the Operator
+  Panel, distinct from the existing `FPS:` label. 4 new tests
+  (`tests/test_sample_rate.py`); full pytest suite: 133 passed, 1
+  pre-existing failure, 134 collected total, no regressions. Live via
+  qt-mcp against an extended `tools/fake_gazepoint_server.py` (now
+  reproducing the real audit's exact NONE/USB2/60Hz/SN0 values, and
+  streaming a real 20 Hz REC once `ENABLE_SEND_DATA` is set): confirmed
+  `NONE`/`SN 0` correctly absent, the warning banner's exact text, a
+  working Re-check, and — running a full task — `FPS: 167` next to
+  `Device: 16 Hz` settling to `FPS: 19` / `Device: 15 Hz`, concretely
+  demonstrating the two are genuinely different measurements. QA
+  processes and the scratch session directory cleaned up, confirmed via
+  `netstat`. **Left uncommitted**, per this project's ask-before-commit
+  pattern.
