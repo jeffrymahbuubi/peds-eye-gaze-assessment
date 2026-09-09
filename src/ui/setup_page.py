@@ -22,16 +22,25 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from ..engine.calibration import Calibration, CalibrationFileError, CalibrationResult, load_calibration_result
+from ..engine.calibration import (
+    Calibration,
+    CalibrationFileError,
+    CalibrationResult,
+    load_calibration_result,
+    per_point_errors_px,
+)
 from ..engine.config import load_default
 from ..engine.local_state import load_local_state, save_local_state
 from ..inputs.gazepoint_client import GazepointClient
@@ -335,6 +344,16 @@ class SetupPage(QWidget):
         self.load_calibration_button.setObjectName("wtmhGhost")
         self.load_calibration_button.clicked.connect(self._on_load_calibration_clicked)
         buttons.addWidget(self.load_calibration_button)
+
+        # SPEC-result-logic.md §8.1: disabled until a calibration result
+        # exists, same gating as Continue to Tasks -- toggles the inline
+        # per-point breakdown below, not a modal (a modal would block the
+        # qt-mcp automation probe, see setup.md's own design note).
+        self.view_details_button = QPushButton("View Calibration Details")
+        self.view_details_button.setObjectName("wtmhGhost")
+        self.view_details_button.setEnabled(False)
+        self.view_details_button.clicked.connect(self._on_toggle_details_clicked)
+        buttons.addWidget(self.view_details_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
 
@@ -348,7 +367,39 @@ class SetupPage(QWidget):
         self.calibration_alert_label.setWordWrap(True)
         alert_layout.addWidget(self.calibration_alert_label)
         layout.addWidget(self.calibration_alert)
+
+        layout.addWidget(self._build_calibration_details_section())
         return card
+
+    def _build_calibration_details_section(self) -> QWidget:
+        self.calibration_details_section = QWidget()
+        self.calibration_details_section.setVisible(False)
+        details_layout = QVBoxLayout(self.calibration_details_section)
+        details_layout.setContentsMargins(0, 4, 0, 0)
+        details_layout.setSpacing(6)
+
+        details_layout.addWidget(self._card_title("Per-point breakdown"))
+
+        self.calibration_details_table = QTableWidget(0, 7)
+        self.calibration_details_table.setObjectName("wtmhTable")
+        self.calibration_details_table.setHorizontalHeaderLabels(
+            ["Point", "Target (X, Y)", "Left eye (X, Y)", "Left valid", "Right eye (X, Y)", "Right valid", "Error (px)"]
+        )
+        self.calibration_details_table.verticalHeader().setVisible(False)
+        self.calibration_details_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.calibration_details_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        self.calibration_details_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        details_layout.addWidget(self.calibration_details_table)
+
+        self.calibration_details_empty_label = QLabel(
+            "Per-point breakdown not available for this calibration."
+        )
+        self.calibration_details_empty_label.setObjectName("wtmhMuted")
+        self.calibration_details_empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.calibration_details_empty_label.setVisible(False)
+        details_layout.addWidget(self.calibration_details_empty_label)
+
+        return self.calibration_details_section
 
     def _build_device_notice_card(self) -> QFrame:
         card, layout = self._card()
@@ -440,6 +491,7 @@ class SetupPage(QWidget):
         self._calibration_thread = None
         self.do_calibration_button.setEnabled(True)
         self._calibration_result = result
+        self.calibration_details_section.setVisible(False)  # collapse any stale prior breakdown
         if result.valid:
             error_txt = f"{result.mean_error_px:.0f}px" if result.mean_error_px is not None else "n/a"
             self._set_calibration_alert(
@@ -474,11 +526,61 @@ class SetupPage(QWidget):
             self._on_state_changed()
             return
         self._calibration_result = saved.result
+        self.calibration_details_section.setVisible(False)  # collapse any stale prior breakdown
         error_txt = f"{saved.result.mean_error_px:.0f}px" if saved.result.mean_error_px is not None else "n/a"
         self._set_calibration_alert(
             "success", f"Calibration loaded — {saved.result.n_points} points, mean error {error_txt}, valid."
         )
         self._on_state_changed()
+
+    def _on_toggle_details_clicked(self) -> None:
+        showing = not self.calibration_details_section.isVisible()
+        if showing:
+            self._populate_calibration_details()
+        self.calibration_details_section.setVisible(showing)
+
+    def _populate_calibration_details(self) -> None:
+        per_point = self._calibration_result.per_point if self._calibration_result else None
+        table = self.calibration_details_table
+        table.setRowCount(0)
+        if not per_point:
+            table.setVisible(False)
+            self.calibration_details_empty_label.setVisible(True)
+            return
+        table.setVisible(True)
+        self.calibration_details_empty_label.setVisible(False)
+
+        app_defaults = self._defaults.get("app", {})
+        screen_w = int(app_defaults.get("screen_width_px", 1920))
+        screen_h = int(app_defaults.get("screen_height_px", 1080))
+        rows = per_point_errors_px(per_point, screen_w, screen_h)
+
+        def _eye_cell(eye: dict | None) -> tuple[str, str]:
+            if eye is None:
+                return "—", "—"
+            return f"{eye['x']:.3f}, {eye['y']:.3f}", "Yes" if eye["valid"] else "No"
+
+        def _error_cell(left_err: float | None, right_err: float | None) -> str:
+            errs = [e for e in (left_err, right_err) if e is not None]
+            return f"{sum(errs) / len(errs):.1f}" if errs else "—"
+
+        table.setRowCount(len(rows))
+        for i, row in enumerate(rows):
+            left_pos, left_valid = _eye_cell(row["left"])
+            right_pos, right_valid = _eye_cell(row["right"])
+            values = [
+                str(row["point"]),
+                f"{row['target_x']:.3f}, {row['target_y']:.3f}",
+                left_pos,
+                left_valid,
+                right_pos,
+                right_valid,
+                _error_cell(row["left_error_px"], row["right_error_px"]),
+            ]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                table.setItem(i, col, item)
 
     def _set_calibration_alert(self, kind: str, text: str) -> None:
         object_names = {
@@ -523,4 +625,7 @@ class SetupPage(QWidget):
         self.continue_button.setToolTip(
             "Still needed: " + "; ".join(missing) + "." if missing else ""
         )
+        self.view_details_button.setEnabled(self._calibration_result is not None)
+        if self._calibration_result is None:
+            self.calibration_details_section.setVisible(False)
         self.stateChanged.emit()

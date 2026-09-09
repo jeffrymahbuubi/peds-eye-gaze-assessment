@@ -18,6 +18,7 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import QApplication, QDialog
 
+from .data.exporter import write_session_metrics
 from .data.recorder import SessionRecorder
 from .data.schema import SessionMetadata
 from .engine.calibration import (
@@ -276,6 +277,21 @@ class AssessmentApp:
         self.recorder = SessionRecorder(self.metadata, output_root=output_root)
         self.recorder.open()
 
+        # Human-readable session narrative (SPEC-result-logic.md §8.3's
+        # Session Log panel) -- connect()/calibrate() above both had to run
+        # before the recorder existed (calibration polls the socket directly
+        # and must not race the client's own reader thread against a log
+        # write), so their lines are recorded here, right after open(), not
+        # at the point each thing actually happened.
+        self.recorder.log(f"Session started: {session_id}")
+        if self._owns_client:
+            self.recorder.log("Connected to Gazepoint Control.")
+        if cal.valid:
+            error_txt = f"{cal.mean_error_px:.1f}px" if cal.mean_error_px is not None else "n/a"
+            self.recorder.log(f"Calibration measured — {cal.n_points} points, mean error {error_txt}, valid.")
+        else:
+            self.recorder.log(f"Calibration measured — {cal.n_points} points, invalid or unmeasured.")
+
         self.metadata.calibration_points = cal.n_points
         self.metadata.calibration_error_px = cal.mean_error_px
 
@@ -283,6 +299,11 @@ class AssessmentApp:
             self.canvas, self.theme, self.config.get("task", {}).get("feedback", {})
         )
         self.task = build_task(task_id, self.config, recorder=self.recorder, feedback=self.feedback)
+        app_cfg = self.config.get("app", {})
+        self.recorder.log(
+            f"Running {task_id} ({len(self.task.targets)} trials) at "
+            f"{int(app_cfg.get('screen_width_px', 1920))}x{int(app_cfg.get('screen_height_px', 1080))}."
+        )
         # Fetched once, not per frame -- the task's persistent on-screen
         # layout description (ported from resources/diki, see
         # SPEC-diki-design-audit.md S3.1). Default {"mode": "single"} for
@@ -465,8 +486,10 @@ class AssessmentApp:
             return  # End button + task.is_done can both fire in the same tick
         self._shutdown_done = True
         self.timer.stop()
-        self.recorder.write_trials(self.task.trials)
+        trials_path = self.recorder.write_trials(self.task.trials)
+        self.recorder.log(f"Wrote {len(self.task.trials)} trials -> {trials_path}")
         self.recorder.close()
+        write_session_metrics(self.recorder.session_dir)
         if self._owns_client:
             self.client.stop()
         if self._embedded:

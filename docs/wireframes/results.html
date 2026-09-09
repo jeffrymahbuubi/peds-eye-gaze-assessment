@@ -569,187 +569,143 @@ body.wmd-root {
 </nav>
 <div class="wmd-row wmd-right">
   <div class="wmd-grid-item">
-    <p class="wmd-paragraph">Session <span class="wmd-badge wmd-badge-primary">1</span>   Tracker <span class="wmd-badge wmd-badge-error">not connected</span>   Calibration <span class="wmd-badge wmd-badge-warning">none</span></p>
+    <p class="wmd-paragraph">Session <span class="wmd-badge wmd-badge-primary">1</span>   Tracker <span class="wmd-badge wmd-badge-success">connected</span>   Calibration <span class="wmd-badge wmd-badge-success">fresh</span></p>
   </div>
 </div>
-<h2 class="wmd-h2">1 · Setup</h2>
+<h2 class="wmd-h2">3 · Results</h2>
+<a href="./tasks.html" class="wmd-button">← Back to Tasks</a>
 <blockquote class="wmd-blockquote">
-  <div class="wmd-container-form-group">
-  <strong>Design note:</strong> status badges above reflect a fresh session (just opened, nothing connected yet). After Connect + a completed/loaded calibration, Tracker reads 
-  <span class="wmd-badge wmd-badge-success">connected</span>
-   and Calibration reads 
-  <span class="wmd-badge wmd-badge-success">fresh</span>
-   — see the Tasks page for that state.
-</div>
+  <p class="wmd-paragraph"><strong>Design note:</strong> reached by clicking <strong>Analyze</strong> on a completed task card in Tasks (<code>tasks.md</code>) — also a persistent top-level tab like Setup/Tasks, so it's reachable directly too. Always shows the <strong>most recent run</strong> for whichever task was last analyzed (re-runs stay on disk in their own <code>_run1</code>/<code>_run2</code>/... session folders, but only the latest is shown here in this phase — no run-picker yet). Modeled closely on <code>resources/images/diki-ui-3.png</code>'s table structure, restyled into this project's own WTMH Clinical Teal theme.</p>
 </blockquote>
 <hr class="wmd-separator" />
-<h3 class="wmd-h3">Subject &amp; Session Info</h3>
-<div class="wmd-container-form-group">
-  Subject ID
-  <input type="text" class="wmd-input" required style="width: 29ch; max-width: 29ch;" />
-</div>
-<div class="wmd-container-form-group">
-  Assessment Date
-  <input type="date" class="wmd-input" placeholder="2026-09-08" style="width: 18ch; max-width: 18ch;" />
-</div>
-<div class="wmd-container-form-group">
-  Sex
-  <select class="wmd-select">
-    <option value="" disabled selected>Select</option>
-    <option value="Female">Female</option>
-    <option value="Male">Male</option>
-    <option value="Other / Prefer not to say">Other / Prefer not to say</option>
-  </select>
-</div>
-<div class="wmd-container-form-group">
-  Notes
-  <input type="text" class="wmd-input" placeholder="Free-text notes for this session..." style="width: 41ch; max-width: 41ch;" />
-</div>
+<h3 class="wmd-h3">Static Click — 32 trials</h3>
+<p class="wmd-paragraph">Computed alongside the raw <code>trials.csv</code>/<code>gaze_stream.csv</code>/<code>events.jsonl</code> and written to <code>session_metrics.json</code> in this run's session folder.</p>
 <hr class="wmd-separator" />
-<h3 class="wmd-h3">Tracker Connection</h3>
-<div class="wmd-row">
-  <div class="wmd-grid-item">
-    <div class="wmd-container-form-group">
-  Control Address
-  <input type="text" class="wmd-input" placeholder="26.113.49.235" required style="width: 19ch; max-width: 19ch;" />
-</div>
-  </div>
-  <div class="wmd-grid-item">
-    <div class="wmd-container-form-group">
-  Control Port
-  <input type="text" class="wmd-input" placeholder="4242" required style="width: 25ch; max-width: 25ch;" />
-</div>
-  </div>
-</div>
-<div class="wmd-container-button-group">
-  <button class="wmd-button wmd-button-primary">Connect</button>
-  <button class="wmd-button wmd-outline">Test Connection</button>
-</div>
-<blockquote class="wmd-blockquote">
-  <p class="wmd-paragraph"><strong>Design note:</strong> Control Address is pre-filled from the last address that connected successfully <em>on this machine</em> (saved locally, never committed to git). A brand-new machine with no history defaults to <code>127.0.0.1</code>. There is no protocol-level auto-discovery — confirmed via the vendor API corpus, nothing to poll or broadcast for.</p>
-</blockquote>
-<hr class="wmd-separator" />
-<h3 class="wmd-h3">Calibration</h3>
-<div class="wmd-container-form-group">
-  Point Count (1–9)
-  <input type="number" class="wmd-input" placeholder="5" style="width: 28ch; max-width: 28ch;" />
-</div>
-<ul class="wmd-list">
-  <label class="wmd-checkbox">
-    <input type="checkbox" checked />
-    <span>Show calibration window to the subject</span>
-  </label>
-</ul>
-<div class="wmd-row">
-  <div class="wmd-grid-item">
-    <div class="wmd-container-button-group">
-  <button class="wmd-button wmd-button-primary">Do Calibration</button>
-  <button class="wmd-button wmd-outline">Load Calibration File</button>
-  <button class="wmd-button wmd-outline wmd-state-disabled" disabled>View Calibration Details</button>
-</div>
-  </div>
-</div>
-<div class="wmd-container-alert">
-  <p class="wmd-paragraph">warning</p>
-  <p class="wmd-paragraph">No calibration yet for this subject — run Do Calibration or Load Calibration File before continuing.</p>
-</div>
-<blockquote class="wmd-blockquote">
-  <p class="wmd-paragraph"><strong>Do Calibration:</strong> runs a fresh calibration against the connected tracker using the point count/show-window controls above.
-<strong>Load Calibration File:</strong> file picker over a saved <code>calibration.json</code>; hard-errors if its <code>subject_id</code> doesn't match the Subject ID field above — same check the existing <code>--calibration-file</code> CLI flag already performs.
-<strong>Alternate state (not shown above):</strong> once calibration succeeds either way, this panel shows <code>::: alert success</code> — "Calibration loaded — 5 points, mean error 42px, valid" — in place of the warning, <strong>and View Calibration Details becomes enabled.</strong>
-<strong>View Calibration Details:</strong> disabled until a calibration result exists (same gating as Continue to Tasks below). Clicking it expands the section illustrated below <strong>in place</strong>, directly under this card — not a modal dialog (a modal would block the qt-mcp automation probe during testing, a known issue in this codebase, and this dashboard already prefers inline expansion elsewhere).</p>
-</blockquote>
-<hr class="wmd-separator" />
-<h3 class="wmd-h3">Calibration Details (expanded state — illustrative)</h3>
-<blockquote class="wmd-blockquote">
-  <p class="wmd-paragraph"><strong>Design note:</strong> hidden by default; shown here expanded purely to illustrate what "View Calibration Details" reveals. In the real page this content lives <em>inside</em> the Calibration card above, appearing only after the button is clicked, and collapses again on a second click.</p>
-</blockquote>
-<div class="wmd-container-alert">
-  <p class="wmd-paragraph">success</p>
-  <p class="wmd-paragraph">Calibration measured — 5 points, mean error 8px, valid.</p>
-</div>
-<p class="wmd-paragraph">Per-point breakdown</p>
+<h4 class="wmd-h4">Data quality</h4>
 <table class="wmd-table">
   <thead>
     <tr>
-      <th class="wmd-table-cell wmd-align-left">Point</th>
-    <th class="wmd-table-cell wmd-align-left">Target (X, Y)</th>
-    <th class="wmd-table-cell wmd-align-left">Left eye (X, Y)</th>
-    <th class="wmd-table-cell wmd-align-left">Left valid</th>
-    <th class="wmd-table-cell wmd-align-left">Right eye (X, Y)</th>
-    <th class="wmd-table-cell wmd-align-left">Right valid</th>
-    <th class="wmd-table-cell wmd-align-left">Error (px)</th>
+      <th class="wmd-table-cell wmd-align-left">Metric</th>
+    <th class="wmd-table-cell wmd-align-left">Value</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-    <td class="wmd-table-cell wmd-align-left">1</td>
-    <td class="wmd-table-cell wmd-align-left">0.500, 0.500</td>
-    <td class="wmd-table-cell wmd-align-left">0.502, 0.503</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
-    <td class="wmd-table-cell wmd-align-left">0.515, 0.509</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
-    <td class="wmd-table-cell wmd-align-left">6.1</td>
+    <td class="wmd-table-cell wmd-align-left">Valid samples</td>
+    <td class="wmd-table-cell wmd-align-left">92%</td>
   </tr>
     <tr>
-    <td class="wmd-table-cell wmd-align-left">2</td>
-    <td class="wmd-table-cell wmd-align-left">0.850, 0.150</td>
-    <td class="wmd-table-cell wmd-align-left">0.849, 0.149</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
-    <td class="wmd-table-cell wmd-align-left">0.846, 0.148</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
-    <td class="wmd-table-cell wmd-align-left">4.8</td>
-  </tr>
-    <tr>
-    <td class="wmd-table-cell wmd-align-left">3</td>
-    <td class="wmd-table-cell wmd-align-left">0.850, 0.850</td>
-    <td class="wmd-table-cell wmd-align-left">0.849, 0.849</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
-    <td class="wmd-table-cell wmd-align-left">0.846, 0.848</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
-    <td class="wmd-table-cell wmd-align-left">5.2</td>
-  </tr>
-    <tr>
-    <td class="wmd-table-cell wmd-align-left">4</td>
-    <td class="wmd-table-cell wmd-align-left">0.150, 0.850</td>
-    <td class="wmd-table-cell wmd-align-left">0.149, 0.849</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
+    <td class="wmd-table-cell wmd-align-left">On-screen samples</td>
     <td class="wmd-table-cell wmd-align-left">—</td>
-    <td class="wmd-table-cell wmd-align-left">No</td>
-    <td class="wmd-table-cell wmd-align-left">3.9</td>
   </tr>
     <tr>
-    <td class="wmd-table-cell wmd-align-left">5</td>
-    <td class="wmd-table-cell wmd-align-left">0.150, 0.150</td>
-    <td class="wmd-table-cell wmd-align-left">0.149, 0.149</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
-    <td class="wmd-table-cell wmd-align-left">0.147, 0.148</td>
-    <td class="wmd-table-cell wmd-align-left">Yes</td>
-    <td class="wmd-table-cell wmd-align-left">4.4</td>
+    <td class="wmd-table-cell wmd-align-left">Effective rate</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Calibration error (raw)</td>
+    <td class="wmd-table-cell wmd-align-left">8.4 px</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Longest gap</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
+  </tr>
+  </tbody>
+</table>
+<h4 class="wmd-h4">Fixation</h4>
+<table class="wmd-table">
+  <thead>
+    <tr>
+      <th class="wmd-table-cell wmd-align-left">Metric</th>
+    <th class="wmd-table-cell wmd-align-left">Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Mean duration</td>
+    <td class="wmd-table-cell wmd-align-left">0.34 s</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Median duration</td>
+    <td class="wmd-table-cell wmd-align-left">0.29 s</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Rate</td>
+    <td class="wmd-table-cell wmd-align-left">18.2 /min</td>
+  </tr>
+  </tbody>
+</table>
+<h4 class="wmd-h4">Saccade</h4>
+<table class="wmd-table">
+  <thead>
+    <tr>
+      <th class="wmd-table-cell wmd-align-left">Metric</th>
+    <th class="wmd-table-cell wmd-align-left">Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Mean amplitude</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Mean direction</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Latency (to first fixation)</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
+  </tr>
+  </tbody>
+</table>
+<h4 class="wmd-h4">Selection</h4>
+<table class="wmd-table">
+  <thead>
+    <tr>
+      <th class="wmd-table-cell wmd-align-left">Metric</th>
+    <th class="wmd-table-cell wmd-align-left">Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Hit rate</td>
+    <td class="wmd-table-cell wmd-align-left">78%</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Median RT</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Mean attempts</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Mean revisits</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
+  </tr>
+    <tr>
+    <td class="wmd-table-cell wmd-align-left">Trials needing re-attempt</td>
+    <td class="wmd-table-cell wmd-align-left">—</td>
   </tr>
   </tbody>
 </table>
 <blockquote class="wmd-blockquote">
-  <p class="wmd-paragraph"><strong>Data source:</strong> target/eye-estimate columns come straight from Gazepoint's own <code>CALIB_RESULT</code> record (per-point, per-eye) — captured but never surfaced anywhere in the UI before this design. Per-point "Error (px)" is a new derived value (Euclidean distance, target vs. each eye's estimate, screen-space) — not yet computed anywhere in this codebase; would need to be added alongside this UI.
-<strong>Placeholder / empty state (not shown above):</strong> if <code>per_point</code> data wasn't captured for this calibration (e.g. an older <code>calibration.json</code>, or a device/vendor path that never sent <code>CALIB_RESULT</code>), the table is replaced with a single centered row: "Per-point breakdown not available for this calibration." The summary alert above still renders normally either way — only the table degrades.</p>
+  <p class="wmd-paragraph"><strong>"—" means not yet computed by this codebase</strong> (see the metrics-category gap report in <code>docs/specs/SPEC-result-logic.md</code>) — not a rendering bug. Rows already backed by real data today: Valid samples, Calibration error, Fixation mean/median duration, Fixation rate, Hit rate.
+<strong>Alternate state (not shown above):</strong> if Valid samples fell below an 80% floor, a warning banner would appear directly under the Data quality table — <code>::: alert warning</code> — "! valid share 62% below the 80% floor" (wording/threshold matches the reference image; exact floor value TBD at implementation time).</p>
 </blockquote>
 <hr class="wmd-separator" />
-<h3 class="wmd-h3">Before You Start</h3>
-<div class="wmd-container-alert">
-  <p class="wmd-paragraph">info</p>
-  <p class="wmd-paragraph">Confirm in Gazepoint Control that Lens Focusing and Automatic Gain Sweep are enabled.</p>
+<h4 class="wmd-h4">Session Log</h4>
+<div class="wmd-container-card">
+  <pre class="wmd-code-block"><code>Session started: 2026-09-09_P001_click_static_run1
+Connected to Gazepoint Control.
+Calibration measured — 5 points, mean error 8.4px, valid.
+Running Static Click (32 trials) at 1920x1080.
+Setting changed: dwell.threshold_ms 800 -&gt; 700
+Wrote 32 trials -&gt; sessions/2026-09-09_P001_click_static_run1/trials.csv</code></pre>
 </div>
 <blockquote class="wmd-blockquote">
-  <p class="wmd-paragraph"><strong>Design note:</strong> this is a read-only reminder, not a checkbox and not a gate — neither setting can be checked or changed from this app. Gazepoint Control's own Settings dialog is the only place either one lives; the OpenGaze API has no command for either (confirmed against the vendor corpus).</p>
+  <p class="wmd-paragraph"><strong>Data source:</strong> this panel is <code>session.log</code>, already written verbatim by <code>SessionRecorder</code> every run today — no new capture needed, only a UI panel to display it.</p>
 </blockquote>
 <hr class="wmd-separator" />
-<button class="wmd-button wmd-button-primary wmd-state-disabled" disabled>Continue to Tasks →</button>
-<blockquote class="wmd-blockquote">
-  <div class="wmd-container-form-group">
-  <strong>Design note:</strong> disabled until Tracker shows 
-  <span class="wmd-badge wmd-badge-success">connected</span>
-   <strong>and</strong> a calibration result exists (via either path above) <strong>and</strong> Subject ID, Assessment Date, and Sex are filled. Notes is optional. The "Before You Start" reminder above does <strong>not</strong> factor into this gate.
-</div>
-</blockquote>
 </body>
 </html>

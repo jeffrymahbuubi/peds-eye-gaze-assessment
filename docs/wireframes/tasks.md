@@ -60,7 +60,7 @@ Find the cued shape in a 2D field of distractors — visual search.
 
 :::
 
-> **Design note (illustrative only):** Scanning Search is shown Complete above just to demonstrate the status/button-state change after a run — in a fresh session all four tasks start Pending. Clicking **Run** embeds the task canvas + operator sidebar into this same window in place of this page's content (no new window, no subprocess); it returns here with status updated to Complete when the task ends.
+> **Design note (illustrative only):** Scanning Search is shown Complete above just to demonstrate the status/button-state change after a run — in a fresh session all four tasks start Pending. Clicking **Run** embeds the task canvas + operator sidebar into this same window in place of this page's content (no new window, no subprocess); it returns here with status updated to Complete when the task ends — **directly back to this Tasks page**, not to Results (see `results.md`'s design note: a run finishing no longer auto-shows Results, superseding the earlier iteration). Clicking **Analyze** (enabled only once a task is Complete) navigates to [Results](./results.md), scoped to that task's most recent run.
 
 ---
 

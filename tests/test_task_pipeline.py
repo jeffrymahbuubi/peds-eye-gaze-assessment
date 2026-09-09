@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -234,6 +235,26 @@ def test_headless_replay_runs_every_task(task_id: str, tmp_path: Path):
     assert (Path(result["session_dir"]) / "trials.csv").exists()
     # hits + timeouts should account for every completed trial
     assert result["n_hits"] + result["n_timeouts"] == result["n_trials"]
+
+
+def test_headless_replay_auto_writes_session_metrics(tmp_path: Path):
+    from src.data.exporter import compute_fixation_saccade_metrics, summarize
+
+    result = run_headless_replay(
+        task_id="click_static",
+        replay_path=FIXTURE,
+        output_root=tmp_path,
+        max_seconds=60.0,
+    )
+    session_dir = Path(result["session_dir"])
+    metrics_path = session_dir / "session_metrics.json"
+    assert metrics_path.exists()
+    assert result["session_metrics_path"] == str(metrics_path)
+
+    payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+    assert payload["summary"] == summarize(session_dir)
+    assert payload["fixation_saccade"] == compute_fixation_saccade_metrics(session_dir)
+    assert "fixations_per_trial" in payload
 
 
 def test_click_static_records_hits(tmp_path: Path):

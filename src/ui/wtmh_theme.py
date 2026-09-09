@@ -194,6 +194,7 @@ QLabel#wtmhBadgeDanger {{
 
 QWidget#wtmhDashboard QLineEdit,
 QWidget#wtmhDashboard QTextEdit,
+QWidget#wtmhDashboard QPlainTextEdit,
 QWidget#wtmhDashboard QComboBox,
 QWidget#wtmhDashboard QDateEdit,
 QWidget#wtmhDashboard QSpinBox,
@@ -206,6 +207,7 @@ QWidget#wtmhDashboard QDoubleSpinBox {{
 }}
 QWidget#wtmhDashboard QLineEdit:focus,
 QWidget#wtmhDashboard QTextEdit:focus,
+QWidget#wtmhDashboard QPlainTextEdit:focus,
 QWidget#wtmhDashboard QComboBox:focus,
 QWidget#wtmhDashboard QDateEdit:focus,
 QWidget#wtmhDashboard QSpinBox:focus,
@@ -357,5 +359,25 @@ QWidget#wtmhDashboard QSlider::handle:horizontal {{
     height: 14px;
     margin: -5px 0;
     border-radius: 7px;
+}}
+
+/* Plain data tables (calibration per-point breakdown, results metric
+   tables) -- SPEC-result-logic.md §8.1/§8.3. Read-only, so no ::item states
+   for hover/selected are needed. */
+QWidget#wtmhDashboard QTableWidget {{
+    background: {PANEL_BG};
+    color: {INK};
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+    gridline-color: {BORDER};
+}}
+QWidget#wtmhDashboard QTableWidget::item {{ padding: 4px 8px; }}
+QWidget#wtmhDashboard QHeaderView::section {{
+    background: {SOFT_ACCENT};
+    color: {SOFT_ACCENT_TEXT};
+    border: none;
+    border-bottom: 1px solid {BORDER};
+    padding: 6px 8px;
+    font-weight: 600;
 }}
 """

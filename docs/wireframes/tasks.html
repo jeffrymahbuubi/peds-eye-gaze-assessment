@@ -564,6 +564,7 @@ body.wmd-root {
     <div class="wmd-brand">Pediatric Eye-Gaze Assessment</div>
     <a href="./setup.html" class="wmd-nav-item">Setup</a>
     <a href="./tasks.html" class="wmd-nav-item">Tasks</a>
+    <a href="./results.html" class="wmd-nav-item">Results</a>
   </div>
 </nav>
 <div class="wmd-row wmd-right">
@@ -618,7 +619,7 @@ body.wmd-root {
 </div>
 </div>
 <blockquote class="wmd-blockquote">
-  <p class="wmd-paragraph"><strong>Design note (illustrative only):</strong> Scanning Search is shown Complete above just to demonstrate the status/button-state change after a run — in a fresh session all four tasks start Pending. Clicking <strong>Run</strong> embeds the task canvas + operator sidebar into this same window in place of this page's content (no new window, no subprocess); it returns here with status updated to Complete when the task ends.</p>
+  <p class="wmd-paragraph"><strong>Design note (illustrative only):</strong> Scanning Search is shown Complete above just to demonstrate the status/button-state change after a run — in a fresh session all four tasks start Pending. Clicking <strong>Run</strong> embeds the task canvas + operator sidebar into this same window in place of this page's content (no new window, no subprocess); it returns here with status updated to Complete when the task ends — <strong>directly back to this Tasks page</strong>, not to Results (see <code>results.md</code>'s design note: a run finishing no longer auto-shows Results, superseding the earlier iteration). Clicking <strong>Analyze</strong> (enabled only once a task is Complete) navigates to <a href="./results.html">Results</a>, scoped to that task's most recent run.</p>
 </blockquote>
 <hr class="wmd-separator" />
 <h2 class="wmd-h2">Modals &amp; Dialogs</h2>

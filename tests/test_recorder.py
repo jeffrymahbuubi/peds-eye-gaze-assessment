@@ -90,6 +90,12 @@ def test_exporter_roundtrip_and_summary(tmp_path: Path):
     assert summary["n_timeouts"] == 1
     assert summary["hit_rate"] == 0.5
     assert summary["mean_reaction_time_ms"] == 800.0
+    assert summary["median_reaction_time_ms"] == 800.0
+    # trial 0 has attempts=1, trial 1 (timed out, never clicked) has
+    # attempts=0 (schema.py's default) -- both are real data points, so the
+    # mean is over all trials, not just ones with a click.
+    assert summary["mean_attempts"] == 0.5
+    assert summary["n_trials_needing_reattempt"] == 0
 
 
 def test_recorder_raises_if_not_open(tmp_path: Path):
@@ -162,6 +168,26 @@ def test_compute_fixation_saccade_metrics(tmp_path: Path):
     assert fix["max_fixation_duration_s"] == 0.5
     assert fix["mean_pupil_left_mm"] == 3.5
     assert fix["mean_pupil_right_mm"] == 3.6
+    # All 10 samples land within [0, 1] on both axes (0.5/0.5, 0.6/0.6).
+    assert fix["on_screen_ratio"] == 1.0
+    # 10 samples over 0.9s (t=0 .. t=900ms, 100ms apart) -> ~11.11 Hz.
+    assert fix["effective_rate_hz"] == 11.11
+    # Every consecutive gap in this fixture is a uniform 100ms.
+    assert fix["longest_gap_s"] == 0.1
+
+
+def test_compute_fixation_saccade_metrics_off_screen_sample(tmp_path: Path):
+    """A valid-but-out-of-bounds gaze sample counts against on_screen_ratio,
+    not valid_ratio -- they measure different things (tracker confidence vs.
+    whether the estimate landed on the physical screen)."""
+    meta = make_metadata()
+    with SessionRecorder(meta, output_root=tmp_path) as rec:
+        rec.record_gaze(GazeSample(t_ns=0, x=0.5, y=0.5, valid=True))
+        rec.record_gaze(GazeSample(t_ns=100_000_000, x=1.4, y=0.5, valid=True))
+        rec.write_trials([])
+    fix = compute_fixation_saccade_metrics(tmp_path / meta.session_id)
+    assert fix["valid_ratio"] == 1.0
+    assert fix["on_screen_ratio"] == 0.5
 
 
 def test_compute_fixation_saccade_metrics_empty_session(tmp_path: Path):
@@ -172,6 +198,9 @@ def test_compute_fixation_saccade_metrics_empty_session(tmp_path: Path):
     assert fix["n_samples"] == 0
     assert fix["n_fixations"] == 0
     assert fix["mean_fixation_duration_s"] is None
+    assert fix["on_screen_ratio"] is None
+    assert fix["effective_rate_hz"] is None
+    assert fix["longest_gap_s"] is None
 
 
 def test_compute_trial_fixation_counts(tmp_path: Path):

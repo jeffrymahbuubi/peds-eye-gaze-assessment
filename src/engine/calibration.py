@@ -18,12 +18,88 @@ swallow the calibration response.
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from ..inputs.gazepoint_client import parse_attrs
+
+_CALIB_RESULT_POINT_RE = re.compile(r"^CALX(\d+)$")
+
+
+def _parse_calib_result(attrs: dict[str, str]) -> list[dict[str, Any]]:
+    """Parse a ``CALIB_RESULT`` record's per-point/per-eye data (API manual
+    S4.3): for each point *i*, the target (``CALXi``/``CALYi``) and each eye's
+    estimated gaze position + validity flag (``LXi``/``LYi``/``LVi``,
+    ``RXi``/``RYi``/``RVi``). This is the richer, per-point counterpart to
+    ``CALIBRATE_RESULT_SUMMARY``'s single ``AVE_ERROR`` scalar -- captured here
+    (but not yet used for any comparison/tradeoff logic) so it's already on
+    disk once real n-point calibration data collection happens.
+    """
+    indices = sorted(
+        int(m.group(1)) for k in attrs if (m := _CALIB_RESULT_POINT_RE.match(k))
+    )
+
+    def _eye(prefix: str, i: int) -> dict[str, Any] | None:
+        x, y, v = attrs.get(f"{prefix}X{i}"), attrs.get(f"{prefix}Y{i}"), attrs.get(f"{prefix}V{i}")
+        if x is None or y is None:
+            return None
+        return {"x": float(x), "y": float(y), "valid": v == "1"}
+
+    points: list[dict[str, Any]] = []
+    for i in indices:
+        cal_x, cal_y = attrs.get(f"CALX{i}"), attrs.get(f"CALY{i}")
+        if cal_x is None or cal_y is None:
+            continue
+        points.append(
+            {
+                "point": i,
+                "target_x": float(cal_x),
+                "target_y": float(cal_y),
+                "left": _eye("L", i),
+                "right": _eye("R", i),
+            }
+        )
+    return points
+
+
+def per_point_errors_px(
+    per_point: tuple[dict[str, Any], ...] | None, screen_width_px: int, screen_height_px: int
+) -> list[dict[str, Any]]:
+    """Per-point, per-eye Euclidean error in pixel space (SPEC-result-logic.md
+    §8.1's "Error (px)" column). ``CALIB_RESULT``'s coordinates are normalized
+    (0-1, same convention as :class:`~src.data.schema.GazeSample`), so the
+    per-axis normalized difference is scaled by the configured screen
+    dimensions before combining -- matching how every other px conversion in
+    this codebase already treats normalized coordinates (e.g. ``BaseTask.
+    set_screen_size``). Returns ``[]`` for ``None``/empty input; each eye's
+    error is ``None`` if that eye's estimate was never reported.
+    """
+    if not per_point:
+        return []
+
+    def _error(target_x: float, target_y: float, eye: dict[str, Any] | None) -> float | None:
+        if eye is None:
+            return None
+        dx = (target_x - eye["x"]) * screen_width_px
+        dy = (target_y - eye["y"]) * screen_height_px
+        return (dx * dx + dy * dy) ** 0.5
+
+    return [
+        {
+            "point": point["point"],
+            "target_x": point["target_x"],
+            "target_y": point["target_y"],
+            "left": point["left"],
+            "right": point["right"],
+            "left_error_px": _error(point["target_x"], point["target_y"], point["left"]),
+            "right_error_px": _error(point["target_x"], point["target_y"], point["right"]),
+        }
+        for point in per_point
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +107,9 @@ class CalibrationResult:
     n_points: int
     mean_error_px: float | None
     valid: bool
+    # Per-point/per-eye breakdown from CALIB_RESULT, if seen during polling
+    # (see _parse_calib_result); None when unmeasured/stub/not observed.
+    per_point: tuple[dict[str, Any], ...] | None = None
 
 
 class CalibrationFileError(Exception):
@@ -57,6 +136,7 @@ def save_calibration_result(path: str | Path, subject_id: str, result: Calibrati
         "n_points": result.n_points,
         "mean_error_px": result.mean_error_px,
         "valid": result.valid,
+        "per_point": list(result.per_point) if result.per_point else None,
         "calibrated_at": datetime.now(timezone.utc).isoformat(),
     }
     Path(path).write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -80,10 +160,15 @@ def load_calibration_result(path: str | Path) -> SavedCalibration:
     try:
         subject_id = str(data["subject_id"])
         mean_error_px = data.get("mean_error_px")
+        # per_point is a newer, optional enrichment field (S4.3's CALIB_RESULT
+        # capture) -- unlike the fields above, its absence in an older
+        # calibration.json is not an error.
+        per_point_raw = data.get("per_point")
         result = CalibrationResult(
             n_points=int(data["n_points"]),
             mean_error_px=float(mean_error_px) if mean_error_px is not None else None,
             valid=bool(data["valid"]),
+            per_point=tuple(per_point_raw) if per_point_raw else None,
         )
         calibrated_at = str(data["calibrated_at"])
     except (KeyError, TypeError, ValueError) as exc:
@@ -254,6 +339,10 @@ class Calibration:
         sock.settimeout(0.2)
         buffer = ""
         best: CalibrationResult | None = None
+        # CALIB_RESULT (per-point/per-eye breakdown) is pushed once, unprompted,
+        # at the end of calibration -- captured opportunistically alongside the
+        # polled CALIBRATE_RESULT_SUMMARY, best-effort (see _parse_calib_result).
+        per_point: list[dict[str, Any]] | None = None
         deadline = time.monotonic() + self._timeout_s
         next_query = 0.0  # query immediately on the first loop iteration
         try:
@@ -276,16 +365,27 @@ class Calibration:
                     if parsed is None:
                         continue
                     tag, attrs = parsed
+                    if tag == "CAL" and attrs.get("ID") == "CALIB_RESULT":
+                        per_point = _parse_calib_result(attrs)
+                        continue
                     if tag != "ACK" or attrs.get("ID") != "CALIBRATE_RESULT_SUMMARY":
                         continue  # ignore CALIB_START_PT/CALIB_RESULT_PT progress records
                     valid_points = int(attrs.get("VALID_POINTS") or 0)
                     ave_error = attrs.get("AVE_ERROR")
                     mean_error_px = float(ave_error) if ave_error else None
                     best = CalibrationResult(
-                        n_points=self.n_points, mean_error_px=mean_error_px, valid=valid_points > 0
+                        n_points=self.n_points,
+                        mean_error_px=mean_error_px,
+                        valid=valid_points > 0,
+                        per_point=tuple(per_point) if per_point else None,
                     )
                     if valid_points >= self.n_points:
                         return best
         finally:
             sock.settimeout(original_timeout)
-        return best or CalibrationResult(n_points=self.n_points, mean_error_px=None, valid=False)
+        return best or CalibrationResult(
+            n_points=self.n_points,
+            mean_error_px=None,
+            valid=False,
+            per_point=tuple(per_point) if per_point else None,
+        )

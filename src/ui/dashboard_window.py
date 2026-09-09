@@ -14,6 +14,8 @@ opt-in entry point (``--dashboard``), not a replacement.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -31,6 +33,7 @@ from ..app import AssessmentApp
 from ..engine.config import CONFIG_ROOT, load_task_config
 from ..engine.calibration import CalibrationFileError
 from ..engine.session_naming import next_run_number
+from .results_page import ResultsPage
 from .setup_page import SetupPage
 from .task_settings_dialog import TaskSettingsDialog
 from .tasks_page import TasksPage
@@ -41,7 +44,8 @@ _ICON_PATH = CONFIG_ROOT / "assets" / "branding" / "WTMH.ico"
 
 _SETUP_INDEX = 0
 _TASKS_INDEX = 1
-_RUN_INDEX = 2  # the embedded TaskRunView is inserted/removed here per run
+_RESULTS_INDEX = 2
+_RUN_INDEX = 3  # the embedded TaskRunView is inserted/removed here per run
 
 
 class DashboardWindow(QMainWindow):
@@ -55,6 +59,12 @@ class DashboardWindow(QMainWindow):
 
         self._active_assessment: AssessmentApp | None = None
         self._active_task_id: str | None = None
+        # Most recent session directory per task_id, populated whenever a run
+        # finishes (SPEC-result-logic.md §8.2: the Results tab always shows
+        # the most-recent run only, no run-picker yet -- re-runs still get
+        # their own on-disk _run<N> folder, but only the latest is tracked
+        # here for Analyze/Results purposes).
+        self._task_session_dirs: dict[str, Path] = {}
         # Structural overrides configured via each task's own "Settings"
         # button (tasks.md's separate Settings/Run buttons -- Settings
         # edits+stores them, Run applies whatever was last saved without
@@ -74,8 +84,10 @@ class DashboardWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.setup_page = SetupPage()
         self.tasks_page = TasksPage()
+        self.results_page = ResultsPage()
         self.stack.addWidget(self.setup_page)  # index 0
         self.stack.addWidget(self.tasks_page)  # index 1
+        self.stack.addWidget(self.results_page)  # index 2
         outer.addWidget(self.stack, stretch=1)
 
         self.setCentralWidget(central)
@@ -84,7 +96,9 @@ class DashboardWindow(QMainWindow):
         self.setup_page.continueRequested.connect(self._on_continue_to_tasks)
         self.tasks_page.runRequested.connect(self._on_run_requested)
         self.tasks_page.settingsRequested.connect(self._on_settings_requested)
+        self.tasks_page.analyzeRequested.connect(self._on_analyze_requested)
         self.tasks_page.backToSetupRequested.connect(lambda: self.stack.setCurrentIndex(_SETUP_INDEX))
+        self.results_page.backRequested.connect(lambda: self._go_to_tab(_TASKS_INDEX))
 
         self._set_active_nav(_SETUP_INDEX)
 
@@ -119,18 +133,24 @@ class DashboardWindow(QMainWindow):
         self.tasks_nav_button.clicked.connect(lambda: self._go_to_tab(_TASKS_INDEX))
         layout.addWidget(self.tasks_nav_button)
 
+        self.results_nav_button = QPushButton("Results")
+        self.results_nav_button.setObjectName("wtmhNavButton")
+        self.results_nav_button.clicked.connect(lambda: self._go_to_tab(_RESULTS_INDEX))
+        layout.addWidget(self.results_nav_button)
+
         return bar
 
     def _go_to_tab(self, index: int) -> None:
         if self._active_assessment is not None:
-            return  # a task is embedded and running; nav is disabled meanwhile
+            return  # a task is embedded and running
         self.stack.setCurrentIndex(index)
         self._set_active_nav(index)
 
     def _set_active_nav(self, index: int) -> None:
         self.setup_nav_button.setProperty("active", index == _SETUP_INDEX)
         self.tasks_nav_button.setProperty("active", index == _TASKS_INDEX)
-        for button in (self.setup_nav_button, self.tasks_nav_button):
+        self.results_nav_button.setProperty("active", index == _RESULTS_INDEX)
+        for button in (self.setup_nav_button, self.tasks_nav_button, self.results_nav_button):
             button.style().unpolish(button)
             button.style().polish(button)
 
@@ -209,15 +229,34 @@ class DashboardWindow(QMainWindow):
         self._active_assessment = None
         self._active_task_id = None
 
-        self.stack.setCurrentIndex(_TASKS_INDEX)
+        # Captured before the view is torn down, per src.app.AssessmentApp's
+        # own contract: _active_assessment/_active_task_id are the only
+        # handles to this run's data once _on_task_finished starts.
+        session_dir = assessment.recorder.session_dir if assessment is not None else None
         if assessment is not None:
             self.stack.removeWidget(assessment.view)
             assessment.view.deleteLater()
+
+        # SPEC-result-logic.md §8.2: a run returns directly to Tasks --
+        # Results is a persistent tab reached on request (nav button or
+        # this task's own "Analyze" button), not auto-shown after every run
+        # like the earlier (§3, now superseded) design.
+        if session_dir is not None and task_id is not None:
+            self._task_session_dirs[task_id] = session_dir
+
+        self.stack.setCurrentIndex(_TASKS_INDEX)
         if task_id is not None:
             self.tasks_page.set_task_status(task_id, "Complete")
         self.tasks_page.set_all_runs_enabled(True)
         self.setup_nav_button.setEnabled(True)
         self._set_active_nav(_TASKS_INDEX)
+
+    def _on_analyze_requested(self, task_id: str) -> None:
+        session_dir = self._task_session_dirs.get(task_id)
+        if session_dir is None:  # pragma: no cover - defensive; Analyze is disabled until a run exists
+            return
+        self.results_page.populate(session_dir, task_id, subject_id=self.setup_page.subject_id())
+        self._go_to_tab(_RESULTS_INDEX)
 
 
 def run_dashboard() -> int:

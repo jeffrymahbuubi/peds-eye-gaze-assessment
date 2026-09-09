@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from ..data.exporter import write_session_metrics
 from ..data.recorder import SessionRecorder
 from ..data.schema import GazeSample, SessionMetadata
 from ..inputs.base import Pointer
@@ -120,12 +121,18 @@ def run_headless_replay(
 
         trials_path = recorder.write_trials(task.trials)
         recorder.log(f"Wrote {len(task.trials)} trials -> {trials_path}")
+        # Close explicitly (flushes gaze_stream.csv fully) so the metrics below
+        # read complete files; the `with` block's own close() on exit is then
+        # a no-op (SessionRecorder.close() guards on self._closed).
+        recorder.close()
+        metrics_path = write_session_metrics(recorder.session_dir)
 
         n_hits = sum(1 for tr in task.trials if tr.is_hit)
         n_timeouts = sum(1 for tr in task.trials if tr.is_timeout)
         return {
             "session_dir": str(recorder.session_dir),
             "trials_csv": str(trials_path),
+            "session_metrics_path": str(metrics_path),
             "n_trials": len(task.trials),
             "n_hits": n_hits,
             "n_timeouts": n_timeouts,

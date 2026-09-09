@@ -24,8 +24,9 @@ from ..engine.task_runner import TASK_REGISTRY
 
 # (display name, one-line description) -- text lifted from docs/wireframes/tasks.md
 # so the real UI matches the reviewed mockup, not re-worded independently.
-
-_TASK_INFO: dict[str, tuple[str, str]] = {
+# Public (not module-private) since results_page.py also reads task display
+# names off it for the Results tab's page header.
+TASK_INFO: dict[str, tuple[str, str]] = {
     "click_static": ("Static Click", "One still target on an empty field — baseline look-and-select."),
     "click_grid": ("Grid Click (3×3)", "One cell of a visible 3x3 board lights up — selection among candidates."),
     "follow_moving": ("Follow & Click", "The target travels; select it while it moves — smooth pursuit."),
@@ -36,12 +37,13 @@ _TASK_INFO: dict[str, tuple[str, str]] = {
 class _TaskCard(QFrame):
     runRequested = Signal(str)
     settingsRequested = Signal(str)
+    analyzeRequested = Signal(str)
 
     def __init__(self, task_id: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.task_id = task_id
         self.setObjectName("wtmhCard")
-        name, description = _TASK_INFO.get(task_id, (task_id, ""))
+        name, description = TASK_INFO.get(task_id, (task_id, ""))
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 14, 16, 14)
@@ -87,7 +89,8 @@ class _TaskCard(QFrame):
         self.analyze_button = QPushButton("Analyze")
         self.analyze_button.setObjectName("wtmhGhost")
         self.analyze_button.setEnabled(False)
-        self.analyze_button.setToolTip("Coming soon — deferred per SPEC-ui-setup-task-selection.md S6.2")
+        self.analyze_button.setToolTip("Enabled once this task shows Complete — opens the Results tab.")
+        self.analyze_button.clicked.connect(lambda: self.analyzeRequested.emit(self.task_id))
         buttons.addWidget(self.analyze_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
@@ -121,6 +124,7 @@ class _TaskCard(QFrame):
 class TasksPage(QWidget):
     runRequested = Signal(str)
     settingsRequested = Signal(str)
+    analyzeRequested = Signal(str)
     backToSetupRequested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -165,6 +169,7 @@ class TasksPage(QWidget):
             card = _TaskCard(task_id)
             card.runRequested.connect(self.runRequested)
             card.settingsRequested.connect(self.settingsRequested)
+            card.analyzeRequested.connect(self.analyzeRequested)
             self._cards[task_id] = card
             self._outer.addWidget(card)
         self._outer.addStretch(1)

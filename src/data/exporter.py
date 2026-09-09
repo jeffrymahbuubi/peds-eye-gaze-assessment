@@ -64,6 +64,9 @@ def load_gaze_rows(session_dir: str | Path) -> list[dict[str, str]]:
 _EMPTY_FIXATION_METRICS: dict[str, Any] = {
     "n_samples": 0,
     "valid_ratio": None,
+    "on_screen_ratio": None,
+    "effective_rate_hz": None,
+    "longest_gap_s": None,
     "n_fixations": 0,
     "mean_fixation_duration_s": None,
     "median_fixation_duration_s": None,
@@ -93,8 +96,21 @@ def compute_fixation_saccade_metrics(session_dir: str | Path) -> dict[str, Any]:
     valid_rows = [r for r in rows if r.get("valid") == "1"]
     valid_ratio = len(valid_rows) / n_samples
 
-    t0, t1 = int(rows[0]["t_ns"]), int(rows[-1]["t_ns"])
-    duration_min = max((t1 - t0) / 1e9 / 60.0, 1e-9)
+    # On-screen: of the valid samples, the fraction whose normalized (x, y)
+    # actually falls within the visible [0, 1] bounds -- a raw BPOG/FPOG
+    # reading can be valid (tracker confidence) yet still land off the
+    # physical screen (head turn, glasses glare deflecting the estimate).
+    on_screen_rows = [
+        r for r in valid_rows if 0.0 <= float(r["x"]) <= 1.0 and 0.0 <= float(r["y"]) <= 1.0
+    ]
+    on_screen_ratio = (len(on_screen_rows) / len(valid_rows)) if valid_rows else None
+
+    t_values = [int(r["t_ns"]) for r in rows]
+    t0, t1 = t_values[0], t_values[-1]
+    duration_s = max((t1 - t0) / 1e9, 1e-9)
+    duration_min = duration_s / 60.0
+    effective_rate_hz = n_samples / duration_s if n_samples > 1 else None
+    longest_gap_s = (max(b - a for a, b in zip(t_values, t_values[1:])) / 1e9) if n_samples > 1 else None
 
     # FPOGD (fix_duration_s) is cumulative for the life of a fixation, so the
     # last sample carrying a given fixation_id holds that fixation's total
@@ -122,6 +138,9 @@ def compute_fixation_saccade_metrics(session_dir: str | Path) -> dict[str, Any]:
     return {
         "n_samples": n_samples,
         "valid_ratio": round(valid_ratio, 4),
+        "on_screen_ratio": round(on_screen_ratio, 4) if on_screen_ratio is not None else None,
+        "effective_rate_hz": round(effective_rate_hz, 2) if effective_rate_hz is not None else None,
+        "longest_gap_s": round(longest_gap_s, 3) if longest_gap_s is not None else None,
         "n_fixations": n_fixations,
         "mean_fixation_duration_s": round(statistics.mean(durations), 4) if durations else None,
         "median_fixation_duration_s": round(statistics.median(durations), 4) if durations else None,
@@ -167,10 +186,40 @@ def summarize(session_dir: str | Path) -> dict[str, Any]:
     timeouts = sum(1 for r in rows if r.get("is_timeout") == "1")
     rts = [float(r["reaction_time_ms"]) for r in rows if r.get("reaction_time_ms")]
     mean_rt = sum(rts) / len(rts) if rts else None
+    median_rt = statistics.median(rts) if rts else None
+    attempts = [int(r["attempts"]) for r in rows if r.get("attempts")]
+    mean_attempts = statistics.mean(attempts) if attempts else None
+    n_needing_reattempt = sum(1 for a in attempts if a > 1)
+    ttff = [float(r["time_to_first_fixation_ms"]) for r in rows if r.get("time_to_first_fixation_ms")]
+    mean_ttff = statistics.mean(ttff) if ttff else None
     return {
         "n_trials": n,
         "n_hits": hits,
         "n_timeouts": timeouts,
         "hit_rate": (hits / n) if n else None,
         "mean_reaction_time_ms": round(mean_rt, 2) if mean_rt is not None else None,
+        "median_reaction_time_ms": round(median_rt, 2) if median_rt is not None else None,
+        "mean_attempts": round(mean_attempts, 2) if mean_attempts is not None else None,
+        "n_trials_needing_reattempt": n_needing_reattempt,
+        "mean_time_to_first_fixation_ms": round(mean_ttff, 2) if mean_ttff is not None else None,
     }
+
+
+def write_session_metrics(session_dir: str | Path) -> Path:
+    """Compute and persist the rolled-up per-session result (Result logic).
+
+    Combines :func:`summarize`, :func:`compute_fixation_saccade_metrics` and
+    :func:`compute_trial_fixation_counts` into ``session_metrics.json`` next to
+    ``trials.csv``/``gaze_stream.csv`` in ``session_dir``. Called automatically
+    at the end of every run (live GUI and headless replay alike) so a rolled-up
+    result always exists on disk without a separate manual
+    ``analysis/analyze_session.py`` invocation.
+    """
+    payload = {
+        "summary": summarize(session_dir),
+        "fixation_saccade": compute_fixation_saccade_metrics(session_dir),
+        "fixations_per_trial": compute_trial_fixation_counts(session_dir),
+    }
+    path = Path(session_dir) / "session_metrics.json"
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path

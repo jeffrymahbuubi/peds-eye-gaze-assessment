@@ -18,6 +18,7 @@ from src.engine.calibration import (
     CalibrationFileError,
     CalibrationResult,
     load_calibration_result,
+    per_point_errors_px,
     save_calibration_result,
 )
 
@@ -113,6 +114,56 @@ def test_run_polls_through_progress_records_to_final_result():
         assert result.valid is True
         assert result.n_points == 5
         assert result.mean_error_px == pytest.approx(19.43)
+    finally:
+        server.close()
+
+
+def test_run_captures_calib_result_per_point_breakdown():
+    # CALIB_RESULT is pushed once, unprompted, at the end of calibration
+    # (API manual S4.3) -- distinct from the polled CALIBRATE_RESULT_SUMMARY.
+    script = [
+        (
+            0.05,
+            '<CAL ID="CALIB_RESULT" CALX1="0.50000" CALY1="0.50000" '
+            'LX1="0.50229" LY1="0.50279" LV1="1" RX1="0.51467" RY1="0.50870" RV1="1" '
+            'CALX2="0.85000" CALY2="0.15000" LX2="0.84943" LY2="0.14930" LV2="1" '
+            'RX2="0.84600" RY2="0.14763" RV2="0" />\r\n',
+        ),
+        (0.10, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="19.43" VALID_POINTS="2" />\r\n'),
+    ]
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        result = Calibration(client=_StubClient(sock), n_points=2, timeout_s=2.0).run()
+        assert result.per_point == (
+            {
+                "point": 1,
+                "target_x": 0.5,
+                "target_y": 0.5,
+                "left": {"x": 0.50229, "y": 0.50279, "valid": True},
+                "right": {"x": 0.51467, "y": 0.5087, "valid": True},
+            },
+            {
+                "point": 2,
+                "target_x": 0.85,
+                "target_y": 0.15,
+                "left": {"x": 0.84943, "y": 0.1493, "valid": True},
+                "right": {"x": 0.846, "y": 0.14763, "valid": False},
+            },
+        )
+    finally:
+        server.close()
+
+
+def test_run_returns_none_per_point_when_calib_result_never_sent():
+    script = [
+        (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="19.43" VALID_POINTS="5" />\r\n'),
+    ]
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        result = Calibration(client=_StubClient(sock), n_points=5, timeout_s=2.0).run()
+        assert result.per_point is None
     finally:
         server.close()
 
@@ -363,6 +414,47 @@ def test_save_then_load_round_trips(tmp_path):
     assert saved.calibrated_at  # a non-empty ISO timestamp string
 
 
+def test_save_then_load_round_trips_per_point(tmp_path):
+    path = tmp_path / "calibration.json"
+    per_point = (
+        {
+            "point": 1,
+            "target_x": 0.5,
+            "target_y": 0.5,
+            "left": {"x": 0.502, "y": 0.503, "valid": True},
+            "right": {"x": 0.515, "y": 0.509, "valid": True},
+        },
+    )
+    result = CalibrationResult(n_points=1, mean_error_px=5.0, valid=True, per_point=per_point)
+    save_calibration_result(path, "P042", result)
+
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["per_point"] == list(per_point)
+
+    saved = load_calibration_result(path)
+    assert saved.result.per_point == per_point
+
+
+def test_load_calibration_file_without_per_point_key_still_loads(tmp_path):
+    # Older calibration.json files predate the per_point field -- its absence
+    # is not an error (unlike the required fields below).
+    path = tmp_path / "calibration.json"
+    path.write_text(
+        json.dumps(
+            {
+                "subject_id": "P001",
+                "n_points": 5,
+                "mean_error_px": 10.0,
+                "valid": True,
+                "calibrated_at": "2026-01-01T00:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    saved = load_calibration_result(path)
+    assert saved.result.per_point is None
+
+
 def test_save_writes_none_mean_error_as_null(tmp_path):
     path = tmp_path / "calibration.json"
     result = CalibrationResult(n_points=5, mean_error_px=None, valid=False)
@@ -374,6 +466,52 @@ def test_save_writes_none_mean_error_as_null(tmp_path):
     saved = load_calibration_result(path)
     assert saved.result.mean_error_px is None
     assert saved.result.valid is False
+
+
+# -- per_point_errors_px (SPEC-result-logic.md §8.1) -------------------------
+
+_SAMPLE_PER_POINT = (
+    {
+        "point": 1,
+        "target_x": 0.5,
+        "target_y": 0.5,
+        "left": {"x": 0.50229, "y": 0.50279, "valid": True},
+        "right": {"x": 0.51467, "y": 0.5087, "valid": True},
+    },
+    {
+        "point": 2,
+        "target_x": 0.85,
+        "target_y": 0.15,
+        "left": {"x": 0.84943, "y": 0.1493, "valid": True},
+        "right": {"x": 0.846, "y": 0.14763, "valid": False},
+    },
+)
+
+
+def test_per_point_errors_px_computes_euclidean_distance_in_pixel_space():
+    rows = per_point_errors_px(_SAMPLE_PER_POINT, screen_width_px=1920, screen_height_px=1080)
+    assert len(rows) == 2
+    assert rows[0]["point"] == 1
+    assert rows[0]["left_error_px"] == pytest.approx(5.33, abs=0.05)
+    assert rows[0]["right_error_px"] == pytest.approx(29.69, abs=0.05)
+    # An eye with valid=False still has a real estimate to compute a distance
+    # against -- validity and "was an error computed" are separate concerns.
+    assert rows[1]["right"]["valid"] is False
+    assert rows[1]["right_error_px"] == pytest.approx(8.10, abs=0.05)
+
+
+def test_per_point_errors_px_missing_eye_is_none():
+    per_point = (
+        {"point": 1, "target_x": 0.5, "target_y": 0.5, "left": {"x": 0.5, "y": 0.5, "valid": True}, "right": None},
+    )
+    rows = per_point_errors_px(per_point, screen_width_px=1920, screen_height_px=1080)
+    assert rows[0]["left_error_px"] == pytest.approx(0.0)
+    assert rows[0]["right_error_px"] is None
+
+
+def test_per_point_errors_px_empty_or_none_input():
+    assert per_point_errors_px(None, 1920, 1080) == []
+    assert per_point_errors_px((), 1920, 1080) == []
 
 
 def test_load_missing_file_raises_calibration_file_error(tmp_path):

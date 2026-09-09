@@ -12,7 +12,6 @@ Usage::
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -24,6 +23,7 @@ from src.data.exporter import (  # noqa: E402
     compute_trial_fixation_counts,
     load_trials_rows,
     summarize,
+    write_session_metrics,
 )
 
 
@@ -121,18 +121,7 @@ def main(argv: list[str]) -> int:
     print(f"  pupil L/R mm (mean)   : {fix['mean_pupil_left_mm']} / {fix['mean_pupil_right_mm']}")
     print(f"  fixations per trial   : {trial_fix_counts}")
 
-    metrics_path = session_dir / "session_metrics.json"
-    metrics_path.write_text(
-        json.dumps(
-            {
-                "summary": summary,
-                "fixation_saccade": fix,
-                "fixations_per_trial": trial_fix_counts,
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    metrics_path = write_session_metrics(session_dir)
     print(f"  metrics json          : {metrics_path}")
 
     rts = _reaction_times_ms(session_dir)
