@@ -9,8 +9,8 @@ previously-undocumented bug was also found and fixed this round (§9): the
 Session Log panel's data source, `session.log`, was silently empty for
 every normal run before this fix — see §9's "real bug" note before trusting
 this doc's own earlier §8.3 claim that it needed no new capture.
-**Everything in this SPEC remains UNCOMMITTED working-tree changes** —
-ask-before-commit, matching this project's established pattern.
+**Committed and pushed to `origin/main` as `9d6e8d3`** — nothing from this
+SPEC remains uncommitted.
 **Created:** 2026-09-09
 **Last updated:** 2026-09-09
 
@@ -550,3 +550,18 @@ needed.
   uncommitted**, same ask-before-commit pattern as the rest of this SPEC's
   history — nothing from this whole Result-logic line of work is on
   `origin/main` yet.
+
+- **2026-09-09, later still — `/spec-memory-audit` (one real fix), then
+  §1-§9 committed and pushed, via `/sparc:orchestrator`.** Audit verified
+  log chronology (clean), every §9 code claim against current source
+  (`backRequested`/`analyzeRequested`/`_task_session_dirs`/all 6
+  `recorder.log()` call sites in `src/app.py` — all matched exactly), and
+  all 3 cross-links in the touched memory file (all resolve). **Found and
+  fixed one real discrepancy:** §9.3's "131 passed" claim was wrong — an
+  actual pytest re-run showed **125 passed, 1 pre-existing failure, 126
+  collected total**, corrected here and in the Log entry above (the overall
+  "no regressions, 1 known pre-existing failure" conclusion was still
+  correct, only the raw count was off). All of §1-§9 (this whole Result-
+  logic/Calibration-Details/Results-tab line of work) committed as one
+  commit, `9d6e8d3`, pushed to `origin/main` (`9049e57..9d6e8d3`). `git
+  status` clean after push — nothing from this SPEC remains uncommitted.
