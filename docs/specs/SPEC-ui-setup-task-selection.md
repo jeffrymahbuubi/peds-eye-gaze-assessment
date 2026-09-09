@@ -73,8 +73,9 @@ background between cards (a `QScrollArea.setWidget()` autoFillBackground
 side effect) — root-caused and fixed with explicit
 `setAutoFillBackground(False)` calls, live-validated.** **§22.6: themed
 the scrollbar itself (slim rounded translucent-teal thumb, no native
-arrow buttons) to match the app, live-validated.** **Left
-uncommitted** — see §22-§22.6.
+arrow buttons) to match the app, live-validated.** **§22-§22.6
+committed and pushed to `origin/main` as `ca5dec4`**, after a
+`/spec-memory-audit` pass that corrected a stale pytest-count claim.
 **Created:** 2026-09-08
 **Last updated:** 2026-09-09
 
@@ -3174,3 +3175,11 @@ the `QScrollBar` rule block). **Left uncommitted**, alongside §22/§22.5
   own already-corrected figure. All three body sections and their
   matching Log entries corrected above (the underlying "no regressions"
   verdict was still correct, only the raw counts were off).
+
+  §22-§22.6 (all of `src/ui/setup_page.py`, `src/ui/wtmh_theme.py`, and
+  this SPEC doc's own updates) committed as one commit, `ca5dec4`, and
+  pushed to `origin/main` (`743a0bc..ca5dec4`). `git status` clean after
+  push — nothing from §22-§22.6 remains uncommitted. (One unrelated,
+  empty, accidentally-created stray file from this session's own shell
+  usage was found alongside the real changes and deleted before staging
+  — never part of any commit.)
