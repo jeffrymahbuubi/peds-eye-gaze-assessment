@@ -13,7 +13,7 @@ timeout_ms: 8000
 inter_trial_interval_ms: 800
 
 target:
-  radius_px: 80
+  radius_px: 100
   color: "#4caf50"
   highlight_color: "#ffeb3b"
 

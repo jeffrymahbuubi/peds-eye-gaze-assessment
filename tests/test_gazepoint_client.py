@@ -27,6 +27,8 @@ _DEVICE_INFO_REPLIES = {
     "SERIAL_ID": '<ACK ID="SERIAL_ID" VALUE="GP3HD-TEST-0001" />\n',
     "CAMERA_SIZE": '<ACK ID="CAMERA_SIZE" WIDTH="752" HEIGHT="480" />\n',
     "API_ID": '<ACK ID="API_ID" VALUE="2.0" />\n',
+    # SPEC-gui-audit-2026-09-10.md item 5 -- the tracked-screen region.
+    "SCREEN_SIZE": '<ACK ID="SCREEN_SIZE" X="0" Y="0" WIDTH="1920" HEIGHT="1080" />\n',
 }
 
 
@@ -365,6 +367,10 @@ def test_connect_populates_device_info_from_get_replies(fake_server):
         assert info.camera_width == 752
         assert info.camera_height == 480
         assert info.api_version == "2.0"
+        assert info.screen_x == 0
+        assert info.screen_y == 0
+        assert info.screen_width == 1920
+        assert info.screen_height == 1080
     finally:
         client.stop()
 
@@ -383,6 +389,8 @@ def test_device_info_fields_stay_none_when_queries_go_unanswered(silent_fake_ser
         assert info.rate_hz is None
         assert info.camera_width is None
         assert info.api_version is None
+        assert info.screen_width is None
+        assert info.screen_height is None
     finally:
         client.stop()
 

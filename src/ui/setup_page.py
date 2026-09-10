@@ -41,6 +41,7 @@ from ..engine.calibration import (
     CalibrationResult,
     load_calibration_result,
     per_point_errors_px,
+    save_calibration_result,
 )
 from ..engine.config import load_default
 from ..engine.local_state import load_local_state, save_local_state
@@ -97,6 +98,19 @@ def _format_rate_warning(info: DeviceInfo | None) -> str:
         "reaches 150 Hz on a USB 3.0 connection — move the data cable to a "
         "USB 3.0 port and reconnect for full-rate data."
     )
+
+
+def _subject_calibration_dir(output_root: str | Path, subject_id: str) -> Path:
+    """Canonical per-subject saved-calibration folder (SPEC-gui-audit-
+    2026-09-10.md item 2b). Distinct from a run's own auto-saved
+    ``calibration.json`` (``src/app.py``, one per session folder) -- this is
+    a single, explicitly-saved record per subject that "Save Calibration"
+    writes to and "Load Calibration File" defaults its file picker to, so a
+    calibration can be reused across sessions without hunting through dated
+    run folders. Doesn't create the directory -- callers create it on save,
+    or just check existence before using it as a browse-to default.
+    """
+    return Path(output_root) / "_calibrations" / subject_id
 
 
 class _ConnectThread(QThread):
@@ -481,6 +495,18 @@ class SetupPage(QWidget):
         self.load_calibration_button.clicked.connect(self._on_load_calibration_clicked)
         buttons.addWidget(self.load_calibration_button)
 
+        # SPEC-gui-audit-2026-09-10.md item 2b: an explicit save action,
+        # decoupled from Do Calibration's own silent per-run auto-save
+        # (src/app.py), so a calibration measured for a subject in one
+        # sitting can be deliberately promoted to that subject's canonical
+        # reusable record -- disabled until there's a result to save, same
+        # gating as View Calibration Details below.
+        self.save_calibration_button = QPushButton("Save Calibration")
+        self.save_calibration_button.setObjectName("wtmhGhost")
+        self.save_calibration_button.setEnabled(False)
+        self.save_calibration_button.clicked.connect(self._on_save_calibration_clicked)
+        buttons.addWidget(self.save_calibration_button)
+
         # SPEC-result-logic.md §8.1: disabled until a calibration result
         # exists, same gating as Continue to Tasks -- toggles the inline
         # per-point breakdown below, not a modal (a modal would block the
@@ -693,10 +719,35 @@ class SetupPage(QWidget):
             )
         self._on_state_changed()
 
+    def _on_save_calibration_clicked(self) -> None:
+        if self._calibration_result is None:
+            return
+        subject_id = self.subject_id()
+        if not subject_id:
+            return  # button is disabled in this state; guard against a stray signal anyway
+        output_root = self._defaults.get("recording", {}).get("output_root", "sessions")
+        target_dir = _subject_calibration_dir(output_root, subject_id)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_path = target_dir / "calibration.json"
+        save_calibration_result(target_path, subject_id, self._calibration_result)
+        self._set_calibration_alert(
+            "success", f"Calibration saved for {subject_id} — Load Calibration File will offer it next time."
+        )
+
     def _on_load_calibration_clicked(self) -> None:
         output_root = self._defaults.get("recording", {}).get("output_root", "sessions")
+        # Default to this subject's own saved calibration (SPEC-gui-audit-
+        # 2026-09-10.md item 2b) when one exists, instead of always starting
+        # the browse at output_root -- QFileDialog pre-selects the file
+        # itself when given a full path, not just a directory.
+        default_path = Path(output_root)
+        subject_id = self.subject_id()
+        if subject_id:
+            candidate = _subject_calibration_dir(output_root, subject_id) / "calibration.json"
+            if candidate.exists():
+                default_path = candidate
         path, _ = QFileDialog.getOpenFileName(
-            self, "Load Calibration File", str(Path(output_root)), "Calibration files (*.json)"
+            self, "Load Calibration File", str(default_path), "Calibration files (*.json)"
         )
         if not path:
             return
@@ -814,6 +865,9 @@ class SetupPage(QWidget):
             "Still needed: " + "; ".join(missing) + "." if missing else ""
         )
         self.view_details_button.setEnabled(self._calibration_result is not None)
+        self.save_calibration_button.setEnabled(
+            self._calibration_result is not None and bool(self.subject_id())
+        )
         if self._calibration_result is None:
             self.calibration_details_section.setVisible(False)
         self.stateChanged.emit()

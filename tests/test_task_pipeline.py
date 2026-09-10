@@ -11,8 +11,23 @@ from src.engine.config import load_task_config
 from src.engine.feedback import NullFeedback
 from src.engine.task_runner import TASK_REGISTRY, build_task, run_headless_replay
 from src.inputs.base import Pointer
+from src.tasks.base_task import BaseTask, TargetSpec
 
 FIXTURE = Path(__file__).parent / "fixtures" / "gaze_replay_click_static.jsonl"
+
+
+class _SingleTargetTask(BaseTask):
+    """Minimal BaseTask with one caller-chosen fixed target -- lets gaze-
+    geometry tests (SPEC-gui-audit-2026-09-10.md item 5) pin an exact target
+    position instead of depending on click_static's randomized candidate
+    list."""
+
+    def __init__(self, config, screen_width_px, screen_height_px, x_norm, y_norm, radius_px):
+        self._fixed_target = TargetSpec(index=0, x_norm=x_norm, y_norm=y_norm, radius_px=radius_px)
+        super().__init__(config, screen_width_px, screen_height_px)
+
+    def build_targets(self):
+        return [self._fixed_target]
 
 
 def test_config_merges_task_over_default():
@@ -191,6 +206,95 @@ def test_hit_testing_uses_live_screen_size_not_config_default():
     result_live_size = task.update(t_ns=2_000_000, pointer=pointer)
     assert result_live_size.just_finished_trial is True
     assert task.trials[-1].is_hit is True
+
+
+def test_set_gaze_geometry_ignores_non_positive_values():
+    task = _SingleTargetTask({}, 1024, 800, x_norm=0.85, y_norm=0.5, radius_px=30.0)
+    task.set_gaze_geometry(0, 1080, 0.0, 0.0)
+    task.set_gaze_geometry(1920, -5, 0.0, 0.0)
+
+    # Neither invalid call took effect -- pointer conversion still falls
+    # back to screen_w/screen_h (canvas-relative), so a canvas-normalized
+    # pointer directly on the target still registers.
+    pointer = Pointer(x=0.85, y=0.5, valid=True, clicked=False)
+    result = task.update(t_ns=1_000_000, pointer=pointer)
+    assert result.on_target is True
+
+
+def test_gaze_geometry_corrects_undershoot_when_canvas_narrower_than_tracked_screen():
+    """SPEC-gui-audit-2026-09-10.md item 5: without set_gaze_geometry, a real
+    gaze position (normalized against the tracked monitor, as Gazepoint
+    actually reports it) undershoots a target drawn canvas-relative whenever
+    the canvas is narrower than the monitor (a non-fullscreen window, a
+    sidebar, ...) -- reproduces the reported "hard to reach the right side"
+    symptom. set_gaze_geometry must correct it."""
+    canvas_w, canvas_h = 1024, 800
+    monitor_w, monitor_h = 1920, 1080
+    target_x_norm, target_y_norm, radius_px = 0.85, 0.5, 30.0
+
+    task = _SingleTargetTask(
+        {}, canvas_w, canvas_h, x_norm=target_x_norm, y_norm=target_y_norm, radius_px=radius_px
+    )
+
+    # The real gaze position, normalized against the full tracked monitor,
+    # that a subject looking exactly at the drawn target would produce
+    # (canvas assumed positioned at the monitor's own origin, offset 0,0).
+    real_target_canvas_px_x = target_x_norm * canvas_w
+    real_target_canvas_px_y = target_y_norm * canvas_h
+    pointer = Pointer(
+        x=real_target_canvas_px_x / monitor_w,
+        y=real_target_canvas_px_y / monitor_h,
+        valid=True,
+        clicked=False,
+    )
+
+    # Before the fix: the pointer is (wrongly) treated as canvas-normalized,
+    # undershooting the target enough to miss its hitbox entirely.
+    result_before = task.update(t_ns=1_000_000, pointer=pointer)
+    assert result_before.on_target is False
+
+    # After wiring in the real tracked-screen geometry: the identical real
+    # gaze position now correctly lands on the target.
+    task.set_gaze_geometry(monitor_w, monitor_h, 0.0, 0.0)
+    result_after = task.update(t_ns=2_000_000, pointer=pointer)
+    assert result_after.on_target is True
+
+
+def test_gaze_geometry_accounts_for_canvas_offset_within_the_tracked_screen():
+    """The canvas is not always positioned at the tracked screen's origin
+    (e.g. a dashboard window not pinned to the monitor's top-left) --
+    set_gaze_geometry's offset must be subtracted, not just the screen size
+    swapped in."""
+    canvas_w, canvas_h = 1024, 800
+    monitor_w, monitor_h = 1920, 1080
+    canvas_offset_x, canvas_offset_y = 200.0, 100.0  # canvas sits inset on the monitor
+    target_x_norm, target_y_norm, radius_px = 0.85, 0.5, 30.0
+
+    task = _SingleTargetTask(
+        {}, canvas_w, canvas_h, x_norm=target_x_norm, y_norm=target_y_norm, radius_px=radius_px
+    )
+    task.set_gaze_geometry(monitor_w, monitor_h, canvas_offset_x, canvas_offset_y)
+
+    # Real gaze position (monitor-normalized) that lands on the target given
+    # the canvas's inset position on the monitor.
+    real_target_monitor_px_x = target_x_norm * canvas_w + canvas_offset_x
+    real_target_monitor_px_y = target_y_norm * canvas_h + canvas_offset_y
+    pointer = Pointer(
+        x=real_target_monitor_px_x / monitor_w,
+        y=real_target_monitor_px_y / monitor_h,
+        valid=True,
+        clicked=False,
+    )
+    result = task.update(t_ns=1_000_000, pointer=pointer)
+    assert result.on_target is True
+
+    # The same pointer with the offset ignored (0,0) would have undershot.
+    task2 = _SingleTargetTask(
+        {}, canvas_w, canvas_h, x_norm=target_x_norm, y_norm=target_y_norm, radius_px=radius_px
+    )
+    task2.set_gaze_geometry(monitor_w, monitor_h, 0.0, 0.0)
+    result2 = task2.update(t_ns=1_000_000, pointer=pointer)
+    assert result2.on_target is False
 
 
 def test_frame_result_reports_on_target_instantly_not_gated_by_dwell():

@@ -223,6 +223,16 @@ def _layout_for(n_points: int) -> list[tuple[float, float]]:
 
 _POLL_INTERVAL_S = 0.5
 
+# SPEC-gui-audit-2026-09-10.md item 2a: how much longer to wait for CALIB_RESULT
+# specifically once CALIBRATE_RESULT_SUMMARY alone already reports every point
+# valid. CALIB_RESULT is pushed once, unprompted, "at the end of the entire
+# calibration process" (API manual S4.3) -- it can arrive slightly after the
+# summary ACK that satisfies VALID_POINTS >= n_points, so returning the
+# instant that ACK is seen was a race that silently dropped the per-point
+# breakdown whenever CALIB_RESULT lost the race (reported as "sometimes
+# available, sometimes not, redoing it doesn't help").
+_CALIB_RESULT_GRACE_S = 0.75
+
 
 class Calibration:
     """Drive the Gazepoint calibration and capture its error summary."""
@@ -334,7 +344,15 @@ class Calibration:
 
     def _poll_for_result(self, sock) -> CalibrationResult:
         """Poll ``CALIBRATE_RESULT_SUMMARY`` until all points are calibrated
-        or ``self._timeout_s`` elapses, returning the best result seen."""
+        or ``self._timeout_s`` elapses, returning the best result seen.
+
+        Once the summary alone reports every point valid, waits up to
+        ``_CALIB_RESULT_GRACE_S`` longer for the separate, unprompted
+        ``CALIB_RESULT`` push (per-point/per-eye breakdown) if it hasn't
+        arrived yet -- see ``_CALIB_RESULT_GRACE_S``'s own docstring for why
+        returning instantly there was a race (SPEC-gui-audit-2026-09-10.md
+        item 2a).
+        """
         original_timeout = sock.gettimeout()
         sock.settimeout(0.2)
         buffer = ""
@@ -345,8 +363,14 @@ class Calibration:
         per_point: list[dict[str, Any]] | None = None
         deadline = time.monotonic() + self._timeout_s
         next_query = 0.0  # query immediately on the first loop iteration
+        # Set once CALIBRATE_RESULT_SUMMARY alone is satisfied but CALIB_RESULT
+        # hasn't been seen yet -- bounds the extra wait for it specifically,
+        # separately from (and always sooner than) the overall poll deadline.
+        grace_deadline: float | None = None
         try:
             while time.monotonic() < deadline:
+                if grace_deadline is not None and time.monotonic() >= grace_deadline:
+                    return best
                 if time.monotonic() >= next_query:
                     sock.sendall(CALIBRATE_RESULT_QUERY.encode("ascii"))
                     next_query = time.monotonic() + _POLL_INTERVAL_S
@@ -367,6 +391,15 @@ class Calibration:
                     tag, attrs = parsed
                     if tag == "CAL" and attrs.get("ID") == "CALIB_RESULT":
                         per_point = _parse_calib_result(attrs)
+                        if best is not None and grace_deadline is not None:
+                            # The one thing the grace window was waiting on.
+                            best = CalibrationResult(
+                                n_points=best.n_points,
+                                mean_error_px=best.mean_error_px,
+                                valid=best.valid,
+                                per_point=tuple(per_point),
+                            )
+                            return best
                         continue
                     if tag != "ACK" or attrs.get("ID") != "CALIBRATE_RESULT_SUMMARY":
                         continue  # ignore CALIB_START_PT/CALIB_RESULT_PT progress records
@@ -380,7 +413,10 @@ class Calibration:
                         per_point=tuple(per_point) if per_point else None,
                     )
                     if valid_points >= self.n_points:
-                        return best
+                        if per_point is not None:
+                            return best  # already have everything -- no need to wait
+                        if grace_deadline is None:
+                            grace_deadline = time.monotonic() + _CALIB_RESULT_GRACE_S
         finally:
             sock.settimeout(original_timeout)
         return best or CalibrationResult(

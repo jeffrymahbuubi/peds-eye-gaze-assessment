@@ -14,7 +14,7 @@ timeout_ms: 8000            # per-trial timeout
 inter_trial_interval_ms: 800
 
 target:
-  radius_px: 90
+  radius_px: 100
   color: "#ff5252"
   # Candidate positions in normalized (0-1) screen coordinates. One is chosen
   # at random per trial (deterministic with --seed).

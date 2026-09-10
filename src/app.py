@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import Qt, QPoint, QTimer, QUrl
 from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import QApplication, QDialog
 
@@ -409,6 +409,25 @@ class AssessmentApp:
 
     # -- main loop ---------------------------------------------------------
 
+    def _sync_gaze_geometry(self) -> None:
+        """Feed the task the real tracked-screen geometry (SPEC-gui-audit-
+        2026-09-10.md item 5) so pointer conversion doesn't assume the
+        canvas fills the tracked monitor -- the confirmed cause of gaze
+        undershooting targets away from center (worst on whichever edge is
+        furthest from the canvas's on-screen position).
+
+        A no-op (``BaseTask`` keeps its today-identical canvas-relative
+        fallback) whenever ``SCREEN_SIZE`` wasn't reported -- replay mode,
+        an unanswered query, or before any connect has happened.
+        """
+        info = self.client.device_info
+        if info is None or not info.screen_width or not info.screen_height:
+            return
+        canvas_origin = self.canvas.mapToGlobal(QPoint(0, 0))
+        offset_x = canvas_origin.x() - (info.screen_x or 0)
+        offset_y = canvas_origin.y() - (info.screen_y or 0)
+        self.task.set_gaze_geometry(info.screen_width, info.screen_height, offset_x, offset_y)
+
     def _tick(self) -> None:
         if self._paused:
             return
@@ -417,6 +436,7 @@ class AssessmentApp:
         # at (fullscreen resolution, a resized window, ...) instead of the
         # configured screen_width_px/height_px default.
         self.task.set_screen_size(self.canvas.width(), self.canvas.height())
+        self._sync_gaze_geometry()
         pointer = self.eye.poll(t_ns)
         if self.input_mode != "eye":
             pointer = Pointer(

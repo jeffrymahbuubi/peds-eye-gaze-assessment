@@ -113,7 +113,16 @@ def _parse_int(raw: str | None) -> int | None:
 class DeviceInfo:
     """Static device identity read once on connect (SPEC-ui-setup-task-
     selection.md S23) -- every field is optional since each is queried
-    independently and a slow/missing reply must not fail the connection."""
+    independently and a slow/missing reply must not fail the connection.
+
+    ``screen_*`` (SPEC-gui-audit-2026-09-10.md item 5) is the tracked-screen
+    region Gazepoint Control's own ``SCREEN_SIZE`` reports (API manual: "how
+    you target a monitor in a multi-monitor setup") -- what ``BPOGX``/
+    ``BPOGY`` are actually normalized against, independent of this app's own
+    window/canvas size. ``BaseTask.set_gaze_geometry`` uses these to convert
+    the pointer correctly instead of assuming the canvas fills the tracked
+    screen.
+    """
 
     model: str | None = None
     bus: str | None = None
@@ -122,9 +131,13 @@ class DeviceInfo:
     camera_width: int | None = None
     camera_height: int | None = None
     api_version: str | None = None
+    screen_x: int | None = None
+    screen_y: int | None = None
+    screen_width: int | None = None
+    screen_height: int | None = None
 
 
-_DEVICE_INFO_QUERY_IDS = ("PRODUCT_ID", "SERIAL_ID", "CAMERA_SIZE", "API_ID")
+_DEVICE_INFO_QUERY_IDS = ("PRODUCT_ID", "SERIAL_ID", "CAMERA_SIZE", "API_ID", "SCREEN_SIZE")
 _DEVICE_INFO_TIMEOUT_S = 0.5
 
 
@@ -174,6 +187,7 @@ def _query_device_info(sock: socket.socket) -> DeviceInfo:
     serial = fields.get("SERIAL_ID", {})
     camera = fields.get("CAMERA_SIZE", {})
     api = fields.get("API_ID", {})
+    screen = fields.get("SCREEN_SIZE", {})
     return DeviceInfo(
         model=_clean_placeholder(product.get("VALUE"), placeholders=("NONE",)),
         bus=product.get("BUS") or None,
@@ -182,6 +196,10 @@ def _query_device_info(sock: socket.socket) -> DeviceInfo:
         camera_width=_parse_int(camera.get("WIDTH")),
         camera_height=_parse_int(camera.get("HEIGHT")),
         api_version=api.get("VALUE") or None,
+        screen_x=_parse_int(screen.get("X")),
+        screen_y=_parse_int(screen.get("Y")),
+        screen_width=_parse_int(screen.get("WIDTH")),
+        screen_height=_parse_int(screen.get("HEIGHT")),
     )
 
 

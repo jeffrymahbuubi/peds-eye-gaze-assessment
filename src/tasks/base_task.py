@@ -89,6 +89,15 @@ class BaseTask:
         self.iti_ns = int(self.task_cfg.get("inter_trial_interval_ms", 800) * 1e6)
         self.jitter_px = float(config.get("dwell", {}).get("jitter_tolerance_px", 40))
 
+        # Real tracked-screen geometry for converting the *pointer* only
+        # (SPEC-gui-audit-2026-09-10.md item 5) -- None until set_gaze_geometry
+        # is called, in which case the pointer falls back to screen_w/screen_h
+        # with a zero offset, i.e. today's exact (canvas-relative) behavior.
+        # Kept separate from screen_w/screen_h, which stay canvas-relative and
+        # keep driving target-position conversion (target coordinates are
+        # authored normalized-to-canvas, not normalized-to-monitor).
+        self._gaze_geometry: tuple[float, float, float, float] | None = None
+
         # Populated by subclasses (in build_targets) that lay out multiple
         # candidate positions on screen at once — e.g. click_grid's cells or
         # scanning's icon row. The GUI draws these as dim, unlit markers so
@@ -120,6 +129,36 @@ class BaseTask:
         if width_px > 0 and height_px > 0:
             self.screen_w = width_px
             self.screen_h = height_px
+
+    def set_gaze_geometry(
+        self, screen_width_px: float, screen_height_px: float, offset_x_px: float, offset_y_px: float
+    ) -> None:
+        """Tell hit-testing how to convert the *pointer* to canvas pixels
+        when the canvas does not fill the tracked screen (SPEC-gui-audit-
+        2026-09-10.md item 5).
+
+        Gazepoint's ``BPOGX``/``BPOGY`` are normalized against the tracked
+        screen Gazepoint Control reports via ``SCREEN_SIZE`` -- the full
+        physical monitor, not this app's window. Whenever the canvas is
+        smaller than that (a non-fullscreen window, a sidebar next to the
+        canvas, ...), converting the pointer with the canvas's own width/
+        height instead undershoots real gaze position, worse the further a
+        target sits from center -- the confirmed root cause of "hard to
+        reach the right side" reported in the SPEC.
+
+        ``screen_width_px``/``screen_height_px`` is the tracked screen's real
+        size; ``offset_x_px``/``offset_y_px`` is the canvas's on-screen
+        position relative to that same tracked screen's origin (so the
+        converted point lands in canvas-local pixels, matching
+        ``screen_w``/``screen_h``'s own coordinate space used for targets).
+        Non-positive width/height is ignored (mirrors ``set_screen_size``)
+        rather than corrupting hit-testing with a degenerate conversion.
+        Never called -> pointer conversion falls back to ``screen_w``/
+        ``screen_h`` with a zero offset, i.e. today's exact behavior
+        (headless replay and any caller that hasn't been updated yet).
+        """
+        if screen_width_px > 0 and screen_height_px > 0:
+            self._gaze_geometry = (screen_width_px, screen_height_px, offset_x_px, offset_y_px)
 
     # -- to be provided by subclasses -------------------------------------
 
@@ -179,7 +218,13 @@ class BaseTask:
             tx_norm, ty_norm = self.target_position(target, elapsed)
             selectable = self.is_selectable(target, elapsed)
             cx_px, cy_px = norm_to_px(tx_norm, ty_norm, self.screen_w, self.screen_h)
-            px, py = norm_to_px(pointer.x, pointer.y, self.screen_w, self.screen_h)
+            if self._gaze_geometry is not None:
+                gaze_w, gaze_h, offset_x, offset_y = self._gaze_geometry
+                px, py = norm_to_px(pointer.x, pointer.y, gaze_w, gaze_h)
+                px -= offset_x
+                py -= offset_y
+            else:
+                px, py = norm_to_px(pointer.x, pointer.y, self.screen_w, self.screen_h)
 
             # The effective hitbox includes the jitter tolerance; this is the
             # region the tool treats as "on target" for both dwell and the

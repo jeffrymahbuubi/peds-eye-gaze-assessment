@@ -155,6 +155,58 @@ def test_run_captures_calib_result_per_point_breakdown():
         server.close()
 
 
+def test_run_captures_calib_result_that_arrives_after_the_satisfying_summary_ack():
+    """SPEC-gui-audit-2026-09-10.md item 2a: CALIB_RESULT (per the vendor
+    manual, pushed at the very end of calibration) can arrive after the
+    CALIBRATE_RESULT_SUMMARY ACK that already satisfies VALID_POINTS ==
+    n_points -- returning the instant that ACK alone is seen used to
+    silently drop a CALIB_RESULT that was only moments away, reproducing
+    the reported "sometimes available, sometimes not" symptom. The grace
+    window must catch it instead."""
+    script = [
+        (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="19.43" VALID_POINTS="2" />\r\n'),
+        (
+            0.15,  # arrives within the grace window, after the satisfying ACK above
+            '<CAL ID="CALIB_RESULT" CALX1="0.50000" CALY1="0.50000" '
+            'LX1="0.50229" LY1="0.50279" LV1="1" RX1="0.51467" RY1="0.50870" RV1="1" '
+            'CALX2="0.85000" CALY2="0.15000" LX2="0.84943" LY2="0.14930" LV2="1" '
+            'RX2="0.84600" RY2="0.14763" RV2="0" />\r\n',
+        ),
+    ]
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        result = Calibration(client=_StubClient(sock), n_points=2, timeout_s=2.0).run()
+        assert result.valid is True
+        assert result.mean_error_px == pytest.approx(19.43)
+        assert result.per_point is not None
+        assert len(result.per_point) == 2
+        assert result.per_point[0]["target_x"] == 0.5
+    finally:
+        server.close()
+
+
+def test_run_gives_up_waiting_for_a_calib_result_that_never_arrives():
+    """The grace window must be bounded -- a summary-satisfied result with
+    no CALIB_RESULT ever coming (e.g. an older firmware, or it genuinely
+    never fires) must still return in roughly _CALIB_RESULT_GRACE_S, not
+    wait out the full poll timeout."""
+    script = [
+        (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="19.43" VALID_POINTS="5" />\r\n'),
+    ]
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        start = time.monotonic()
+        result = Calibration(client=_StubClient(sock), n_points=5, timeout_s=10.0).run()
+        elapsed = time.monotonic() - start
+        assert result.valid is True
+        assert result.per_point is None
+        assert elapsed < 3.0  # well under the 10s poll timeout
+    finally:
+        server.close()
+
+
 def test_run_returns_none_per_point_when_calib_result_never_sent():
     script = [
         (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="19.43" VALID_POINTS="5" />\r\n'),

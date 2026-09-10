@@ -70,6 +70,14 @@ DEVICE_INFO_REPLIES = {
     "SERIAL_ID": '<ACK ID="SERIAL_ID" VALUE="0" />\r\n',
     "CAMERA_SIZE": '<ACK ID="CAMERA_SIZE" WIDTH="752" HEIGHT="480" />\r\n',
     "API_ID": '<ACK ID="API_ID" VALUE="2.8" />\r\n',
+    # A plausible single-monitor tracked-screen region (SPEC-gui-audit-
+    # 2026-09-10.md item 5) -- lets QA exercise BaseTask.set_gaze_geometry's
+    # real wiring (app.py -> DeviceInfo -> task) end-to-end even though this
+    # fake server's REC stream is already canvas-normalized (see WAYPOINTS),
+    # not screen-normalized -- the fake server proves the plumbing, not the
+    # undershoot math itself (that's covered by tests/test_task_pipeline.py's
+    # direct unit tests instead).
+    "SCREEN_SIZE": '<ACK ID="SCREEN_SIZE" X="0" Y="0" WIDTH="1920" HEIGHT="1080" />\r\n',
 }
 
 

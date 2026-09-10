@@ -9,7 +9,7 @@ inter_trial_interval_ms: 900
 
 layout:
   n_icons: 4                  # number of distractor icons + target
-  radius_px: 80
+  radius_px: 100
   arrangement: grid          # row | ring | grid -- grid is real 2D visual search
   margin_frac: 0.14          # inset from screen edge, as a fraction of screen size
 
