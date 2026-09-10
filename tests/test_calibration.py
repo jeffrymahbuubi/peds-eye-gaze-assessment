@@ -17,6 +17,7 @@ from src.engine.calibration import (
     Calibration,
     CalibrationFileError,
     CalibrationResult,
+    calibration_timing_log_path,
     load_calibration_result,
     per_point_errors_px,
     save_calibration_result,
@@ -70,6 +71,19 @@ class _ScriptedServer:
 
     def received_text(self) -> str:
         return bytes(self._received).decode("ascii", errors="ignore")
+
+    def send_now(self, text: str) -> None:
+        """Push raw text immediately, outside the timed script.
+
+        Lets a test seed the client's receive buffer with data that predates
+        the call under test -- e.g. a previous calibration's leftover replies
+        (SPEC-gui-audit-2026-09-10.md S9).
+        """
+        deadline = time.monotonic() + 2.0
+        while self._conn is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert self._conn is not None, "client never connected"
+        self._conn.sendall(text.encode("ascii"))
 
     def connect_client_socket(self) -> socket.socket:
         return socket.create_connection(("127.0.0.1", self.port), timeout=2.0)
@@ -187,10 +201,16 @@ def test_run_captures_calib_result_that_arrives_after_the_satisfying_summary_ack
 
 
 def test_run_gives_up_waiting_for_a_calib_result_that_never_arrives():
-    """The grace window must be bounded -- a summary-satisfied result with
-    no CALIB_RESULT ever coming (e.g. an older firmware, or it genuinely
-    never fires) must still return in roughly _CALIB_RESULT_GRACE_S, not
-    wait out the full poll timeout."""
+    """The wait must be bounded -- a summary-satisfied result with no
+    CALIB_RESULT ever coming (e.g. an older firmware, or it genuinely never
+    fires) must still return without waiting out the full poll timeout.
+
+    Since S9 this returns after _min_calibration_s plus the grace window
+    rather than immediately: an instantly-satisfied summary cannot be
+    distinguished from Gazepoint Control's retained previous calibration any
+    other way. Here that gate is the 0.7 x timeout cap (7.0s of the 10s
+    timeout), so the call still returns before the deadline rather than
+    running it out."""
     script = [
         (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="19.43" VALID_POINTS="5" />\r\n'),
     ]
@@ -202,7 +222,7 @@ def test_run_gives_up_waiting_for_a_calib_result_that_never_arrives():
         elapsed = time.monotonic() - start
         assert result.valid is True
         assert result.per_point is None
-        assert elapsed < 3.0  # well under the 10s poll timeout
+        assert 7.0 <= elapsed < 9.5  # gated, then bounded -- not the 10s timeout
     finally:
         server.close()
 
@@ -583,3 +603,188 @@ def test_load_missing_fields_raises_calibration_file_error(tmp_path):
     path.write_text(json.dumps({"subject_id": "P001"}), encoding="utf-8")
     with pytest.raises(CalibrationFileError, match="missing/invalid fields"):
         load_calibration_result(path)
+
+
+# -- S7 calibration timing diagnostic ------------------------------------
+
+
+def test_timing_log_records_a_calib_result_that_arrived_inside_the_grace_window(tmp_path):
+    """SPEC-gui-audit-2026-09-10.md S7: the diagnostic must record how the
+    ACK-vs-CALIB_RESULT race actually resolved, and how large the gap was --
+    that measured gap across point counts is what decides whether 0.75s is the
+    right grace window, instead of guessing at a new constant."""
+    log_path = tmp_path / "_diagnostics" / "calibration_timing.jsonl"
+    script = [
+        (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="19.43" VALID_POINTS="2" />\r\n'),
+        (
+            0.15,  # after the satisfying ACK, but inside the grace window
+            '<CAL ID="CALIB_RESULT" CALX1="0.50000" CALY1="0.50000" '
+            'LX1="0.50229" LY1="0.50279" LV1="1" RX1="0.51467" RY1="0.50870" RV1="1" '
+            'CALX2="0.85000" CALY2="0.15000" LX2="0.84943" LY2="0.14930" LV2="1" '
+            'RX2="0.84600" RY2="0.14763" RV2="0" />\r\n',
+        ),
+    ]
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        Calibration(
+            client=_StubClient(sock), n_points=2, timeout_s=2.0, timing_log_path=log_path
+        ).run()
+    finally:
+        server.close()
+
+    records = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    assert len(records) == 1
+    record = records[0]
+    assert record["outcome"] == "calib_result_after_ack"
+    assert record["n_points"] == 2
+    assert record["per_point_captured"] is True
+    # The gap is the whole point of the diagnostic: positive (it arrived after
+    # the ACK) and inside the window that caught it.
+    assert 0 < record["gap_s"] < record["grace_s"]
+
+
+def test_timing_log_records_a_calib_result_that_never_arrived(tmp_path):
+    """The 'never arrived' case must be recorded too -- a log of only the
+    successes would make the grace window look adequate no matter how often it
+    actually times out."""
+    log_path = tmp_path / "_diagnostics" / "calibration_timing.jsonl"
+    script = [(0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="19.43" VALID_POINTS="5" />\r\n')]
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        Calibration(
+            client=_StubClient(sock), n_points=5, timeout_s=10.0, timing_log_path=log_path
+        ).run()
+    finally:
+        server.close()
+
+    record = json.loads(log_path.read_text(encoding="utf-8").splitlines()[0])
+    assert record["outcome"] == "calib_result_never"
+    assert record["gap_s"] is None
+    assert record["t_calib_result_s"] is None
+    assert record["per_point_captured"] is False
+    assert record["n_points"] == 5
+
+
+def test_timing_log_appends_across_runs_and_is_off_by_default(tmp_path):
+    """Records accumulate in one file (the question they answer is only
+    answerable across many runs), and no path means no file is written at
+    all -- the diagnostic must not create files for callers that never asked
+    for it."""
+    log_path = tmp_path / "_diagnostics" / "calibration_timing.jsonl"
+    script = [(0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="10.0" VALID_POINTS="4" />\r\n')]
+    for _ in range(2):
+        server = _ScriptedServer(script)
+        try:
+            sock = server.connect_client_socket()
+            Calibration(
+                client=_StubClient(sock), n_points=4, timeout_s=10.0, timing_log_path=log_path
+            ).run()
+        finally:
+            server.close()
+    assert len(log_path.read_text(encoding="utf-8").strip().splitlines()) == 2
+
+    # No timing_log_path -> nothing written anywhere.
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        Calibration(client=_StubClient(sock), n_points=4, timeout_s=10.0).run()
+    finally:
+        server.close()
+    assert len(log_path.read_text(encoding="utf-8").strip().splitlines()) == 2
+
+
+def test_calibration_timing_log_path_is_shared_not_per_session(tmp_path):
+    """Both callers (the dashboard's Setup page and app.py's own CLI launch
+    path) must resolve to the same file, or the point counts get split across
+    files and can't be compared."""
+    assert calibration_timing_log_path(tmp_path) == tmp_path / "_diagnostics" / "calibration_timing.jsonl"
+
+
+# -- S9 stale-result bug (leftover replies from a previous calibration) ---
+
+
+def test_run_ignores_stale_replies_left_over_from_a_previous_calibration():
+    """SPEC-gui-audit-2026-09-10.md S9: the reported bug, reproduced exactly.
+
+    _poll_for_result polls CALIBRATE_RESULT_SUMMARY every _POLL_INTERVAL_S and
+    returns on the first satisfying reply, so a real (~10s) calibration leaves
+    a queue of later replies unread -- every one of them reporting the finished
+    calibration as fully valid. Against the real GP3 HD this made each
+    calibration after the first return in ~60ms with the PREVIOUS run's numbers
+    while the child was still being calibrated on screen.
+
+    Here the socket already holds such stale replies before run() is called;
+    the new calibration must ignore them and report its own result, not the
+    stale 99.0 one.
+    """
+    # What the previous calibration actually left behind on the real device:
+    # its trailing summary replies AND its CALIB_RESULT push. Together these
+    # hit _poll_for_result's fast path (summary satisfied *and* per_point
+    # already known), so it returns instantly -- which is why the grace window
+    # from item 2a cannot mask this the way it would for a summary alone.
+    stale = (
+        '<CAL ID="CALIB_RESULT" CALX1="0.50000" CALY1="0.50000" '
+        'LX1="0.99000" LY1="0.99000" LV1="1" RX1="0.99000" RY1="0.99000" RV1="1" />\r\n'
+        '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="99.0" VALID_POINTS="5" />\r\n'
+    )
+    script = [
+        # This run's own result, arriving only after a realistic delay.
+        (0.6, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="12.5" VALID_POINTS="5" />\r\n'),
+    ]
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        # Seed the socket with the previous calibration's leftover replies.
+        server.send_now(stale * 3)
+        time.sleep(0.2)  # let them land in the client's receive buffer
+
+        started = time.monotonic()
+        result = Calibration(client=_StubClient(sock), n_points=5, timeout_s=5.0).run()
+        elapsed = time.monotonic() - started
+
+        # The stale 99.0 must not be what gets reported...
+        assert result.mean_error_px == pytest.approx(12.5)
+        # ...and the call must actually have waited for this run's own result
+        # rather than returning instantly off the stale queue.
+        assert elapsed > 0.4
+    finally:
+        server.close()
+
+
+def test_run_ignores_a_retained_result_reported_before_this_calibration_could_finish():
+    """SPEC-gui-audit-2026-09-10.md S9, the half a socket drain cannot fix.
+
+    On a *fresh* connection there is nothing stale in the socket, yet Gazepoint
+    Control still answers CALIBRATE_RESULT_QUERY with the calibration it
+    retained from a previous session -- measured against the real device at
+    0.031s after CALIBRATE_START, carrying the previous app instance's own
+    error value. A result that arrives before the points could physically have
+    been animated must not be accepted as this run's.
+    """
+    script = [
+        # Retained from a previous session: satisfying, but impossibly early.
+        (0.05, '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="99.0" VALID_POINTS="2" />\r\n'),
+        # This run's real result, once the points have actually been animated.
+        (
+            1.6,
+            '<CAL ID="CALIB_RESULT" CALX1="0.50000" CALY1="0.50000" '
+            'LX1="0.50229" LY1="0.50279" LV1="1" RX1="0.51467" RY1="0.50870" RV1="1" />\r\n'
+            '<ACK ID="CALIBRATE_RESULT_SUMMARY" AVE_ERROR="12.5" VALID_POINTS="2" />\r\n',
+        ),
+    ]
+    server = _ScriptedServer(script)
+    try:
+        sock = server.connect_client_socket()
+        started = time.monotonic()
+        # n_points=2 -> _min_calibration_s == 0.4 * 2 * 1.75 == 1.4s, so the
+        # 0.05s reply is rejected and the 1.6s one accepted.
+        result = Calibration(client=_StubClient(sock), n_points=2, timeout_s=6.0).run()
+        elapsed = time.monotonic() - started
+
+        assert result.mean_error_px == pytest.approx(12.5)  # not the retained 99.0
+        assert result.per_point is not None  # this run's own breakdown
+        assert elapsed >= 1.4  # waited past the earliest a real result could exist
+    finally:
+        server.close()

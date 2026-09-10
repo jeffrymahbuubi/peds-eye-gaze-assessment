@@ -297,6 +297,72 @@ def test_gaze_geometry_accounts_for_canvas_offset_within_the_tracked_screen():
     assert result2.on_target is False
 
 
+def test_cursor_xy_norm_puts_the_drawn_cursor_where_hit_testing_looks():
+    """SPEC-gui-audit-2026-09-10.md S6: the reported cursor position and the
+    position hit-testing checks must be the same point.
+
+    They were not: item 5 corrected only the hit-testing conversion, while the
+    renderer kept receiving the raw, monitor-normalized pointer and converting
+    it with the canvas's own width/height. This reproduces that divergence and
+    proves FrameResult.cursor_xy_norm closes it."""
+    canvas_w, canvas_h = 1024, 800
+    monitor_w, monitor_h = 1920, 1080
+    target_x_norm, target_y_norm, radius_px = 0.85, 0.5, 30.0
+
+    task = _SingleTargetTask(
+        {}, canvas_w, canvas_h, x_norm=target_x_norm, y_norm=target_y_norm, radius_px=radius_px
+    )
+    task.set_gaze_geometry(monitor_w, monitor_h, 0.0, 0.0)
+
+    # A subject looking exactly at the drawn target, as the tracker reports it.
+    pointer = Pointer(
+        x=(target_x_norm * canvas_w) / monitor_w,
+        y=(target_y_norm * canvas_h) / monitor_h,
+        valid=True,
+        clicked=False,
+    )
+    result = task.update(t_ns=1_000_000, pointer=pointer)
+
+    # Hit-testing agrees the subject is on the target...
+    assert result.on_target is True
+    # ...and the cursor is reported at that same target, in the canvas's own
+    # normalized space -- so the dot is drawn on the circle, not short of it.
+    assert result.cursor_xy_norm == pytest.approx((target_x_norm, target_y_norm))
+    # The raw pointer the renderer used to be handed is a different point
+    # entirely -- this gap is exactly what made the cursor drift and vanish.
+    assert result.cursor_xy_norm != pytest.approx((pointer.x, pointer.y))
+
+
+def test_cursor_xy_norm_reports_positions_outside_the_canvas_rather_than_hiding_them():
+    """Real gaze can land off the canvas (the operator sidebar, elsewhere on
+    the monitor). That must surface as an out-of-range value the renderer can
+    clamp and dim -- not be silently squashed here, which would make "at the
+    edge" and "off the canvas" indistinguishable to the layer that draws."""
+    canvas_w, canvas_h = 744, 845  # the real measured canvas from item 5
+    monitor_w, monitor_h = 1920, 1080
+
+    task = _SingleTargetTask({}, canvas_w, canvas_h, x_norm=0.5, y_norm=0.5, radius_px=30.0)
+    task.set_gaze_geometry(monitor_w, monitor_h, 0.0, 0.0)
+
+    # Gaze far to the right of the monitor -- well past the canvas's own width.
+    pointer = Pointer(x=0.95, y=0.5, valid=True, clicked=False)
+    result = task.update(t_ns=1_000_000, pointer=pointer)
+
+    assert result.cursor_xy_norm[0] > 1.0  # off the canvas, truthfully reported
+
+
+def test_cursor_xy_norm_falls_back_to_the_raw_pointer_without_gaze_geometry():
+    """Headless replay and any not-yet-wired caller never call
+    set_gaze_geometry; there the pointer is already canvas-normalized and must
+    pass through untouched, so this change is a no-op for them."""
+    task = _SingleTargetTask({}, 1024, 800, x_norm=0.5, y_norm=0.5, radius_px=30.0)
+    pointer = Pointer(x=0.42, y=0.73, valid=True, clicked=False)
+
+    result = task.update(t_ns=1_000_000, pointer=pointer)
+
+    assert result.cursor_xy_norm == pytest.approx((0.42, 0.73))
+
+
 def test_frame_result_reports_on_target_instantly_not_gated_by_dwell():
     """SPEC-2026-09-02.md item 2: gaze landing on the target must be visible
     the instant it happens, not only after threshold_ms of accumulated dwell

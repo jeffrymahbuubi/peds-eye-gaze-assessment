@@ -55,6 +55,15 @@ class FrameResult:
     dwell_progress: float
     pointer: Pointer
     just_finished_trial: bool
+    # Where the pointer actually is in *canvas-normalized* coordinates, i.e.
+    # the same space target_xy_norm is expressed in and the canvas renders in
+    # (SPEC-gui-audit-2026-09-10.md S6). Distinct from ``pointer.x/y``, which
+    # for a live tracker are normalized against the whole tracked monitor.
+    # The renderer must use this, not pointer.x/y, or the drawn cursor and the
+    # position hit-testing checks are two different points. May fall outside
+    # [0,1] when real gaze is off the canvas -- clamping is the renderer's
+    # decision, not this layer's, so hit-testing stays exact.
+    cursor_xy_norm: tuple[float, float] = (0.5, 0.5)
     selectable: bool = True  # whether a selection currently counts as a hit
     # Instant (not dwell-gated) acknowledgment that gaze is on the target right
     # now (SPEC-2026-09-02.md item 2) -- distinct from dwell_progress, which
@@ -160,6 +169,36 @@ class BaseTask:
         if screen_width_px > 0 and screen_height_px > 0:
             self._gaze_geometry = (screen_width_px, screen_height_px, offset_x_px, offset_y_px)
 
+    def pointer_to_canvas_px(self, pointer: Pointer) -> tuple[float, float]:
+        """Convert a pointer to canvas-local pixels, applying the tracked-screen
+        geometry from :meth:`set_gaze_geometry` when it's known.
+
+        The single place this conversion happens, so hit-testing (below) and
+        whatever the GUI draws can never drift apart -- they did before
+        (SPEC-gui-audit-2026-09-10.md S6: item 5 corrected hit-testing only,
+        while the canvas kept converting the raw pointer with its own widget
+        size, so the drawn cursor left the widget's rect and Qt silently
+        clipped it away).
+        """
+        if self._gaze_geometry is not None:
+            gaze_w, gaze_h, offset_x, offset_y = self._gaze_geometry
+            px, py = norm_to_px(pointer.x, pointer.y, gaze_w, gaze_h)
+            return px - offset_x, py - offset_y
+        return norm_to_px(pointer.x, pointer.y, self.screen_w, self.screen_h)
+
+    def pointer_to_canvas_norm(self, pointer: Pointer) -> tuple[float, float]:
+        """Same conversion as :meth:`pointer_to_canvas_px`, re-normalized to the
+        canvas's own 0-1 space so the renderer can use it directly.
+
+        Not clamped to [0,1]: a value outside that range is the truthful
+        statement "real gaze is off the canvas", which the renderer needs to
+        know about in order to decide what to show for it.
+        """
+        px, py = self.pointer_to_canvas_px(pointer)
+        w = self.screen_w or 1
+        h = self.screen_h or 1
+        return px / w, py / h
+
     # -- to be provided by subclasses -------------------------------------
 
     def build_targets(self) -> list[TargetSpec]:
@@ -218,13 +257,7 @@ class BaseTask:
             tx_norm, ty_norm = self.target_position(target, elapsed)
             selectable = self.is_selectable(target, elapsed)
             cx_px, cy_px = norm_to_px(tx_norm, ty_norm, self.screen_w, self.screen_h)
-            if self._gaze_geometry is not None:
-                gaze_w, gaze_h, offset_x, offset_y = self._gaze_geometry
-                px, py = norm_to_px(pointer.x, pointer.y, gaze_w, gaze_h)
-                px -= offset_x
-                py -= offset_y
-            else:
-                px, py = norm_to_px(pointer.x, pointer.y, self.screen_w, self.screen_h)
+            px, py = self.pointer_to_canvas_px(pointer)
 
             # The effective hitbox includes the jitter tolerance; this is the
             # region the tool treats as "on target" for both dwell and the
@@ -285,6 +318,10 @@ class BaseTask:
             dwell_progress=dwell_progress,
             pointer=pointer,
             just_finished_trial=just_finished,
+            # Computed every frame, not just during WAIT_INPUT -- the cursor is
+            # drawn continuously (including between trials), so it can't depend
+            # on the hit-testing branch above having run.
+            cursor_xy_norm=self.pointer_to_canvas_norm(pointer),
             selectable=selectable,
             on_target=on_target,
         )

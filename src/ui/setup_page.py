@@ -39,6 +39,7 @@ from ..engine.calibration import (
     Calibration,
     CalibrationFileError,
     CalibrationResult,
+    calibration_timing_log_path,
     load_calibration_result,
     per_point_errors_px,
     save_calibration_result,
@@ -113,6 +114,41 @@ def _subject_calibration_dir(output_root: str | Path, subject_id: str) -> Path:
     return Path(output_root) / "_calibrations" / subject_id
 
 
+def _subject_calibration_path(output_root: str | Path, subject_id: str, n_points: int) -> Path:
+    """One saved calibration file per point count per subject (SPEC-gui-audit-
+    2026-09-10.md S8).
+
+    The point count is in the filename so it's readable without opening the
+    file. Because it's part of the name rather than a fixed ``calibration.json``,
+    saving a 9-point calibration no longer overwrites the same subject's
+    5-point one -- both stay available to load.
+    """
+    return _subject_calibration_dir(output_root, subject_id) / f"calibration_{int(n_points)}pt.json"
+
+
+def _latest_subject_calibration(output_root: str | Path, subject_id: str) -> Path | None:
+    """The subject's most recently saved calibration, or None if they have none.
+
+    With one file per point count (S8), a subject can have several. The most
+    recently written one is what a single canonical ``calibration.json`` would
+    always have held anyway, so defaulting the file picker to it keeps the
+    established behaviour while still listing the others alongside it.
+
+    ``calibration.json`` (the pre-S8 name) is included in the search so
+    calibrations saved before this change are still offered.
+    """
+    directory = _subject_calibration_dir(output_root, subject_id)
+    if not directory.is_dir():
+        return None
+    candidates = [p for p in directory.glob("calibration_*pt.json") if p.is_file()]
+    legacy = directory / "calibration.json"
+    if legacy.is_file():
+        candidates.append(legacy)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
+
+
 class _ConnectThread(QThread):
     """Connects (or probes) a GazepointClient off the UI thread.
 
@@ -169,14 +205,23 @@ class _DeviceInfoRefreshThread(QThread):
 class _CalibrationThread(QThread):
     finished_ok = Signal(object)
 
-    def __init__(self, client: GazepointClient, n_points: int, show: bool, parent=None) -> None:
+    def __init__(
+        self, client: GazepointClient, n_points: int, show: bool, output_root: str | Path, parent=None
+    ) -> None:
         super().__init__(parent)
         self._client = client
         self._n_points = n_points
         self._show = show
+        self._output_root = output_root
 
     def run(self) -> None:
-        calibration = Calibration(self._client, n_points=self._n_points, enabled=True, show=self._show)
+        calibration = Calibration(
+            self._client,
+            n_points=self._n_points,
+            enabled=True,
+            show=self._show,
+            timing_log_path=calibration_timing_log_path(self._output_root),
+        )
         self.finished_ok.emit(calibration.run())
 
 
@@ -694,7 +739,11 @@ class SetupPage(QWidget):
         self.do_calibration_button.setEnabled(False)
         self._set_calibration_alert("info", "Calibrating…")
         thread = _CalibrationThread(
-            self._client, self.point_count_spin.value(), self.show_calibration_checkbox.isChecked(), parent=self
+            self._client,
+            self.point_count_spin.value(),
+            self.show_calibration_checkbox.isChecked(),
+            self._defaults.get("recording", {}).get("output_root", "sessions"),
+            parent=self,
         )
         self._calibration_thread = thread
         thread.finished_ok.connect(self._on_calibration_finished)
@@ -726,12 +775,14 @@ class SetupPage(QWidget):
         if not subject_id:
             return  # button is disabled in this state; guard against a stray signal anyway
         output_root = self._defaults.get("recording", {}).get("output_root", "sessions")
-        target_dir = _subject_calibration_dir(output_root, subject_id)
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target_path = target_dir / "calibration.json"
+        n_points = self._calibration_result.n_points
+        target_path = _subject_calibration_path(output_root, subject_id, n_points)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
         save_calibration_result(target_path, subject_id, self._calibration_result)
         self._set_calibration_alert(
-            "success", f"Calibration saved for {subject_id} — Load Calibration File will offer it next time."
+            "success",
+            f"Calibration saved for {subject_id} as {target_path.name} — "
+            "Load Calibration File will offer it next time.",
         )
 
     def _on_load_calibration_clicked(self) -> None:
@@ -739,12 +790,14 @@ class SetupPage(QWidget):
         # Default to this subject's own saved calibration (SPEC-gui-audit-
         # 2026-09-10.md item 2b) when one exists, instead of always starting
         # the browse at output_root -- QFileDialog pre-selects the file
-        # itself when given a full path, not just a directory.
+        # itself when given a full path, not just a directory. With one file
+        # per point count (S8) a subject can have several; the most recently
+        # saved one is pre-selected and the rest are listed beside it.
         default_path = Path(output_root)
         subject_id = self.subject_id()
         if subject_id:
-            candidate = _subject_calibration_dir(output_root, subject_id) / "calibration.json"
-            if candidate.exists():
+            candidate = _latest_subject_calibration(output_root, subject_id)
+            if candidate is not None:
                 default_path = candidate
         path, _ = QFileDialog.getOpenFileName(
             self, "Load Calibration File", str(default_path), "Calibration files (*.json)"

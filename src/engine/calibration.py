@@ -233,6 +233,61 @@ _POLL_INTERVAL_S = 0.5
 # available, sometimes not, redoing it doesn't help").
 _CALIB_RESULT_GRACE_S = 0.75
 
+# Upper bound on reads when clearing stale pre-calibration data (see
+# _drain_socket). Only a handful of leftover replies are ever expected; the cap
+# exists so a continuously-streaming device can't stall the drain forever.
+_DRAIN_MAX_READS = 64
+
+
+def _drain_socket(sock) -> None:
+    """Read and discard whatever is already waiting on the socket.
+
+    Used before starting a calibration so a previous calibration's leftover
+    replies can't be mistaken for this one's (SPEC-gui-audit-2026-09-10.md S9).
+    Bounded by a read cap as well as the non-blocking timeout, so a device that
+    is streaming continuously can't hold the drain loop open indefinitely.
+    """
+    original_timeout = sock.gettimeout()
+    sock.settimeout(0.0)  # non-blocking: read only what has already arrived
+    try:
+        for _ in range(_DRAIN_MAX_READS):
+            try:
+                if not sock.recv(65536):
+                    return  # peer closed
+            except (BlockingIOError, TimeoutError):
+                return  # nothing left waiting -- the normal exit
+            except OSError:
+                return
+    finally:
+        sock.settimeout(original_timeout)
+
+
+def calibration_timing_log_path(output_root: str | Path) -> Path:
+    """Where calibration timing records accumulate (SPEC-gui-audit-2026-09-10.md
+    S7). One shared append-only JSONL across every run and subject, since the
+    question it answers ("how long after the summary ACK does CALIB_RESULT
+    actually arrive, by point count?") is only answerable across many runs.
+    Deliberately outside any single session folder, and not per-subject.
+    """
+    return Path(output_root) / "_diagnostics" / "calibration_timing.jsonl"
+
+
+def _append_timing_record(path: str | Path, record: dict[str, Any]) -> None:
+    """Append one JSONL timing record, never raising (SPEC-gui-audit-
+    2026-09-10.md S7).
+
+    A diagnostic must not be able to break a calibration the child just sat
+    through, so every filesystem error is swallowed deliberately -- losing a
+    diagnostic line is always preferable to losing the calibration itself.
+    """
+    try:
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record) + "\n")
+    except OSError:
+        pass
+
 
 class Calibration:
     """Drive the Gazepoint calibration and capture its error summary."""
@@ -247,12 +302,17 @@ class Calibration:
         point_timeout_s: float | None = None,
         point_delay_s: float | None = None,
         preset_result: CalibrationResult | None = None,
+        timing_log_path: str | Path | None = None,
     ) -> None:
         # A preset result (from --calibration-file) means run() returns it
         # immediately without touching the socket at all -- skip point-count
         # validation and the device-timing math below entirely, since none of
         # it applies to a reused record.
         self._preset_result = preset_result
+        # Where _poll_for_result appends its ACK-to-CALIB_RESULT timing record
+        # (SPEC-gui-audit-2026-09-10.md S7). None = don't log, which is what
+        # every unit test does; the app always passes a real path.
+        self.timing_log_path = timing_log_path
         if preset_result is not None:
             self._layout = None  # never consulted: run() returns preset_result directly
             self._client = client
@@ -262,6 +322,7 @@ class Calibration:
             self.point_timeout_s = point_timeout_s
             self.point_delay_s = point_delay_s
             self._timeout_s = timeout_s or 0.0
+            self._min_calibration_s = 0.0  # never polls; run() returns the preset directly
             return
 
         self._layout = _layout_for(n_points)  # raises ValueError if out of range
@@ -288,6 +349,21 @@ class Calibration:
         )
         self._timeout_s = timeout_s if timeout_s is not None else max(10.0, n_points * per_point_s * 1.75)
 
+        # Fallback completion gate for devices that never push CALIB_RESULT
+        # (SPEC-gui-audit-2026-09-10.md S9). Gazepoint Control answers a result
+        # query with its *retained previous* calibration from the moment
+        # CALIBRATE_START is sent, so elapsed time is the only other evidence
+        # that a summary describes this run. It must therefore be long enough
+        # that the calibration is genuinely over: 1.25x the vendor-derived
+        # per-point estimate, measured at ~10.5s for a real 5-point run. An
+        # earlier gate does not work -- a 0.4x gate was tried against the real
+        # device and still returned the retained result.
+        #
+        # Capped below the poll deadline so this can never swallow the whole
+        # timeout and return nothing at all; CALIB_RESULT, when it arrives,
+        # short-circuits all of this and is by far the common case.
+        self._min_calibration_s = min(n_points * per_point_s * 1.25, self._timeout_s * 0.7)
+
     @property
     def is_stub(self) -> bool:
         """True if :meth:`run` will skip the device (no socket, or disabled).
@@ -313,6 +389,18 @@ class Calibration:
             return CalibrationResult(n_points=self.n_points, mean_error_px=None, valid=False)
 
         try:
+            # Discard anything the device left in the socket from a previous
+            # calibration before starting a new one (SPEC-gui-audit-2026-09-10.md
+            # S9). _poll_for_result queries CALIBRATE_RESULT_SUMMARY every
+            # _POLL_INTERVAL_S and returns on the first satisfying reply, so a
+            # ~10s calibration leaves a queue of later replies unread -- all of
+            # them reporting the finished calibration as fully valid. Without
+            # this drain the next calibration's poll consumes those stale
+            # replies within milliseconds and reports the PREVIOUS run's
+            # numbers as if they were this run's, while the child is still
+            # being calibrated on screen.
+            _drain_socket(sock)
+
             if self.point_delay_s is not None:
                 sock.sendall(f'<SET ID="CALIBRATE_DELAY" VALUE="{self.point_delay_s}" />\r\n'.encode("ascii"))
             if self.point_timeout_s is not None:
@@ -352,6 +440,13 @@ class Calibration:
         arrived yet -- see ``_CALIB_RESULT_GRACE_S``'s own docstring for why
         returning instantly there was a race (SPEC-gui-audit-2026-09-10.md
         item 2a).
+
+        When ``timing_log_path`` is set, appends one JSONL record per run
+        describing how that race actually resolved on real hardware
+        (SPEC-gui-audit-2026-09-10.md S7): whether ``CALIB_RESULT`` arrived
+        before the satisfying ACK, inside the grace window (and how long it
+        took), or never. That measured gap -- across point counts -- is what
+        decides whether 0.75s is the right constant, instead of guessing.
         """
         original_timeout = sock.gettimeout()
         sock.settimeout(0.2)
@@ -367,10 +462,98 @@ class Calibration:
         # hasn't been seen yet -- bounds the extra wait for it specifically,
         # separately from (and always sooner than) the overall poll deadline.
         grace_deadline: float | None = None
+
+        # -- S7 timing diagnostic bookkeeping (monotonic, relative to t0) --
+        t0 = time.monotonic()
+        t_satisfied: float | None = None  # first ACK reporting every point valid
+        t_calib_result: float | None = None  # the unprompted CALIB_RESULT push
+
+        def _finish(result: CalibrationResult, outcome: str) -> CalibrationResult:
+            if self.timing_log_path is not None:
+                gap = (
+                    t_calib_result - t_satisfied
+                    if t_calib_result is not None and t_satisfied is not None
+                    else None
+                )
+                _append_timing_record(
+                    self.timing_log_path,
+                    {
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "n_points": self.n_points,
+                        "outcome": outcome,
+                        # The number that matters: how long after the summary
+                        # ACK said "all valid" the per-point push landed.
+                        # Negative = it arrived first (no race to lose).
+                        "gap_s": round(gap, 4) if gap is not None else None,
+                        "grace_s": _CALIB_RESULT_GRACE_S,
+                        "t_summary_satisfied_s": (
+                            round(t_satisfied - t0, 4) if t_satisfied is not None else None
+                        ),
+                        "t_calib_result_s": (
+                            round(t_calib_result - t0, 4) if t_calib_result is not None else None
+                        ),
+                        # Total time run() spent polling. Distinguishes "waited
+                        # for the real calibration" from "returned instantly
+                        # off a retained result" at a glance (S9).
+                        "elapsed_s": round(time.monotonic() - t0, 4),
+                        "min_calibration_s": round(self._min_calibration_s, 4),
+                        "per_point_captured": bool(result.per_point),
+                        "valid": result.valid,
+                        "mean_error_px": result.mean_error_px,
+                    },
+                )
+            return result
+
+        def _with_per_point(result: CalibrationResult) -> CalibrationResult:
+            if not per_point or result.per_point:
+                return result
+            return CalibrationResult(
+                n_points=result.n_points,
+                mean_error_px=result.mean_error_px,
+                valid=result.valid,
+                per_point=tuple(per_point),
+            )
+
+        def _acceptance() -> CalibrationResult | None:
+            """Whether the satisfied summary can be trusted as THIS run's result.
+
+            Gazepoint Control answers CALIBRATE_RESULT_QUERY with its retained
+            previous calibration, so a summary reporting every point valid
+            within milliseconds of CALIBRATE_START describes the LAST
+            calibration, not the one still animating on screen
+            (SPEC-gui-audit-2026-09-10.md S9 -- measured at 0.031s against the
+            real device, carrying the previous session's error value).
+            CALIB_RESULT is the trustworthy completion marker: pushed once,
+            unprompted, when this calibration actually ends. The elapsed-time
+            fallback keeps a device that never pushes it working.
+
+            Returns the result to return, or None to keep polling.
+            """
+            nonlocal grace_deadline
+            if t_satisfied is None or best is None:
+                return None
+            if per_point is not None:
+                outcome = (
+                    "calib_result_before_ack"
+                    if t_calib_result is not None and t_calib_result <= t_satisfied
+                    else "calib_result_after_ack"
+                )
+                return _finish(_with_per_point(best), outcome)
+            if time.monotonic() - t0 >= self._min_calibration_s:
+                if grace_deadline is None:
+                    grace_deadline = time.monotonic() + _CALIB_RESULT_GRACE_S
+                elif time.monotonic() >= grace_deadline:
+                    return _finish(best, "calib_result_never")
+            return None
+
         try:
             while time.monotonic() < deadline:
-                if grace_deadline is not None and time.monotonic() >= grace_deadline:
-                    return best
+                # Checked every iteration, including ones where recv() timed
+                # out with nothing new -- the grace/minimum-duration deadlines
+                # pass with the clock, not with incoming data.
+                accepted = _acceptance()
+                if accepted is not None:
+                    return accepted
                 if time.monotonic() >= next_query:
                     sock.sendall(CALIBRATE_RESULT_QUERY.encode("ascii"))
                     next_query = time.monotonic() + _POLL_INTERVAL_S
@@ -391,15 +574,7 @@ class Calibration:
                     tag, attrs = parsed
                     if tag == "CAL" and attrs.get("ID") == "CALIB_RESULT":
                         per_point = _parse_calib_result(attrs)
-                        if best is not None and grace_deadline is not None:
-                            # The one thing the grace window was waiting on.
-                            best = CalibrationResult(
-                                n_points=best.n_points,
-                                mean_error_px=best.mean_error_px,
-                                valid=best.valid,
-                                per_point=tuple(per_point),
-                            )
-                            return best
+                        t_calib_result = time.monotonic()
                         continue
                     if tag != "ACK" or attrs.get("ID") != "CALIBRATE_RESULT_SUMMARY":
                         continue  # ignore CALIB_START_PT/CALIB_RESULT_PT progress records
@@ -412,16 +587,23 @@ class Calibration:
                         valid=valid_points > 0,
                         per_point=tuple(per_point) if per_point else None,
                     )
-                    if valid_points >= self.n_points:
-                        if per_point is not None:
-                            return best  # already have everything -- no need to wait
-                        if grace_deadline is None:
-                            grace_deadline = time.monotonic() + _CALIB_RESULT_GRACE_S
+                    if valid_points >= self.n_points and t_satisfied is None:
+                        t_satisfied = time.monotonic()
+
+                accepted = _acceptance()
+                if accepted is not None:
+                    return accepted
         finally:
             sock.settimeout(original_timeout)
-        return best or CalibrationResult(
-            n_points=self.n_points,
-            mean_error_px=None,
-            valid=False,
-            per_point=tuple(per_point) if per_point else None,
+        return _finish(
+            _with_per_point(
+                best
+                or CalibrationResult(
+                    n_points=self.n_points,
+                    mean_error_px=None,
+                    valid=False,
+                    per_point=tuple(per_point) if per_point else None,
+                )
+            ),
+            "poll_timeout",
         )

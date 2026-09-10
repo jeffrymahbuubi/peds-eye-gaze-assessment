@@ -25,6 +25,7 @@ from .engine.calibration import (
     Calibration,
     CalibrationFileError,
     CalibrationResult,
+    calibration_timing_log_path,
     load_calibration_result,
     save_calibration_result,
 )
@@ -212,6 +213,7 @@ class AssessmentApp:
                 show=bool(cal_cfg.get("show", True)),
                 point_timeout_s=cal_cfg.get("timeout_s"),
                 point_delay_s=cal_cfg.get("delay_s"),
+                timing_log_path=calibration_timing_log_path(output_root),
             )
             cal = calibration.run()
             if not calibration.is_stub:
@@ -455,7 +457,11 @@ class AssessmentApp:
         self.canvas.set_frame(
             target_xy_norm=result.target_xy_norm,
             target_radius_px=(result.target.radius_px if result.target else 90.0),
-            cursor_xy_norm=(pointer.x, pointer.y),
+            # The task's own corrected canvas-normalized pointer, NOT the raw
+            # monitor-normalized pointer.x/y -- feeding the raw value here was
+            # the confirmed cause of the cursor silently vanishing off-center
+            # (SPEC-gui-audit-2026-09-10.md S6).
+            cursor_xy_norm=result.cursor_xy_norm,
             cursor_valid=pointer.valid,
             dwell_progress=result.dwell_progress,
             selectable=result.selectable,

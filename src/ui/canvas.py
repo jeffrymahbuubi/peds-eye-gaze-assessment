@@ -21,6 +21,33 @@ from ..inputs.base import norm_to_px
 # visual-search assessment is for.
 _SHAPE_CIRCLE, _SHAPE_SQUARE, _SHAPE_TRIANGLE, _SHAPE_DIAMOND, _SHAPE_HEX, _SHAPE_STAR = range(6)
 
+# Drawn radius of the gaze cursor dot. Also the inset used when clamping it to
+# the canvas edge, so a clamped cursor is fully visible rather than half cut
+# off by the widget boundary (SPEC-gui-audit-2026-09-10.md S6).
+_CURSOR_RADIUS_PX = 14.0
+
+
+def _clamp_to_canvas(x: float, y: float, w: int, h: int) -> tuple[float, float, bool]:
+    """Pull a cursor position inside the canvas, reporting whether it had to.
+
+    Real gaze can legitimately land outside the canvas -- on the operator
+    sidebar, or anywhere else on the tracked monitor. Qt clips paintEvent
+    drawing to the widget's own rect, so such a position used to make the
+    cursor silently disappear entirely, which reads as "tracking died" rather
+    than "you're looking off to the side" (SPEC-gui-audit-2026-09-10.md S6).
+    Clamping keeps a dot on screen at the nearest edge, matching Gazepoint
+    Control's own always-visible calibration marker.
+
+    Inset by the cursor's own radius so the clamped dot is drawn whole, not
+    half-clipped by the boundary. The returned flag is what lets the caller
+    show a clamped cursor differently from a real in-canvas one -- without it,
+    "gaze at the very edge" and "gaze left the canvas" would be identical.
+    """
+    r = _CURSOR_RADIUS_PX
+    cx = min(max(x, r), max(float(w) - r, r))
+    cy = min(max(y, r), max(float(h) - r, r))
+    return cx, cy, (cx != x or cy != y)
+
 
 class TaskCanvas(QWidget):
     def __init__(self, theme: dict | None = None, parent: QWidget | None = None) -> None:
@@ -129,7 +156,8 @@ class TaskCanvas(QWidget):
 
         if self.show_cursor:
             cx, cy = norm_to_px(*self.cursor_xy_norm, w, h)
-            self._draw_cursor(painter, cx, cy)
+            ccx, ccy, clamped = _clamp_to_canvas(cx, cy, w, h)
+            self._draw_cursor(painter, ccx, ccy, clamped)
 
         painter.end()
 
@@ -311,12 +339,18 @@ class TaskCanvas(QWidget):
         span = int(-360 * 16 * max(0.0, min(1.0, self.dwell_progress)))
         painter.drawArc(int(x - r), int(y - r), int(2 * r), int(2 * r), 90 * 16, span)
 
-    def _draw_cursor(self, painter: QPainter, x: float, y: float) -> None:
+    def _draw_cursor(self, painter: QPainter, x: float, y: float, clamped: bool = False) -> None:
         color = QColor(self.theme.get("cursor_color", "#ffffff"))
-        color.setAlpha(200 if self.cursor_valid else 70)
+        # A clamped cursor reuses the same dim treatment as an invalid one: it
+        # is still a real reading, but it is not where it appears to be, so it
+        # should not look like a normal on-canvas cursor (SPEC-gui-audit-
+        # 2026-09-10.md S6 -- the operator can still tell "looking off-canvas"
+        # from "looking at the canvas edge", which a uniformly-bright clamp
+        # would have made indistinguishable).
+        color.setAlpha(200 if (self.cursor_valid and not clamped) else 70)
         painter.setBrush(color)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(QPointF(x, y), 14, 14)
+        painter.drawEllipse(QPointF(x, y), _CURSOR_RADIUS_PX, _CURSOR_RADIUS_PX)
 
     def _draw_particles(self, painter: QPainter, w: int, h: int) -> None:
         if not self._particles:
