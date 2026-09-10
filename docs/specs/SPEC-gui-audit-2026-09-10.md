@@ -1,6 +1,6 @@
 # SPEC-gui-audit-2026-09-10 — Real-Device GUI Audit
 
-**Status: ALL 5 ITEMS DONE** — implemented and validated, hardest-to-easiest per the user's chosen order (5 → 2b → 2a → 3 → 1). Item 4 was an explanation only, no code change needed. Full suite: 139 collected, 138 passed, 1 pre-existing unrelated failure, no regressions across the whole round. **Everything remains uncommitted** (`configs/default.yaml`/`configs/local_state.json` are skip-worktree'd/gitignored and were never part of any commit by design) — ask before committing, matching this project's established pattern.
+**Status: ALL 5 ITEMS DONE, committed and pushed.** Implemented and validated, hardest-to-easiest per the user's chosen order (5 → 2b → 2a → 3 → 1). Item 4 was an explanation only, no code change needed. Full suite: 139 collected, 138 passed, 1 pre-existing unrelated failure, no regressions across the whole round. Committed as `0b433c7`, pushed to `origin/main`. (`configs/default.yaml`/`configs/local_state.json` are skip-worktree'd/gitignored and were never part of any commit by design — the `127.0.0.1`/`4242` values they now hold are real, just not tracked.)
 
 **Created:** 2026-09-10
 **Last updated:** 2026-09-10
@@ -136,4 +136,6 @@ This is distinct from the already-fixed Aug-31 hit-testing bug (`peds-eye-gaze-a
 
   Full pytest suite: 139 collected, 138 passed, 1 pre-existing unrelated failure, no regressions (config-only change, no test reads `configs/default.yaml`'s `gazepoint.host` directly).
 
-  **Files changed:** `configs/default.yaml` (skip-worktree'd, not part of any commit by design), `configs/local_state.json` (gitignored, per-machine, never committable). **All 5 SPEC items are now implemented and validated. Everything from `src/`/`tests/`/`configs/tasks/`/`tools/` remains uncommitted** — ask before committing.
+  **Files changed:** `configs/default.yaml` (skip-worktree'd, not part of any commit by design), `configs/local_state.json` (gitignored, per-machine, never committable). All 5 SPEC items are now implemented and validated.
+
+- **2026-09-10, later — audited (clean) then committed and pushed.** A `/spec-memory-audit` pass confirmed the log's chronology, every code claim (`BaseTask.set_gaze_geometry`, `DeviceInfo.screen_x/y/width/height`, `_subject_calibration_dir`, `_CALIB_RESULT_GRACE_S`, all 4 task YAMLs' `radius_px: 100`, `configs/default.yaml`'s `host: "127.0.0.1"`, `configs/local_state.json`'s `port: 4242`), and the pytest count (re-run: 139 collected, 138 passed, 1 pre-existing failure) against current source — all checked out clean, nothing needed fixing. Items 5, 2b, 2a, 3 (`src/`, `tests/`, `configs/tasks/*.yaml`, `tools/fake_gazepoint_server.py`) plus this SPEC committed as one commit, `0b433c7`, pushed to `origin/main`. `configs/default.yaml`/`configs/local_state.json` are correctly excluded (skip-worktree/gitignore) — their `127.0.0.1`/`4242` values are real and in effect, just not tracked, matching this project's established local-config pattern. `git status` clean of everything from this SPEC after push.
