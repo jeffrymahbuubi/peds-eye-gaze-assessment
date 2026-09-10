@@ -565,3 +565,68 @@ needed.
   logic/Calibration-Details/Results-tab line of work) committed as one
   commit, `9d6e8d3`, pushed to `origin/main` (`9049e57..9d6e8d3`). `git
   status` clean after push — nothing from this SPEC remains uncommitted.
+
+- **2026-09-09, later still — §10: qt-mcp-driven end-to-end demo recording
+  of the Results-tab feature (Setup → Calibration → Task → Results) for a
+  user report, via `/sparc:orchestrator`.** User wanted to record (their own
+  OBS capture, this session driving) a full walkthrough of §9's new Results
+  tab without a live gaze subject. Investigated first: `DashboardWindow`'s
+  embedded task-run path hardcodes `replay_path=None`
+  (`src/ui/dashboard_window.py:199`), so a real `--replay` fixture only
+  works through the old standalone `--task X --gui` CLI path (`MainWindow`),
+  not the persistent dashboard — flagged to the user as a real gap, not
+  fixed (out of scope this round; see
+  [[peds-eye-gaze-assessment-dashboard-testing-without-subject-2026-09-09]]).
+
+  Chosen path instead (`AskUserQuestion`): extended `tools/
+  fake_gazepoint_server.py`'s streamed `REC` from a single fixed point to a
+  9-waypoint cycle (matching `click_static.yaml`'s own 8 positions + center),
+  held ~1.8s each as a real "fixation" — `FPOGID` increments/`FPOGD` resets
+  on each waypoint change, so `compute_fixation_saccade_metrics` gets
+  genuine (if synthetic) fixation/saccade segmentation instead of one
+  perpetual fixation. Smoke-tested standalone first (confirmed `FPOGID`/
+  `FPOGD` sequencing over a raw socket) before driving the real app. Full
+  pytest suite: 125 passed, 1 pre-existing failure, no regressions (this
+  tool has no direct test coverage).
+
+  Live-drove via `qt-mcp` against this fake server (port 4244 — 4242/4243
+  bound by the real Gazepoint Control app) + the dashboard (probe port
+  9142), two full passes for subject `DEMO01`:
+  1. **Do Calibration path:** Connect → fill subject fields → Do Calibration
+     (valid, 5 points) → View Calibration Details (correctly "not
+     available" — the fake server sends no `CALIB_RESULT`) → Continue → ran
+     Grid Click (18 trials) to completion → Results (reached both via
+     Analyze and the persistent nav tab) showing real Data Quality/
+     Fixation/Saccade/Selection numbers and a populated Session Log.
+     Session: `sessions/2026-09-09_DEMO01_click_grid_run1`.
+  2. **Load Calibration File path:** reused run 1's `calibration.json` for
+     the same subject. **New qt-mcp finding:** clicking "Load Calibration
+     File" opens a native `QFileDialog`, which blocks the click's own RPC
+     call the same way a custom `.exec()` modal does — `qt_click` doesn't
+     return until the dialog closes. Worked around by firing a backgrounded
+     PowerShell `SendKeys` script (types the target file's full path +
+     Enter) in parallel with the `qt_click` call. **This recovered cleanly
+     — no process kill/relaunch needed once the dialog closed**, unlike the
+     already-documented custom-`QDialog` `.exec()` gotcha (see
+     [[qt-mcp-tool-reference]], now updated with this distinction). Ran
+     Grid Click again → correctly created `..._click_grid_run2` (the
+     run-index collision-avoidance feature), confirming it also works from
+     a *loaded* (not just freshly-measured) calibration. Session: `sessions/
+     2026-09-09_DEMO01_click_grid_run2`.
+
+  **New real (cosmetic) bug found, flagged not fixed:** the Session Log's
+  calibration line is written unconditionally as "Calibration measured —
+  ..." (`src/app.py:287-294`), regardless of whether `cal` came from a
+  fresh `Calibration.run()` or a loaded/reused file — confirmed live in
+  run 2's Session Log, which said "measured" even though the Setup page's
+  own on-screen alert correctly said "loaded". Session naming/metadata/
+  timestamps are all correct; this is wording only. Left for a future
+  session if the user wants it fixed.
+
+  Both processes killed after recording (each had a venv-launcher +
+  resolved-interpreter PID pair on Windows); ports 4244/9142 confirmed
+  freed. **Both demo session directories deliberately preserved** at the
+  user's explicit request — `sessions/` is gitignored, so this never
+  touched `git status` either way. **Files changed:** `tools/
+  fake_gazepoint_server.py` only (docstring, `WAYPOINTS`/`FIXATION_HOLD_S`
+  constants, `send_rec_loop()`). No `src`/`tests` changes this round.

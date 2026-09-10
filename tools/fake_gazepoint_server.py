@@ -5,11 +5,19 @@ Accepts a connection the same way Gazepoint Control does, and answers
 ``CALIBRATE_RESULT_SUMMARY`` queries with a fixed, immediately-valid result
 -- enough for ``Calibration.run()`` to complete and for ``AssessmentApp`` to
 auto-save ``calibration.json`` (SPEC-2026-09-02.md item 7, Goal 1). Once
-``ENABLE_SEND_DATA`` is set, streams a fixed-position ``REC`` at
-``REC_RATE_HZ`` (SPEC-ui-setup-task-selection.md S24.4 QA: enough for the
-Operator Panel's device-sample-rate meter to show a real, non-placeholder
-number) -- not a moving gaze signal (use ``--replay`` with ``tools/
-make_replay_fixture.py`` output for that instead).
+``ENABLE_SEND_DATA`` is set, streams a ``REC`` at ``REC_RATE_HZ`` that steps
+through ``WAYPOINTS`` (SPEC-ui-setup-task-selection.md S24.4's original
+fixed-center point, extended for SPEC-result-logic.md's Results-tab demo
+recording): it holds each waypoint for ``FIXATION_HOLD_S``, incrementing
+``FPOGID``/resetting ``FPOGD`` on every waypoint change, so a downstream
+task sees a real dwell-then-saccade gaze pattern -- enough to exercise hit/
+miss scoring and the fixation/saccade aggregation in
+``compute_fixation_saccade_metrics`` (real fixation clustering, real
+saccade count), not just a live sample-rate number. Still not a real
+recorded gaze trace (no noise/smooth pursuit/blinks) -- use ``--replay``
+with ``tools/make_replay_fixture.py`` output for that instead, though note
+that path only wires into the old standalone ``--gui`` launch today, not
+the ``DashboardWindow``'s embedded task-run flow.
 
 Usage::
 
@@ -38,6 +46,19 @@ N_POINTS = 5
 AVE_ERROR = "8.42"
 REC_RATE_HZ = 20.0
 
+# Waypoints the streamed REC steps through, one "fixation" at a time -- the
+# 8 outer positions exactly match configs/tasks/click_static.yaml's own
+# candidate positions (guaranteed hits there); the center additionally lines
+# up with click_static's own [0.5, 0.5] fallback and sits close to
+# click_grid's own middle cell. Order is simple sequential cycling, not
+# randomized, so a recording is reproducible run to run.
+WAYPOINTS: list[tuple[float, float]] = [
+    (0.15, 0.15), (0.50, 0.15), (0.85, 0.15),
+    (0.15, 0.50), (0.50, 0.50), (0.85, 0.50),
+    (0.15, 0.85), (0.50, 0.85), (0.85, 0.85),
+]
+FIXATION_HOLD_S = 1.8  # comfortably above dwell.threshold_ms's 800ms default
+
 # Canned replies for the connect-time device-info GET queries
 # (SPEC-ui-setup-task-selection.md S23). Deliberately reproduces the real
 # GP3HD audit's exact reported values (S24) -- NONE/0 placeholders and a
@@ -53,15 +74,34 @@ DEVICE_INFO_REPLIES = {
 
 
 def send_rec_loop(conn: socket.socket, stop_event: threading.Event) -> None:
-    """Streams a fixed-position, always-valid REC at REC_RATE_HZ until the
-    connection drops or stop_event is set (SPEC S24.4 QA support)."""
+    """Streams an always-valid REC at REC_RATE_HZ, stepping through
+    WAYPOINTS one fixation at a time, until the connection drops or
+    stop_event is set (SPEC S24.4 / result-logic S9 QA support).
+
+    FPOGID increments (and FPOGD resets to 0) the instant the waypoint
+    changes -- the same signal ``compute_fixation_saccade_metrics`` already
+    uses to segment real device output into fixations/saccades, so this
+    produces genuine (if synthetic) fixation/saccade counts rather than the
+    single perpetual fixation a truly fixed point would give.
+    """
     t0 = time.monotonic()
     interval_s = 1.0 / REC_RATE_HZ
+    waypoint_index = -1
+    fixation_id = 0
+    fixation_start = 0.0
     while not stop_event.wait(interval_s):
         elapsed = time.monotonic() - t0
+        current_index = int(elapsed // FIXATION_HOLD_S) % len(WAYPOINTS)
+        if current_index != waypoint_index:
+            waypoint_index = current_index
+            fixation_id += 1
+            fixation_start = elapsed
+        x, y = WAYPOINTS[waypoint_index]
+        fix_duration = elapsed - fixation_start
         line = (
-            f'<REC TIME="{elapsed:.3f}" FPOGX="0.5" FPOGY="0.5" FPOGV="1" '
-            f'BPOGX="0.5" BPOGY="0.5" BPOGV="1" LPMM="3.0" RPMM="3.0" />\r\n'
+            f'<REC TIME="{elapsed:.3f}" FPOGX="{x}" FPOGY="{y}" FPOGV="1" '
+            f'FPOGID="{fixation_id}" FPOGD="{fix_duration:.3f}" '
+            f'BPOGX="{x}" BPOGY="{y}" BPOGV="1" LPMM="3.0" RPMM="3.0" />\r\n'
         )
         try:
             conn.sendall(line.encode("ascii"))
