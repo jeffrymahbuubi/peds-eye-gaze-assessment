@@ -5,9 +5,9 @@
 all implemented, live-validated via qt-mcp, and committed+pushed
 (`89d0019`, `c988dba`, `b3b2a2f`).
 
-**§10 (settings persistence across runs and days, 2026-09-11) is IMPLEMENTED and live-validated**, including the "subject returns another day" case proved across an app restart. It **reverses decision #2 of §2 and all of §5.6** ("no persistence"), which are superseded rather than wrong: they were written for a debugging panel, before the dashboard existed and before the panel became physician-facing. **§10.6 closes the last two open sub-questions** (§10.5.1 and §10.5.5), both answered by the user and built. **§10.7 (Tasks-page settings badge + Subject-ID autocomplete) and §10.8 (dashboard opens maximized) are also implemented and live-validated — see §10.9.** Nothing in this SPEC is open.
+**§10 (settings persistence across runs and days, 2026-09-11) is IMPLEMENTED and live-validated**, including the "subject returns another day" case proved across an app restart. It **reverses decision #2 of §2 and all of §5.6** ("no persistence"), which are superseded rather than wrong: they were written for a debugging panel, before the dashboard existed and before the panel became physician-facing. **§10.6 closes the last two open sub-questions** (§10.5.1 and §10.5.5), both answered by the user and built. **§10.7 (Tasks-page settings badge + Subject-ID autocomplete) is implemented and live-validated — see §10.9.** **§10.8's `showMaximized()` fix FAILED and is superseded by §10.10:** its height measurements were taken offscreen without fonts and understate the panel by ~100 px, so the panel never fit a maximized window at all; the real fix is a `QScrollArea` inside `OperatorPanel`, which also covers §10.8.4's standalone `MainWindow` case. **Read §10.10 before touching panel sizing — it carries two rules about how NOT to measure and validate Qt layout.** Nothing in this SPEC is open.
 **Created:** 2026-09-04
-**Last updated:** 2026-09-11 (§10.9 — §10.7 and §10.8 implemented)
+**Last updated:** 2026-09-11 (§10.10 — §10.8's fix corrected and replaced with the scroll area)
 
 ## 1. Origin / what was asked
 
@@ -588,11 +588,23 @@ Both halves were chosen together because either alone leaves one of §10.7.2's t
 
 Profile *age* is deliberately **not** surfaced as a warning. `saved_at` is already shown when the profile loads, and a months-old profile is a legitimate clinical choice, not an error. Flagged so a later session does not add a staleness nag unasked.
 
-## 10.8 The operator panel is clipped on first launch (2026-09-11) — IMPLEMENTED and live-validated (see §10.9)
+## 10.8 The operator panel is clipped on first launch (2026-09-11) — the diagnosis here is PARTLY WRONG and the fix FAILED; superseded by §10.10
 
 ### 10.8.1 Reported
 
 **User:** "when I launch first the GUI, the panel setting is overflow to fix it I minimize and maximize again the window." Evidence: `resources/images/task-ui/run-the-gui-for-first-time.png` (Settings-profile card cut off at the window edge, "Reset to defaults" half-drawn) and `.../fixed-the-setting-panel-overflow-with-minimize-and-maximize.png` (same window, everything visible).
+
+> **CORRECTION (2026-09-11, see §10.10): the height figures in §10.8.2 and
+> §10.8.3 below are WRONG — they understate the panel by ~100 px.** They were
+> measured in a `QT_QPA_PLATFORM=offscreen` process, which has no fonts
+> (`QFontDatabase: Cannot find font directory`), so every label and control
+> measured short. The real requirement with the app's own Windows fonts is
+> **989 px** (**1038** for `follow_moving`), against **980 px** available when
+> maximized on this 1920×1080 machine. The panel therefore does **not** fit on
+> this display at all, §10.8.3's "fits, 41–85 px spare" row is wrong, and
+> `showMaximized()` could not fix this. The sections are left intact as the
+> record of what was believed at the time; §10.10 has the corrected numbers and
+> the real fix. **Do not re-measure this panel offscreen.**
 
 ### 10.8.2 Root cause — measured, not estimated
 
@@ -648,7 +660,13 @@ Not fixed here because the report and the decision are both about the dashboard,
 
 Both built exactly as decided, with one structural change not in the design.
 
-### 10.9.1 §10.8 — one line, and it is the whole fix
+### 10.9.1 §10.8 — one line, and it is the whole fix — **WRONG, see §10.10**
+
+> **This subsection's conclusion is retracted.** The one-line change is still in
+> place and still removes a real (if secondary) startup-geometry problem, but it
+> did **not** fix the clipping, and the screenshot cited below could not have
+> shown whether it did. §10.10 has the corrected measurements and the real fix.
+
 
 `dashboard_window.py`'s `run_dashboard()` now calls `window.showMaximized()`
 instead of `window.show()`; `resize(1024, 800)` stays as the restore-down
@@ -729,6 +747,107 @@ reporting file existence.
 no warning louder than the badge reading "Task defaults". §10.7.4 stands too:
 profile *age* is still not surfaced as a staleness warning. §10.8.4's standalone
 `--task X --gui` `MainWindow` clipping is still not fixed, as decided.
+
+## 10.10 §10.8's fix did not work, and its measurement was wrong (2026-09-11)
+
+**User, after testing the build from §10.9:** "the live-settings still behave
+overflow and the fix is I need to minimized than maximized the GUI" — i.e. the
+symptom §10.8 was supposed to remove, unchanged.
+
+### 10.10.1 The measurement §10.8 rested on was taken without fonts
+
+§10.8.2's table (891 px, 935 for `follow_moving`) came from a headless
+`QT_QPA_PLATFORM=offscreen` process. That platform plugin prints
+`QFontDatabase: Cannot find font directory .../PySide6/lib/fonts` and falls back
+to a stub, so **every label, button and spin box measures short**. Re-running the
+identical measurement on the real Windows platform with Fusion applied, exactly
+as the app runs:
+
+| Task | §10.8.2 said (offscreen) | Real (Windows fonts) | Understated by |
+|---|---:|---:|---:|
+| click_static / click_grid / scanning | 891 | **989** | 98 |
+| follow_moving | 935 | **1038** | 103 |
+
+Available when maximized on this machine: work area **1032** − title bar **52**
+= **980 px**. So **every task overflows** — `follow_moving` by 58 px — and
+§10.8.3's "fits, 41–85 px spare" conclusion was never true. `showMaximized()`
+addressed a startup-geometry problem that was real but not the binding one.
+
+**Rule for this repo: never size-measure a widget under `QT_QPA_PLATFORM=offscreen`.**
+Offscreen is still fine for *rendering* checks that don't depend on text metrics
+(the §11 contrast work), but any `sizeHint`/`minimumSizeHint` number taken there
+is not the number the app will use.
+
+### 10.10.2 What was actually happening, measured live
+
+During a `follow_moving` run, before the fix:
+
+- `OperatorPanel.minimumSizeHint` height **1038**, and `minimumSizeHint ==
+  sizeHint`, so it cannot give back a pixel
+- `TaskRunView` and `QStackedWidget` therefore **1038**
+- **`DashboardWindow` grew to 1920×1090** — on a 1080 px screen with a 1032 px
+  work area
+
+The window is *pushed past the screen edge* by its own layout minimum (the
+auto-grow mechanism recorded in [[qt-mcp-tool-reference]]), so the bottom of the
+panel sits below the desktop. Confirmed that a full minimize → maximize cycle
+leaves it at **1090**: a window cannot shrink below its layout minimum, so
+maximizing genuinely cannot fix it. Whatever the user's minimize/maximize was
+doing, it was not restoring a correct layout.
+
+### 10.10.3 The validation in §10.9.1 was invalid
+
+§10.9.1 claimed the fix worked on the strength of a `qt_screenshot(ref=panel)`
+showing all four cards. That call is `QWidget.grab()`, which **renders a widget
+at its own full size into an offscreen pixmap** — it cannot show clipping by a
+parent or by the screen edge, because neither is involved in the paint. A panel
+that is 1038 px tall in a 957 px hole grabs as a complete 1038 px image.
+
+The contradiction was already present in §10.9.1's own numbers — panel 989 inside
+a window of 1009 with a 52 px title bar — and was not acted on. This is the same
+family as the `WA_TranslucentBackground` blind spot in [[qt-mcp-tool-reference]],
+and a second instance of the failure §10.8.2 owns for the original regression.
+
+**Rule: to check whether something is clipped, screenshot the WINDOW, or compare
+the widget's height against its parent's — never grab the widget alone.**
+
+### 10.10.4 Fix: the QScrollArea, chosen by the user once the numbers were corrected
+
+§10.8.3 had offered the scroll area and the user declined it in favour of the
+one-liner — but that choice was made against the wrong numbers. Re-asked with
+989/1038 vs 980 on the table, the user chose the scroll area.
+
+Built **inside `OperatorPanel`**, not around it: the cards move into a scrolled
+content widget and the panel's own layout holds only the `QScrollArea`. That
+placement means **both** embedders are fixed by one change — `DashboardWindow`'s
+`TaskRunView` and the standalone `--task X --gui` `MainWindow`, which is
+§10.8.4's second occurrence, previously listed as out of scope.
+
+Both §22 gotchas handled: `setWidget()`'s `autoFillBackground` is cleared on the
+viewport **and** the content widget (the QSS rule reaches only the viewport), and
+the scrollbar is themed **in the panel's own stylesheet** rather than relying on
+`wtmh_theme.py`'s app-wide rule — the panel sets its own sheet and also runs
+under `MainWindow`, which never installs the app-wide one.
+
+**Result, measured the same way as the bug:**
+
+| | Before | After |
+|---|---:|---:|
+| `OperatorPanel.minimumSizeHint` height | 989 / **1038** | **58** |
+| `DashboardWindow` during a `follow_moving` run | 1920×**1090** | 1920×**1009** |
+| `OperatorPanel` actual size | 280×1038 (overflowing) | 280×**957** (= the space available) |
+
+**Live-validated**, this time against the window: a full-window screenshot shows
+the dashboard fitting entirely inside 1009 px with the panel's canvas-matched
+background intact and no black bands; the scrollbar reports `maximum: 81`, which
+is exactly the 1038 − 957 overflow; and scrolling to the bottom brings the
+Settings-profile card fully into view with both its buttons. Suite: **191
+collected, 190 passed, 1 pre-existing unrelated failure** (the `target_fps`
+drift).
+
+**§10.8.3's risk table is now moot** — the panel no longer has a height it must
+have, so a shorter screen or 125 % scaling degrades to scrolling rather than to
+silent clipping.
 
 ## 11. Log
 
@@ -1089,3 +1208,7 @@ profile *age* is still not surfaced as a staleness warning. §10.8.4's standalon
   **Tests: +10** in `tests/test_settings_profile.py` — 7 on `resolve_settings_precedence` (carried beats a profile; profile applies when nothing was carried; neither is defaults; an *empty* profile file is `defaults` not `profile`, so `source` names what the run uses rather than what exists; a structural-only profile still counts; an explicit Settings-dialog choice outranks the profile's structural block; structural overrides survive the carried branch) and 3 on `known_subject_ids` (the union, the empty/missing root, and ignoring loose files). Suite: **191 collected, 190 passed, 1 pre-existing unrelated failure** (the long-known `target_fps` drift), no regressions.
 
   **Cleanup:** `BADGETEST` profile and session directory deleted, the dashboard and `tools/fake_gazepoint_server.py` processes killed with ports 4250/9142 confirmed closed, and `configs/local_state.json` restored from the fake server's 4250 back to **4242** — the same stale-port class as the 2026-09-09 calibration crash.
+
+  **SUPERSEDED IN PART, same day — §10.9.1's claim that §10.8 fixed the panel clipping is WRONG; see the entry below and §10.10.** The §10.7 badge and autocomplete work in this entry stands.
+
+- **2026-09-11, evening — the user reported the overflow was still there, and they were right. §10.8's fix could never have worked, and §10.9.1's validation of it was invalid. Root-caused, corrected, and refixed with the QScrollArea; see §10.10.** Two compounding mistakes, both mine. **(1) The measurement was taken without fonts.** §10.8.2's 891/935 came from a `QT_QPA_PLATFORM=offscreen` process, which has no font directory and so measures every control short; the real requirement on the Windows platform is **989 px (1038 for `follow_moving`)** against **980 px** available when maximized — so the panel does not fit on a 1920×1080 screen at all, and §10.8.3's "fits, 41–85 px spare" was never true. **(2) The validation could not have detected the failure.** §10.9.1 screenshotted the panel alone via `qt_screenshot(ref=...)`, i.e. `QWidget.grab()`, which renders a widget at its own full size and structurally cannot show clipping by a parent or the screen edge — and §10.9.1's own numbers (panel 989 inside a 957 px hole) already contained the contradiction unnoticed. Measured live before the fix: panel `minimumSizeHint` 1038 with `minimumSizeHint == sizeHint`, `QStackedWidget` 1038, and **`DashboardWindow` grown to 1920×1090 on a 1080 px screen**, staying at 1090 through a full minimize→maximize cycle because a window cannot shrink below its layout minimum. **Fix:** the `QScrollArea` §10.8.3 had offered and the user had declined against the wrong numbers — re-asked with the corrected figures, they chose it. Built *inside* `OperatorPanel` rather than around it, so it also fixes §10.8.4's standalone `MainWindow` occurrence, previously out of scope. Both `SPEC-ui-setup-task-selection.md` §22 gotchas handled (`autoFillBackground` cleared on viewport *and* content widget; scrollbar themed in the panel's own sheet, since `MainWindow` never installs the app-wide one). **Result:** panel `minimumSizeHint` **1038 → 58**, window **1090 → 1009**, panel sized **957** = exactly the space available, scrollbar `maximum: 81` = exactly the former overflow, and the Settings-profile card reachable by scrolling. Validated against a **full-window** screenshot this time. Suite **191 collected, 190 passed, 1 pre-existing unrelated failure**. Two rules recorded in §10.10 for future sessions: never take a size measurement under `offscreen`, and never judge clipping from a `grab()` of the widget alone.

@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -75,6 +76,28 @@ _BAD = "#e5484d"
 
 _STYLESHEET = f"""
 QWidget#operatorPanel {{ background: {_CANVAS_BG}; }}
+/* The scroll area and its viewport must not paint over the panel's own
+   canvas-matched background -- see the autoFillBackground note in __init__,
+   which this rule alone cannot fix. */
+QScrollArea#operatorPanelScroll {{ background: transparent; border: none; }}
+QScrollArea#operatorPanelScroll > QWidget > QWidget {{ background: transparent; }}
+/* Scrollbar themed here rather than relying on wtmh_theme.py's app-wide rule:
+   this panel sets its own stylesheet and also runs under the standalone
+   MainWindow, which never installs the app-wide sheet at all. Matches the HUD
+   palette (translucent accent thumb, no native arrow buttons). */
+QScrollBar:vertical {{
+    background: transparent;
+    width: 8px;
+    margin: 0;
+}}
+QScrollBar::handle:vertical {{
+    background: {_ACCENT_SOFT};
+    border-radius: 4px;
+    min-height: 28px;
+}}
+QScrollBar::handle:vertical:hover {{ background: {_ACCENT}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; border: none; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
 QFrame#hudCard {{
     background: {_CARD_BG};
     border-radius: 9px;
@@ -161,7 +184,18 @@ class OperatorPanel(QWidget):
         # back into the controls rather than only into the engine.
         self._controls: dict[str, Any] = {}
 
-        layout = QVBoxLayout(self)
+        # The cards are built into a scrolled content widget, not into the
+        # panel directly (SPEC-live-settings-panel.md S10.10). The card stack
+        # needs 989 px (1038 for follow_moving) and cannot compress, which is
+        # more than a maximized window can offer on a 1920x1080 screen -- put
+        # directly on the panel it forced the whole DashboardWindow to grow
+        # past the screen edge and silently cut its own bottom card off. The
+        # scroll area lives inside the panel rather than around it so both
+        # embedders get it: DashboardWindow's TaskRunView and the standalone
+        # ``--task X --gui`` MainWindow (S10.8.4's second occurrence).
+        content = QWidget()
+        content.setObjectName("operatorPanelContent")
+        layout = QVBoxLayout(content)
         # ~16-20px inset from the window's top/right edges (SPEC-diki-design-
         # audit.md S8.10); uniform on all sides so the cards read as floating
         # within the column rather than flush against any edge of it.
@@ -279,6 +313,29 @@ class OperatorPanel(QWidget):
         # Cards hug the top of the column; the rest of the column shows the
         # canvas-matched background instead of stretching a card to fill it.
         layout.addStretch(1)
+
+        scroll = QScrollArea(self)
+        scroll.setObjectName("operatorPanelScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # Width is fixed at 280 by the embedder, so a horizontal bar would only
+        # ever be a rendering artifact.
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(content)
+        # setWidget() turns on autoFillBackground for BOTH the viewport and the
+        # content widget, which paints them with the inherited QPalette::Window
+        # colour -- near-black under this app's Fusion palette, and visible in
+        # the gaps between the HUD cards. The QSS rule below only reaches the
+        # viewport (a direct QScrollArea child), never the content widget (a
+        # grandchild via the viewport), so both need it cleared explicitly.
+        # Same gotcha as SPEC-ui-setup-task-selection.md S22.5.
+        scroll.viewport().setAutoFillBackground(False)
+        content.setAutoFillBackground(False)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(scroll)
 
     # -- HUD card construction -----------------------------------------------
 
