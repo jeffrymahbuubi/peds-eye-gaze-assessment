@@ -75,12 +75,38 @@ class TrialRecord:
     is_hit: bool = False
     is_timeout: bool = False
     attempts: int = 0
+    # First moment this trial's target could actually be selected. Equal to
+    # t_target_shown_ns for every task except follow_moving, the only one that
+    # overrides BaseTask.is_selectable(); None if the window never opened.
+    t_selectable_start_ns: int | None = None
 
     @property
     def reaction_time_ms(self) -> float | None:
+        """Time from the target appearing to the selection.
+
+        Kept unchanged, and comparable across tasks. Note for follow_moving
+        specifically: its selection window opens at a random offset, so this
+        figure is dominated by that offset rather than by the child --
+        :attr:`reaction_time_from_selectable_ms` is the meaningful one there
+        (SPEC-follow-moving-selection.md S4.2).
+        """
         if self.t_click_ns is None:
             return None
         return (self.t_click_ns - self.t_target_shown_ns) / 1e6
+
+    @property
+    def reaction_time_from_selectable_ms(self) -> float | None:
+        """Time from the target becoming selectable to the selection.
+
+        For a task with no selection window this equals
+        :attr:`reaction_time_ms`. For follow_moving it is the reaction time
+        with the random window offset removed. Can be ~0 by design: a child
+        already tracking has their held dwell fire the instant the window
+        opens (S5.2).
+        """
+        if self.t_click_ns is None or self.t_selectable_start_ns is None:
+            return None
+        return (self.t_click_ns - self.t_selectable_start_ns) / 1e6
 
     @property
     def time_to_first_fixation_ms(self) -> float | None:
@@ -102,7 +128,11 @@ class TrialRecord:
             "is_hit": int(self.is_hit),
             "is_timeout": int(self.is_timeout),
             "attempts": self.attempts,
+            "t_selectable_start_ns": _blank(self.t_selectable_start_ns),
             "reaction_time_ms": _blank(_round(self.reaction_time_ms)),
+            "reaction_time_from_selectable_ms": _blank(
+                _round(self.reaction_time_from_selectable_ms)
+            ),
             "time_to_first_fixation_ms": _blank(_round(self.time_to_first_fixation_ms)),
         }
         return row
@@ -122,7 +152,9 @@ class TrialRecord:
             "is_hit",
             "is_timeout",
             "attempts",
+            "t_selectable_start_ns",
             "reaction_time_ms",
+            "reaction_time_from_selectable_ms",
             "time_to_first_fixation_ms",
         ]
 
@@ -143,6 +175,11 @@ class SessionMetadata:
     notes: str = ""
     assessment_date: str = ""
     sex: str = ""
+    # The settings this run actually used, and where they came from
+    # (SPEC-live-settings-panel.md S10.4). Additive, so `schema_version` is
+    # deliberately NOT bumped: every existing reader takes named keys and is
+    # unaffected, and older sessions simply lack the block.
+    settings: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {f.name: getattr(self, f.name) for f in fields(self)}

@@ -38,6 +38,7 @@ class _TaskCard(QFrame):
     runRequested = Signal(str)
     settingsRequested = Signal(str)
     analyzeRequested = Signal(str)
+    saveSettingsRequested = Signal(str)
 
     def __init__(self, task_id: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -72,6 +73,18 @@ class _TaskCard(QFrame):
         self.run_label = QLabel("No runs yet")
         self.run_label.setObjectName("wtmhMuted")
         status_row.addWidget(self.run_label)
+
+        # Which settings a Run would actually start from (SPEC-live-settings-
+        # panel.md S10.7.3 A). Before this, a saved profile was stated in
+        # exactly one place -- the OperatorPanel card, which doesn't exist
+        # until the run is already underway and the child is already in front
+        # of the screen, so there was no way to check beforehand what would be
+        # applied. No fixed width (unlike status_label): the text varies with
+        # the calibration detail.
+        self.settings_label = QLabel("Task defaults")
+        self.settings_label.setObjectName("wtmhBadgeNeutral")
+        self.settings_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_row.addWidget(self.settings_label)
         status_row.addStretch(1)
         layout.addLayout(status_row)
 
@@ -92,6 +105,24 @@ class _TaskCard(QFrame):
         self.analyze_button.setToolTip("Enabled once this task shows Complete — opens the Results tab.")
         self.analyze_button.clicked.connect(lambda: self.analyzeRequested.emit(self.task_id))
         buttons.addWidget(self.analyze_button)
+
+        # SPEC-live-settings-panel.md S10.5.1: the OperatorPanel's own "Save
+        # for this subject" is only reachable *during* a run, but the moment a
+        # physician actually knows a run's settings were good is after seeing
+        # its hit rate and reaction times. This is the same save, available
+        # once a run has finished -- it stores that run's ending values, which
+        # DashboardWindow already holds.
+        self.save_settings_button = QPushButton("Save Settings")
+        self.save_settings_button.setObjectName("wtmhGhost")
+        self.save_settings_button.setEnabled(False)
+        self.save_settings_button.setToolTip(
+            "Enabled after a run — saves that run's settings as this subject's "
+            "profile for this task."
+        )
+        self.save_settings_button.clicked.connect(
+            lambda: self.saveSettingsRequested.emit(self.task_id)
+        )
+        buttons.addWidget(self.save_settings_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
 
@@ -116,15 +147,46 @@ class _TaskCard(QFrame):
     def set_run_count(self, n: int) -> None:
         self.run_label.setText(f"Run {n}")
 
+    _SETTINGS_BADGES = {
+        "defaults": "wtmhBadgeNeutral",
+        "profile": "wtmhBadgeSuccess",
+        "carried": "wtmhBadgeAccent",
+    }
+
+    def set_settings_badge(self, text: str, source: str, tooltip: str = "") -> None:
+        self.settings_label.setText(text)
+        self.settings_label.setToolTip(tooltip)
+        object_name = self._SETTINGS_BADGES.get(source, "wtmhBadgeNeutral")
+        self.settings_label.setObjectName(object_name)
+        self.settings_label.style().unpolish(self.settings_label)
+        self.settings_label.style().polish(self.settings_label)
+
     def set_run_enabled(self, enabled: bool) -> None:
         self.run_button.setEnabled(enabled)
         self.settings_button.setEnabled(enabled)
+
+    def set_save_settings_enabled(self, enabled: bool) -> None:
+        self.save_settings_button.setEnabled(enabled)
+
+    def set_settings_saved(self, filename: str) -> None:
+        """Confirm the save on the button itself.
+
+        A silent write is indistinguishable from a button that does nothing,
+        and this one has no dialog and no visible side effect anywhere else on
+        the page.
+        """
+        self.save_settings_button.setText("Settings Saved ✓")
+        self.save_settings_button.setToolTip(
+            f"Saved as this subject's profile for this task ({filename}). "
+            "Press Run again to apply it, or save again after another run."
+        )
 
 
 class TasksPage(QWidget):
     runRequested = Signal(str)
     settingsRequested = Signal(str)
     analyzeRequested = Signal(str)
+    saveSettingsRequested = Signal(str)
     backToSetupRequested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -170,6 +232,7 @@ class TasksPage(QWidget):
             card.runRequested.connect(self.runRequested)
             card.settingsRequested.connect(self.settingsRequested)
             card.analyzeRequested.connect(self.analyzeRequested)
+            card.saveSettingsRequested.connect(self.saveSettingsRequested)
             self._cards[task_id] = card
             self._outer.addWidget(card)
         self._outer.addStretch(1)
@@ -181,6 +244,20 @@ class TasksPage(QWidget):
     def set_task_run_number(self, task_id: str, n: int) -> None:
         if task_id in self._cards:
             self._cards[task_id].set_run_count(n)
+
+    def set_task_settings_badge(
+        self, task_id: str, text: str, source: str, tooltip: str = ""
+    ) -> None:
+        if task_id in self._cards:
+            self._cards[task_id].set_settings_badge(text, source, tooltip)
+
+    def set_task_save_settings_enabled(self, task_id: str, enabled: bool) -> None:
+        if task_id in self._cards:
+            self._cards[task_id].set_save_settings_enabled(enabled)
+
+    def set_task_settings_saved(self, task_id: str, filename: str) -> None:
+        if task_id in self._cards:
+            self._cards[task_id].set_settings_saved(filename)
 
     def set_all_runs_enabled(self, enabled: bool) -> None:
         """Disable every card's Run/Settings while one task is embedded and running."""

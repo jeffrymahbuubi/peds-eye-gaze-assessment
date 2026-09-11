@@ -1,9 +1,9 @@
 # SPEC-gaze-cursor-redesign — Gaze Cursor Behaviour & Appearance
 
-**Status: DONE — implemented, live-validated against the real GP3 HD with a real subject, committed as `fa55f8c` and pushed to `origin/main`.** The reported corner jump (§2) is fixed and **user-confirmed live**: deliberate blinking no longer moves the cursor. Two design decisions were revised after that session (§10): the ring's colours were re-chosen by measurement after the first attempt blended into the forest theme, and the off-canvas fade was **removed entirely** in favour of freezing the cursor in place, at the user's request, for parity with Gazepoint Control — so §4.2 is superseded and `_OFF_CANVAS_FADE_NORM` no longer exists. **One thing is implemented but not visually signed off: how the new ring reads against the red target (§10.3).** Tests: 161 collected, 160 passed, 1 pre-existing unrelated failure, +13 new.
+**Status: DONE — implemented, live-validated against the real GP3 HD with a real subject, committed as `fa55f8c` and pushed to `origin/main`.** The reported corner jump (§2) is fixed and **user-confirmed live**: deliberate blinking no longer moves the cursor. Two design decisions were revised after that session (§10): the ring's colours were re-chosen by measurement after the first attempt blended into the forest theme, and the off-canvas fade was **removed entirely** in favour of freezing the cursor in place, at the user's request, for parity with Gazepoint Control — so §4.2 is superseded and `_OFF_CANVAS_FADE_NORM` no longer exists. **§10.3's last open item — how the new ring reads against the red target — is now closed by measurement (§11): red is a *better* backdrop for the white core than the background it was tuned against, and no code change was needed.** Tests: **161 collected, 160 passed, 1 pre-existing unrelated failure as of this task's own round**, +13 new. (The suite has since grown to **181 / 180 / the same 1 failure** through later, unrelated work — verified 2026-09-11 evening.)
 
 **Created:** 2026-09-11
-**Last updated:** 2026-09-11 (live session + revisions)
+**Last updated:** 2026-09-11 (live session + revisions; §10.3 closed by measurement in §11)
 
 ## Scope note
 
@@ -150,7 +150,7 @@ Purpose: establish how often dropouts actually occur during a real task, how lon
 *Refreshed 2026-09-11 after the live session — several original entries are now resolved and are marked as such rather than deleted, so the reasoning stays traceable.*
 
 - **RESOLVED — the fade threshold no longer exists.** §10.2 removed the fade entirely at the user's request; `_OFF_CANVAS_FADE_NORM` is deleted, so there is no constant left to tune and §4.4's tuning question is moot. (The diagnostic that would have informed it is still worth keeping for its dropout data.)
-- **PARTLY RESOLVED — ring legibility.** Size was confirmed fine by the user against the real device. Contrast was fixed by measurement (§10.1, +73%). **Still unverified: how the white core reads against the red target** — see §10.3.
+- **RESOLVED — ring legibility.** Size was confirmed fine by the user against the real device. Contrast was fixed by measurement (§10.1, +73%), and §10.3's remaining doubt — the white core against the red target — was closed the same way in **§11**: on red the core reads at 2.02–2.72:1 versus 1.12:1 on the background it was tuned against, so red is a *better* backdrop for it, not a worse one. Worst case across both themes is 4.40:1, above the 3:1 floor. No code change was needed.
 - **§4.1's stale-dot trade-off is accepted, not solved.** Recorded in full in §4.1 so a future session does not "fix" a deliberate decision. §10.2 widened it: off-canvas gaze now freezes too, so a stale ring can mean either "looking away" or "tracking lost".
 - **Whether the trail should ever be available to the operator** is not decided. §4.3 rejects it for the child-facing canvas; it is not ruled out as a future operator-panel diagnostic view, and is not in scope here.
 - **RESOLVED — dropout frequency is now measured, not inferred.** Across three real sessions: median dropout 52–98ms, longest 6.4s. Literal-zero `FPOGX` (the corner-jump case) occurred at 8/31, 6/361 and 4/24 across the three — **the rate varies substantially between sessions and does not track calibration quality**, contrary to a correlation suggested mid-session and retracted here. Two of those samples are small.
@@ -197,9 +197,35 @@ This is a correction worth honouring rather than arguing: §4.2's fade was an in
 
 **Hit-testing is untouched.** `BaseTask` still receives the true, unfrozen, possibly out-of-range position, so a frozen cursor can never cause a selection the child did not make. Freezing is the renderer's decision alone — the same separation §6 of the GUI-audit SPEC established for the clamp.
 
-### 10.3 — What is NOT confirmed
+### 10.3 — What was NOT confirmed *(measured and resolved in §11)*
 
 The user moved to commit without giving a verdict on the revised ring's appearance. So: the ring is **implemented and measured, but not visually signed off.** Specifically unverified — **how the white core reads against the red target**, the one backdrop the measurements did not cover and the moment the cursor matters most. A future session should not treat §10.1 as visually validated.
+
+**Superseded by §11 (2026-09-11, later):** the red target was measured and it is *not* a problem backdrop — it is a **better** one for the white core than the background the core was tuned against. No code change was needed.
+
+## 11. §10.3 closed by measurement — the red target is a good backdrop, not a risky one
+
+§10.1 settled the ring's colours by rendering variants against the real scene and scoring them. §10.3's open question is the same kind of question about a backdrop that pass did not cover, so it was closed the same way rather than by opinion: the **real `TaskCanvas`** was rendered offscreen at the live-measured canvas size (744×845, from `SPEC-gui-audit-2026-09-10.md` §5) with the full on-target scene — target at `radius_px: 100`, `selectable` outline, instant-feedback ring, dwell arc at 45% — and the cursor placed on five backdrops.
+
+**The reproduction is faithful, which is what makes the new numbers comparable:** re-scoring §10.1's own variant-C case with the identical 40×40 metric gives **53097** against the **53363** recorded in §10.1 — 0.5% apart, on a separately written harness.
+
+§10.1's aggregate score mixes both tones together, so it cannot answer a question about the core specifically. The per-tone WCAG contrast ratio can, and that is the number below.
+
+| Backdrop (forest) | RGB | core `#ffffff` | halo `#102010` |
+|---|---|---|---|
+| Background — §10.1's anchor | (232,245,233) | 1.12:1 | **15.10:1** |
+| **Red target, centre** | (255,155,155) | **2.02:1** | **8.42:1** |
+| **Red target, off-centre** | (255,110,110) | **2.72:1** | **6.24:1** |
+| Target's white `selectable` outline | (190,190,171) | 1.88:1 | **9.01:1** |
+| On-target ring (`cursor_color`) | (92,141,96) | 3.86:1 | **4.40:1** |
+
+**The answer to §10.3: the white core reads on red roughly twice as strongly as it does on the background it was chosen against** (2.02–2.72:1 vs 1.12:1). The concern was reasonable but inverted — red is a mid-tone, so *both* tones stay live on it, whereas the near-white background leaves only the halo working. Visually the marker reads as a dark ring with a white inner line on red, and as a plain dark ring on the background.
+
+**The same run on the `space` theme confirms the theme-independence claim of §10.1 as an exact mirror**, which is the stronger result: on its dark background (13,27,42) the **core** carries it at **17.39:1** while the **halo collapses to 1.02:1** — precisely the reverse of forest. Neither tone is load-bearing everywhere; on every backdrop tested at least one is.
+
+**Worst case across all ten backdrops on both themes: 4.40:1** — the forest theme's own dark-green on-target ring, a backdrop *neither* §10.1 nor §10.3 had thought to consider. It clears the 3:1 WCAG floor for graphical objects. **No code change was made; none is warranted.**
+
+**What this does not establish**, stated so a later session does not over-read it: these are static offscreen renders of the app's real paint path, not a live run on the clinic monitor. Monitor gamma, viewing distance, a child's vision, and the marker in motion are all outside what a rendered pixel can answer. What was open in §10.3 was a *rendering* question, and that part is now closed on evidence.
 
 ## Log
 
@@ -250,3 +276,5 @@ The user moved to commit without giving a verdict on the revised ring's appearan
 - **2026-09-11, later still — `/spec-memory-audit` pass, then committed as `fa55f8c` and pushed to `origin/main`.** Audit verified every symbol this SPEC names against current source (`_last_pointer_xy`, `_cursor_draw_position`, `_last_on_canvas_xy`, `_CURSOR_HALO_COLOR`/`_CURSOR_CORE_COLOR`, `outside_distance` in `src/inputs/base.py`) and confirmed `_OFF_CANVAS_FADE_NORM` is genuinely absent; re-ran the suite (161/160/1, matching); checked log chronology (three entries, correctly ordered); confirmed both wikilinks in the memory file resolve. **Fixed during the audit:** §4.2 marked SUPERSEDED rather than rewritten, §5's heading which still read "not yet built", §7's risk list which still described the deleted fade threshold as an open question, the status header, and the memory index line which still said DESIGN ONLY. A section-numbering gap (7 → 10) is deliberate and noted in §5: `src/ui/canvas.py` cites "S10" by name, so renumbering would silently break those references.
 
   **Cleanup:** the three QA session directories this task created (`CURSOR01` ×2, `CURSOR02`) were deleted; the user's own `TESTING` session dirs were deliberately left alone. `sessions/` is gitignored, so none of it was ever committable. Scratch scripts (the real-device drill, the ring-variant renderer) stayed in the session scratchpad and never entered the repo. `sessions/_diagnostics/gaze_dropouts.jsonl` is kept deliberately, for the same reason the calibration timing log was: it is what makes these findings checkable by a later session that was not here.
+
+- **2026-09-11, last — §10.3 closed by measurement; no code changed.** `git status` clean, `main` level with `origin/main` at `36f0fd1`, on entry and on exit. The one item §10.3 left open — the white core against the red target — was answered by extending §10.1's own method rather than by opinion: the real `TaskCanvas` rendered offscreen at 744×845 with the full on-target scene, the cursor placed on five backdrops, scored per-tone. Full numbers and reasoning in **§11**. Three things worth carrying forward: the concern was **inverted** (red is a mid-tone, so both tones stay live on it; the near-white background is the backdrop where the core does nothing); the `space` theme measures as an **exact mirror** — core 17.39:1 / halo 1.02:1 against forest's 1.12:1 / 15.10:1 — which is what actually validates the two-tone design as theme-independent rather than merely well-tuned for forest; and the genuine worst case turned out to be a backdrop **nobody had listed**, the forest theme's own dark-green on-target ring at 4.40:1, still above the 3:1 floor. The harness was validated before its results were trusted — re-scoring §10.1's variant C reproduced **53097** against the recorded **53363**. **Cleanup:** the render scripts and their PNGs stayed in the session scratchpad and never entered the repo, matching this task's established practice.

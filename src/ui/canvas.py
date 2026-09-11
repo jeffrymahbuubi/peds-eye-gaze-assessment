@@ -183,7 +183,14 @@ class TaskCanvas(QWidget):
         if self.target_xy_norm is not None:
             tx, ty = norm_to_px(*self.target_xy_norm, w, h)
             self._draw_target(painter, tx, ty)
-            if self.show_instant_feedback and self.on_target:
+            # Gated on `selectable` too (SPEC-follow-moving-selection.md S5.4):
+            # without it this told the child "you're on it" on a target the
+            # task had already decided could not be selected yet -- the same
+            # contradictory-affordance family as the dwell ring filling
+            # outside follow_moving's selection window. No other task has a
+            # window, so `selectable` is always True for them and nothing
+            # changes there.
+            if self.show_instant_feedback and self.on_target and self.selectable:
                 self._draw_instant_feedback(painter, tx, ty)
             if self.show_progress_ring and self.dwell_progress > 0:
                 self._draw_progress_ring(painter, tx, ty)

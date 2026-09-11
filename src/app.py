@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 import time
+from datetime import datetime, timezone
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -35,13 +36,14 @@ from .engine.feedback import FeedbackBus
 from .engine.latency import LatencyTracker
 from .engine.sample_rate import SampleRateTracker
 from .engine.session_naming import next_session_id
+from .engine.settings_profile import save_settings_profile
 from .engine.task_runner import build_task
 from .inputs.base import Pointer
 from .inputs.eye_input import DwellConfig, EyeInput, SmoothingConfig
 from .inputs.gazepoint_client import GazepointClient
 from .inputs.switch_input import SwitchInput
 from .ui.main_window import MainWindow, TaskRunView
-from .ui.settings_registry import initial_live_values
+from .ui.settings_registry import apply_live_values_to_config, initial_live_values
 from .ui.task_settings_dialog import TaskSettingsDialog
 
 
@@ -107,6 +109,10 @@ class AssessmentApp:
         subject_id: str,
         calibration_file: str | None = None,
         structural_overrides: dict | None = None,
+        live_overrides: dict | None = None,
+        settings_source: str = "defaults",
+        settings_saved_at: str = "",
+        settings_calibration: dict | None = None,
         client: GazepointClient | None = None,
         preset_calibration_result: CalibrationResult | None = None,
         embedded: bool = False,
@@ -140,6 +146,20 @@ class AssessmentApp:
             # settings-panel.md section 5.3. Reuses the exact merge a task
             # YAML's own `overrides:` block already goes through.
             self.config["task"] = deep_merge(self.config["task"], structural_overrides)
+        # Captured before any profile is applied, so "Reset to defaults" means
+        # the task's own configured values -- not whatever the profile said.
+        self._default_live_values = initial_live_values(self.config)
+        if live_overrides:
+            # Carried from a previous run in this sitting, or loaded from the
+            # subject's saved profile (SPEC-live-settings-panel.md S10.3).
+            # Applied to the *config* rather than only to self._live_values so
+            # that build_task(), the engine objects and the operator panel all
+            # read the same thing -- self._live_values is derived from the
+            # config a few lines down, so they cannot disagree.
+            apply_live_values_to_config(self.config, live_overrides)
+        self._settings_source = settings_source
+        self._settings_saved_at = settings_saved_at
+        self._structural_overrides = dict(structural_overrides or {})
         theme_name = self.config.get("task", {}).get("theme") or self.config.get("theme", {}).get("name", "forest")
         self.theme = load_theme(theme_name)
         self.input_mode = self.config.get("input", {}).get("mode", "eye")
@@ -153,6 +173,7 @@ class AssessmentApp:
         # auto-saved calibration.json needs the session dir to already be
         # known before Calibration.run() executes.
         output_root = self.config.get("recording", {}).get("output_root", "sessions")
+        self._output_root = output_root
         session_id = next_session_id(output_root, subject_id, task_id)
         session_dir = Path(output_root) / session_id
 
@@ -253,12 +274,22 @@ class AssessmentApp:
             # No top-level window at all -- the caller (DashboardWindow)
             # inserts .view into its own QStackedWidget page.
             self.window = None
-            self.view = TaskRunView(theme=self.theme, task_id=task_id, initial_settings=lv)
+            self.view = TaskRunView(
+                theme=self.theme,
+                task_id=task_id,
+                initial_settings=lv,
+                settings_source=settings_source,
+                settings_saved_at=settings_saved_at,
+                settings_calibration=settings_calibration,
+            )
         else:
             self.window = MainWindow(
                 theme=self.theme,
                 task_id=task_id,
                 initial_settings=lv,
+                settings_source=settings_source,
+                settings_saved_at=settings_saved_at,
+                settings_calibration=settings_calibration,
                 fullscreen=bool(self.config.get("app", {}).get("fullscreen", True)),
             )
             self.view = self.window.view
@@ -277,6 +308,24 @@ class AssessmentApp:
             assessment_date=assessment_date,
             sex=sex,
             notes=notes,
+            # Provenance (SPEC-live-settings-panel.md S10.4). Before settings
+            # persisted, a run was reproducible because every run started from
+            # the same YAML defaults; S10.3 removes that guarantee, so the
+            # settings actually in effect have to be recorded with the data or
+            # two runs of the same task on the same child can differ with
+            # nothing to say how. This is a snapshot of the values **as
+            # resolved at run start**, after any profile has been applied --
+            # deliberately not updated afterwards, because a mid-run change
+            # is already recorded, with its timestamp, as a SETTING_CHANGED
+            # event. Start state plus the event stream reconstructs the
+            # settings at any moment of the run; a single mutated block
+            # could not.
+            settings={
+                "source": self._settings_source,
+                "profile_saved_at": self._settings_saved_at,
+                "live": dict(self._live_values),
+                "structural": self._structural_overrides,
+            },
         )
         self.recorder = SessionRecorder(self.metadata, output_root=output_root)
         self.recorder.open()
@@ -355,6 +404,57 @@ class AssessmentApp:
         panel.skip_requested.connect(self._skip_trial)
         panel.end_requested.connect(self._shutdown)
         panel.setting_changed.connect(self._apply_setting)
+        panel.save_profile_requested.connect(self._save_settings_profile)
+        panel.reset_settings_requested.connect(self._reset_settings_to_defaults)
+
+    def calibration_snapshot(self) -> dict:
+        """The calibration this run is operating under (S10.5.5).
+
+        Descriptive only -- stored with a saved profile so a later reader can
+        tell whether the settings were tuned under a good or a poor
+        calibration. Nothing reads it back to change behaviour.
+        """
+        return {
+            "error_px": self.metadata.calibration_error_px,
+            "points": self.metadata.calibration_points,
+        }
+
+    def _save_settings_profile(self) -> None:
+        """Persist the current settings for this subject+task (S10.3).
+
+        Explicit action only. Failure is reported into the session log rather
+        than raised: a profile is a convenience and must never take a run down
+        with it.
+        """
+        try:
+            path = save_settings_profile(
+                self._output_root,
+                self.metadata.subject_id,
+                self.task_id,
+                self._live_values,
+                self._structural_overrides,
+                calibration=self.calibration_snapshot(),
+            )
+        except OSError as exc:
+            self.recorder.log(f"Could not save settings profile: {exc}")
+            return
+        self.operator_panel.set_settings_source(
+            "profile", datetime.now(timezone.utc).isoformat(), self.calibration_snapshot()
+        )
+        self.recorder.log(f"Settings profile saved for {self.metadata.subject_id}: {path.name}")
+        self.recorder.record_event("SETTINGS_PROFILE_SAVED", time.time_ns(), path=str(path))
+
+    def _reset_settings_to_defaults(self) -> None:
+        """Put every live setting back to the task's configured default.
+
+        Routed through the panel rather than straight to the engine so the
+        controls move too, and so each key still goes through _apply_setting
+        and is logged as a SETTING_CHANGED -- a reset is a real change to the
+        run and belongs in the record like any other.
+        """
+        self.operator_panel.apply_values(self._default_live_values)
+        self.operator_panel.set_settings_source("defaults")
+        self.recorder.log("Settings reset to task defaults.")
 
     def _install_key_handler(self) -> None:
         original = self.canvas.keyPressEvent

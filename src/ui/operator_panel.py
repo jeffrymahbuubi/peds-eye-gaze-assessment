@@ -52,7 +52,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .settings_registry import LiveSetting, live_settings_for_task
+from .settings_registry import LiveSetting, format_calibration, live_settings_for_task
 from .slider_spin import SliderSpinRow
 
 # HUD palette (SPEC-diki-design-audit.md S8.10). _TEXT/_MUTED/_ACCENT/_OK are
@@ -81,6 +81,7 @@ QFrame#hudCard {{
 }}
 QWidget#operatorPanel QLabel {{ color: {_TEXT}; background: transparent; font-size: 11px; }}
 QWidget#operatorPanel QCheckBox {{ color: {_TEXT}; font-size: 11px; }}
+QLabel#hudMuted {{ color: {_MUTED}; font-size: 10px; }}
 QLabel[hudSubheading="true"] {{
     color: {_MUTED};
     font-size: 10px;
@@ -134,11 +135,19 @@ class OperatorPanel(QWidget):
     # ``dwell_threshold_changed`` signal) so adding a new live-tunable field
     # is a registry entry, not a new Signal + slot pair.
     setting_changed = Signal(str, object)
+    # Explicit "keep these settings for this subject" (SPEC-live-settings-panel.md
+    # S10.3). Deliberately an action, not an auto-save at run end: an
+    # exploratory run must not be able to overwrite a profile that was working.
+    save_profile_requested = Signal()
+    reset_settings_requested = Signal()
 
     def __init__(
         self,
         task_id: str = "click_static",
         initial_values: dict[str, Any] | None = None,
+        settings_source: str = "defaults",
+        settings_saved_at: str = "",
+        settings_calibration: dict[str, Any] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -148,6 +157,9 @@ class OperatorPanel(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setStyleSheet(_STYLESHEET)
         self._values = dict(initial_values or {})
+        # key -> the widget driving it, so "Reset to defaults" can put values
+        # back into the controls rather than only into the engine.
+        self._controls: dict[str, Any] = {}
 
         layout = QVBoxLayout(self)
         # ~16-20px inset from the window's top/right edges (SPEC-diki-design-
@@ -242,6 +254,28 @@ class OperatorPanel(QWidget):
             tuning_layout.addWidget(self._build_control(setting))
         layout.addWidget(tuning_card)
 
+        # -- Profile card ------------------------------------------------------
+        # The visible half of S10.3's "auto-apply, clearly shown" decision.
+        # Auto-applying a profile from another day WITHOUT saying so would be
+        # silent protocol drift, so the indicator is not decoration -- it is
+        # the other half of the decision.
+        profile_card, profile_layout = self._make_card()
+        self._add_subheading(profile_layout, "Settings profile")
+        self.settings_source_label = QLabel()
+        self.settings_source_label.setObjectName("hudMuted")
+        self.settings_source_label.setWordWrap(True)
+        profile_layout.addWidget(self.settings_source_label)
+        self.set_settings_source(settings_source, settings_saved_at, settings_calibration)
+
+        self.save_profile_button = QPushButton("Save for this subject")
+        self.save_profile_button.clicked.connect(self.save_profile_requested.emit)
+        profile_layout.addWidget(self.save_profile_button)
+
+        self.reset_settings_button = QPushButton("Reset to defaults")
+        self.reset_settings_button.clicked.connect(self.reset_settings_requested.emit)
+        profile_layout.addWidget(self.reset_settings_button)
+        layout.addWidget(profile_card)
+
         # Cards hug the top of the column; the rest of the column shows the
         # canvas-matched background instead of stretching a card to fill it.
         layout.addStretch(1)
@@ -290,6 +324,7 @@ class OperatorPanel(QWidget):
             if setting.tooltip:
                 box.setToolTip(setting.tooltip)
             box.toggled.connect(lambda v, k=setting.key: self._emit_change(k, bool(v)))
+            self._controls[setting.key] = box
             row.addWidget(box)
             return container
 
@@ -311,11 +346,64 @@ class OperatorPanel(QWidget):
         if setting.tooltip:
             control.setToolTip(setting.tooltip)
         control.valueChanged.connect(lambda v, k=setting.key: self._emit_change(k, v))
+        self._controls[setting.key] = control
         row.addWidget(control)
         return container
 
     def _emit_change(self, key: str, value: Any) -> None:
+        self._values[key] = value
         self.setting_changed.emit(key, value)
+
+    # -- settings profile --------------------------------------------------
+
+    def current_values(self) -> dict[str, Any]:
+        """The live values currently shown, i.e. what a save would store."""
+        return dict(self._values)
+
+    def set_settings_source(
+        self, source: str, saved_at: str = "", calibration: dict[str, Any] | None = None
+    ) -> None:
+        """Say where this run's settings came from, in plain language.
+
+        For a loaded profile this also names the calibration it was tuned
+        under (S10.5.5) -- settings tuned under a poor calibration may be
+        compensating for bad tracking rather than suiting the child, and that
+        is worth seeing at the moment they are applied, not only in the file.
+        """
+        if source == "profile":
+            when = f" (saved {saved_at[:10]})" if saved_at else ""
+            text = f"Loaded from this subject's saved profile{when}."
+            cal = format_calibration(calibration)
+            if cal:
+                text += f" Tuned under {cal}."
+        elif source == "carried":
+            text = "Carried over from the previous run in this session."
+        else:
+            text = "Using task defaults."
+        self.settings_source_label.setText(text)
+
+    def apply_values(self, values: dict[str, Any]) -> None:
+        """Push values into the controls, emitting a change for each.
+
+        Used by "Reset to defaults". Each control is updated with its signals
+        blocked and the change re-emitted explicitly, so the engine is updated
+        exactly once per key and a SETTING_CHANGED event is still logged --
+        a reset is a real settings change and must appear in the record like
+        any other.
+        """
+        for key, value in values.items():
+            control = self._controls.get(key)
+            if control is None:
+                continue
+            blocked = control.blockSignals(True)
+            try:
+                if isinstance(control, QCheckBox):
+                    control.setChecked(bool(value))
+                else:
+                    control.setValue(value)
+            finally:
+                control.blockSignals(blocked)
+            self._emit_change(key, value)
 
     # -- live updates ------------------------------------------------------
 

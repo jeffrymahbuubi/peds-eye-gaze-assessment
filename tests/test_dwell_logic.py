@@ -96,3 +96,75 @@ def test_reset_clears_state():
     sel.update(500 * MS, on_target=True)
     assert sel.update(900 * MS, on_target=True).triggered is False
     assert sel.update(1300 * MS, on_target=True).triggered is True
+
+
+# -- can_complete: holding a finished dwell until the caller will accept it ----
+# SPEC-follow-moving-selection.md S5.2. Before this, a dwell that completed
+# outside follow_moving's selection window was treated as a real completion
+# and thrown away by the task, costing the child refractory + threshold and
+# logging a MISS_CLICK against a correctly-aimed selection.
+
+
+def test_dwell_holds_at_full_when_completion_not_allowed():
+    sel = make_selector(threshold_ms=800)
+    sel.update(0, on_target=True)
+    state = sel.update(800 * MS, on_target=True, can_complete=False)
+    assert state.triggered is False
+    assert state.progress == 1.0
+    assert state.in_refractory is False
+
+
+def test_held_dwell_fires_immediately_once_allowed():
+    sel = make_selector(threshold_ms=800)
+    sel.update(0, on_target=True)
+    # Held well past the threshold...
+    for t in (800, 1500, 3000):
+        assert sel.update(t * MS, on_target=True, can_complete=False).triggered is False
+    # ...then the window opens: no re-accumulation, it triggers on that frame.
+    assert sel.update(3001 * MS, on_target=True, can_complete=True).triggered is True
+
+
+def test_holding_does_not_open_the_refractory_window():
+    """A hold is not a selection, so there is nothing to recover from.
+
+    If holding started the refractory window, the child would be locked out
+    at exactly the moment the selection window opened -- the bug this whole
+    mechanism exists to remove, reintroduced one layer down.
+    """
+    sel = make_selector(threshold_ms=800, refractory_ms=500)
+    sel.update(0, on_target=True)
+    sel.update(800 * MS, on_target=True, can_complete=False)
+    assert sel.update(801 * MS, on_target=True, can_complete=True).triggered is True
+
+
+def test_looking_away_clears_a_held_dwell():
+    """The safety property: a held dwell must not survive the gaze leaving.
+
+    Otherwise a child could complete a dwell early, look away entirely, and
+    still be credited with a hit when the window opened.
+    """
+    sel = make_selector(threshold_ms=800, hold_grace_ms=0)
+    sel.update(0, on_target=True)
+    assert sel.update(800 * MS, on_target=True, can_complete=False).progress == 1.0
+    # Gaze leaves: the held accumulator is discarded.
+    assert sel.update(900 * MS, on_target=False).progress == 0.0
+    # Returning re-accumulates from scratch rather than firing instantly.
+    assert sel.update(1000 * MS, on_target=True, can_complete=True).triggered is False
+
+
+def test_hold_grace_still_bridges_a_blink_while_held():
+    """A held dwell keeps the ordinary grace semantics, not stricter ones."""
+    sel = make_selector(threshold_ms=800, hold_grace_ms=120)
+    sel.update(0, on_target=True)
+    sel.update(800 * MS, on_target=True, can_complete=False)
+    # A 100 ms blink is inside the grace window, so the hold survives it.
+    assert sel.update(900 * MS, on_target=False).progress == 1.0
+    assert sel.update(950 * MS, on_target=True, can_complete=True).triggered is True
+
+
+def test_can_complete_defaults_to_true():
+    """Every existing caller passes two positional arguments and must be
+    unaffected -- the tasks without a selection window most of all."""
+    sel = make_selector(threshold_ms=800)
+    sel.update(0, on_target=True)
+    assert sel.update(800 * MS, on_target=True).triggered is True

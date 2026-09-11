@@ -110,7 +110,8 @@ class ResultsPage(QWidget):
             "Mean amplitude", "Mean direction", "Latency (to first fixation)",
         ])
         self._selection_rows = self._add_category_card(content_layout, "Selection", [
-            "Hit rate", "Median RT", "Mean attempts", "Mean revisits", "Trials needing re-attempt",
+            "Hit rate", "Median RT", "Median RT (from selectable)", "Mean attempts",
+            "Mean revisits", "Trials needing re-attempt",
         ])
 
         log_card = QFrame()
@@ -205,6 +206,15 @@ class ResultsPage(QWidget):
 
         self._selection_rows["Hit rate"].setText(_pct(summary["hit_rate"]))
         self._selection_rows["Median RT"].setText(_fmt(summary["median_reaction_time_ms"], " ms", 0))
+        # Only follow_moving has a selection window, so this is "—" everywhere
+        # else -- and for follow_moving it is the honest reaction time, since
+        # "Median RT" above is measured from trial start and is therefore
+        # dominated by that task's random window offset
+        # (SPEC-follow-moving-selection.md §4.2). Older sessions predate the
+        # field and stay "—" rather than breaking.
+        self._selection_rows["Median RT (from selectable)"].setText(
+            _fmt(summary.get("median_reaction_time_from_selectable_ms"), " ms", 0)
+        )
         self._selection_rows["Mean attempts"].setText(_fmt(summary["mean_attempts"], "", 2))
         # Mean revisits needs on-target entry/exit tracking this codebase
         # doesn't capture yet -- same deliberate gap as amplitude/direction.

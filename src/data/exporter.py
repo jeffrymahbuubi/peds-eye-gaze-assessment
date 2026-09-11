@@ -192,6 +192,16 @@ def summarize(session_dir: str | Path) -> dict[str, Any]:
     n_needing_reattempt = sum(1 for a in attempts if a > 1)
     ttff = [float(r["time_to_first_fixation_ms"]) for r in rows if r.get("time_to_first_fixation_ms")]
     mean_ttff = statistics.mean(ttff) if ttff else None
+    # Window-relative reaction time (SPEC-follow-moving-selection.md S5.3).
+    # Absent from trials.csv files written before that change, so this stays
+    # None for older sessions rather than breaking their summary.
+    sel_rts = [
+        float(r["reaction_time_from_selectable_ms"])
+        for r in rows
+        if r.get("reaction_time_from_selectable_ms")
+    ]
+    mean_sel_rt = statistics.mean(sel_rts) if sel_rts else None
+    median_sel_rt = statistics.median(sel_rts) if sel_rts else None
     return {
         "n_trials": n,
         "n_hits": hits,
@@ -199,6 +209,12 @@ def summarize(session_dir: str | Path) -> dict[str, Any]:
         "hit_rate": (hits / n) if n else None,
         "mean_reaction_time_ms": round(mean_rt, 2) if mean_rt is not None else None,
         "median_reaction_time_ms": round(median_rt, 2) if median_rt is not None else None,
+        "mean_reaction_time_from_selectable_ms": (
+            round(mean_sel_rt, 2) if mean_sel_rt is not None else None
+        ),
+        "median_reaction_time_from_selectable_ms": (
+            round(median_sel_rt, 2) if median_sel_rt is not None else None
+        ),
         "mean_attempts": round(mean_attempts, 2) if mean_attempts is not None else None,
         "n_trials_needing_reattempt": n_needing_reattempt,
         "mean_time_to_first_fixation_ms": round(mean_ttff, 2) if mean_ttff is not None else None,

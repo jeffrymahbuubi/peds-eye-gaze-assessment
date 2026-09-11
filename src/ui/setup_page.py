@@ -12,11 +12,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QDate, Qt, QThread, Signal
+from PySide6.QtCore import QDate, QStringListModel, Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QCheckBox,
     QComboBox,
+    QCompleter,
     QDateEdit,
     QFileDialog,
     QFormLayout,
@@ -46,6 +47,7 @@ from ..engine.calibration import (
 )
 from ..engine.config import load_default
 from ..engine.local_state import load_local_state, save_local_state
+from ..engine.settings_profile import known_subject_ids
 from ..inputs.gazepoint_client import DeviceInfo, GazepointClient
 from .wtmh_theme import BORDER, PANEL_BG
 
@@ -228,6 +230,11 @@ class _CalibrationThread(QThread):
 class SetupPage(QWidget):
     stateChanged = Signal()
     continueRequested = Signal()
+    # Emitted on every keystroke in Subject ID. DashboardWindow re-resolves the
+    # Tasks-page settings badges from it (S10.7.3 A) -- which profile applies
+    # depends entirely on this field, so the badges must not outlive a change
+    # to it.
+    subjectIdChanged = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -261,6 +268,17 @@ class SetupPage(QWidget):
 
     def notes(self) -> str:
         return self.notes_edit.toPlainText()
+
+    def refresh_subject_completer(self) -> None:
+        """Re-read the known subject IDs from disk into the completer.
+
+        Called at build time and again whenever something is written under a
+        subject during this sitting (a saved calibration, a saved settings
+        profile), so a subject entered today is offered for the rest of the
+        session without needing a restart.
+        """
+        output_root = self._defaults.get("recording", {}).get("output_root", "sessions")
+        self._subject_completer_model.setStringList(known_subject_ids(output_root))
 
     def can_continue(self) -> bool:
         return (
@@ -344,6 +362,22 @@ class SetupPage(QWidget):
         form.setVerticalSpacing(10)
         self.subject_id_edit = QLineEdit()
         self.subject_id_edit.textChanged.connect(self._on_state_changed)
+        self.subject_id_edit.textChanged.connect(self.subjectIdChanged)
+        # Autocomplete over subjects already on disk (SPEC-live-settings-
+        # panel.md S10.7.3 B). Without it a mistyped ID is silently a *new*
+        # subject: no profile and no calibration are found, the run proceeds on
+        # task defaults, and nothing anywhere says so. That has already
+        # happened in real use -- ``sessions/_settings/tseting/`` is a profile
+        # and a run stored under a typo. Case-insensitive because the Windows
+        # filesystem already treats ``jeffry`` and ``JEFFRY`` as one directory,
+        # so offering them as one entry matches what actually resolves.
+        self._subject_completer_model = QStringListModel(self)
+        completer = QCompleter(self._subject_completer_model, self)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.subject_id_edit.setCompleter(completer)
+        self.refresh_subject_completer()
         form.addRow("Subject ID", self.subject_id_edit)
 
         # No calendar popup (SPEC-ui-setup-task-selection.md S13, user
@@ -779,6 +813,9 @@ class SetupPage(QWidget):
         target_path = _subject_calibration_path(output_root, subject_id, n_points)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         save_calibration_result(target_path, subject_id, self._calibration_result)
+        # This subject now has a directory on disk, so offer them for the rest
+        # of the sitting rather than only after a restart.
+        self.refresh_subject_completer()
         self._set_calibration_alert(
             "success",
             f"Calibration saved for {subject_id} as {target_path.name} — "

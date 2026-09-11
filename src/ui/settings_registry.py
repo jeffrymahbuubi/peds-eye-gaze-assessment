@@ -271,6 +271,54 @@ def initial_live_values(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def format_calibration(calibration: dict[str, Any] | None) -> str:
+    """Render a profile's stored calibration for display, or "" if unknown.
+
+    Lives here rather than in the panel so it is testable without importing
+    PySide6, matching this module's existing no-Qt rule. Returns "" for
+    missing/empty/partial data instead of printing "None px" -- an older
+    profile written before S10.5.5 has no calibration block at all, and must
+    simply show nothing extra.
+    """
+    if not calibration:
+        return ""
+    error_px = calibration.get("error_px")
+    points = calibration.get("points")
+    parts: list[str] = []
+    if isinstance(error_px, (int, float)):
+        parts.append(f"{error_px:.0f}px error")
+    if isinstance(points, int):
+        parts.append(f"{points}pt")
+    return ", ".join(parts)
+
+
+def apply_live_values_to_config(config: dict[str, Any], values: dict[str, Any]) -> None:
+    """Write live values back into the merged config, in place.
+
+    The exact inverse of :func:`initial_live_values`, and deliberately kept
+    beside it: the ``motion.*`` keys are the reason a generic
+    :func:`set_nested` cannot be used here, since they are read from
+    ``config["task"]["motion"]`` while their key says only ``motion.``. A
+    mismatch between the two functions would silently drop a restored setting.
+
+    Used to seed a run from a carried-over or saved profile
+    (SPEC-live-settings-panel.md S10.3) *before* ``initial_live_values`` runs,
+    so the config stays the single source of truth and the task, the engine
+    objects and the panel cannot disagree about what is in effect.
+
+    **Unknown keys are ignored**, which is what lets a profile written by an
+    older or newer build load without breaking the run (S10.5.3).
+    """
+    known = {s.key for s in LIVE_SETTINGS}
+    for key, value in values.items():
+        if key not in known:
+            continue
+        if key.startswith("motion."):
+            set_nested(config.setdefault("task", {}), key, value)
+        else:
+            set_nested(config, key, value)
+
+
 def initial_structural_values(task_id: str, config: dict[str, Any]) -> dict[str, Any]:
     task_cfg = config.get("task", {})
     return {

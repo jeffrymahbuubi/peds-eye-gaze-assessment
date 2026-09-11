@@ -100,7 +100,33 @@ class DwellSelector:
         self._last_on_target_ns = None
         self._refractory_until_ns = None
 
-    def update(self, t_ns: int, on_target: bool) -> DwellState:
+    def update(self, t_ns: int, on_target: bool, *, can_complete: bool = True) -> DwellState:
+        """Advance the accumulator one frame.
+
+        ``can_complete=False`` means the caller is not willing to accept a
+        selection right now, even though gaze is on target. The dwell then
+        **holds at full** instead of completing: it reports ``progress=1.0``
+        without triggering, without clearing the accumulator, and without
+        opening the refractory window -- so the instant the caller becomes
+        willing, the very next frame triggers.
+
+        This exists for ``follow_moving``'s timed selection window
+        (SPEC-follow-moving-selection.md S5.2). Before it, a dwell that
+        completed outside the window was treated as a real completion and
+        thrown away by the task, costing the child a full
+        ``refractory_ms + threshold_ms`` cycle and logging a MISS_CLICK
+        against them for a correctly-aimed selection.
+
+        **Why this lives here rather than as an "armed" flag on the task:**
+        holding the accumulator *is* the arming, so a child who looks away
+        has it cleared by the ordinary off-target reset below, with
+        ``hold_grace_ms`` bridging blinks exactly as it already does. A
+        separate flag would have to re-implement that, and getting it wrong
+        would credit a hit to a child who had stopped looking.
+
+        Keyword-only so the two existing positional call sites cannot acquire
+        a third argument by accident.
+        """
         threshold_ns = int(self.config.threshold_ms * 1e6)
         refractory_ns = int(self.config.refractory_ms * 1e6)
         grace_ns = int(self.config.hold_grace_ms * 1e6)
@@ -135,6 +161,11 @@ class DwellSelector:
 
         elapsed = t_ns - self._dwell_start_ns
         if elapsed >= threshold_ns:
+            if not can_complete:
+                # Hold at full: keep _dwell_start_ns so the next frame with
+                # can_complete=True triggers immediately, and do NOT start the
+                # refractory window (there was no selection to recover from).
+                return DwellState(progress=1.0, triggered=False, in_refractory=False)
             self._dwell_start_ns = None
             self._last_on_target_ns = None
             self._refractory_until_ns = t_ns + refractory_ns

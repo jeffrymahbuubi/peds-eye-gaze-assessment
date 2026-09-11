@@ -269,8 +269,20 @@ class BaseTask:
             if on_target and self._current.t_first_gaze_on_target_ns is None:
                 self._current.t_first_gaze_on_target_ns = t_ns
 
+            if selectable and self._current.t_selectable_start_ns is None:
+                # First frame this trial's target became selectable. Recorded
+                # so reaction time can be measured from the moment a selection
+                # was actually possible, not from trial start -- for a task
+                # with a randomly-timed window the latter is dominated by the
+                # random offset (SPEC-follow-moving-selection.md S4.2).
+                self._current.t_selectable_start_ns = t_ns
+
             if self.input_mode == "eye" and self.dwell is not None:
-                state = self.dwell.update(t_ns, on_target)
+                # `selectable` gates *completion*, not accumulation: an early
+                # dwell holds at full and fires the moment the window opens,
+                # rather than completing and being rejected
+                # (SPEC-follow-moving-selection.md S5.2).
+                state = self.dwell.update(t_ns, on_target, can_complete=selectable)
                 dwell_progress = state.progress
                 if self.feedback is not None and state.progress > 0:
                     self.feedback.on_progress(tx_norm, ty_norm, state.progress)

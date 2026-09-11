@@ -26,6 +26,9 @@ class TaskRunView(QWidget):
         theme: dict | None = None,
         task_id: str = "click_static",
         initial_settings: dict[str, Any] | None = None,
+        settings_source: str = "defaults",
+        settings_saved_at: str = "",
+        settings_calibration: dict | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -37,7 +40,13 @@ class TaskRunView(QWidget):
         layout.setSpacing(0)
 
         self.canvas = TaskCanvas(theme=theme)
-        self.operator_panel = OperatorPanel(task_id=task_id, initial_values=initial_settings)
+        self.operator_panel = OperatorPanel(
+            task_id=task_id,
+            initial_values=initial_settings,
+            settings_source=settings_source,
+            settings_saved_at=settings_saved_at,
+            settings_calibration=settings_calibration,
+        )
         self.operator_panel.setFixedWidth(280)
 
         layout.addWidget(self.canvas, stretch=1)
@@ -50,12 +59,22 @@ class MainWindow(QMainWindow):
         theme: dict | None = None,
         task_id: str = "click_static",
         initial_settings: dict[str, Any] | None = None,
+        settings_source: str = "defaults",
+        settings_saved_at: str = "",
+        settings_calibration: dict | None = None,
         fullscreen: bool = True,
     ) -> None:
         super().__init__()
         self.setWindowTitle("Pediatric Eye-Gaze Assessment")
 
-        self.view = TaskRunView(theme=theme, task_id=task_id, initial_settings=initial_settings)
+        self.view = TaskRunView(
+            theme=theme,
+            task_id=task_id,
+            initial_settings=initial_settings,
+            settings_source=settings_source,
+            settings_saved_at=settings_saved_at,
+            settings_calibration=settings_calibration,
+        )
         self.canvas = self.view.canvas
         self.operator_panel = self.view.operator_panel
         self.setCentralWidget(self.view)
