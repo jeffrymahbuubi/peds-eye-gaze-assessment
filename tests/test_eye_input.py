@@ -154,3 +154,72 @@ def test_smoothing_lets_dwell_complete_despite_jitter_that_defeats_raw_pointer()
 
     assert dwell_completes(smoothing_enabled=False) is False
     assert dwell_completes(smoothing_enabled=True) is True
+
+
+# -- dropout freeze (SPEC-gaze-cursor-redesign.md S4.1 / S5.1) --------------
+
+
+def test_invalid_sample_freezes_pointer_instead_of_reporting_its_own_coordinates():
+    """The reported "cursor jumps to the left corner" bug, reproduced exactly.
+
+    ``rec_to_sample`` substitutes ``0.0`` for a coordinate the device did not
+    supply, so a dropout sample carries ``(0.0, 0.0)`` -- not a position, a
+    placeholder. Rendering it puts the cursor in the canvas's top-left corner
+    (SPEC-gaze-cursor-redesign.md S2). Before the fix this asserted position
+    was ``(0.0, 0.0)``; it must now hold wherever gaze actually was.
+    """
+    samples = [
+        GazeSample(t_ns=0, x=0.8, y=0.3, valid=True),
+        GazeSample(t_ns=1, x=0.0, y=0.0, valid=False),  # tracking lost
+    ]
+    eye = EyeInput(_SequenceSource(samples), smoothing_config=SmoothingConfig(enabled=False))
+    eye.poll(t_ns=0)
+    pointer = eye.poll(t_ns=1)
+    assert pointer.valid is False
+    assert (pointer.x, pointer.y) == (0.8, 0.3)
+
+
+def test_frozen_position_is_the_smoothed_one_the_renderer_last_drew():
+    """S4.5: "freeze" means freeze what was on screen. The raw last sample and
+    the smoothed pointer differ, so freezing the raw one would twitch the
+    cursor at the exact moment tracking is lost."""
+    samples = [
+        GazeSample(t_ns=0, x=0.2, y=0.2, valid=True),
+        GazeSample(t_ns=1, x=0.8, y=0.8, valid=True),
+        GazeSample(t_ns=2, x=0.0, y=0.0, valid=False),  # tracking lost
+    ]
+    eye = EyeInput(_SequenceSource(samples), smoothing_config=SmoothingConfig(enabled=True, alpha=0.35))
+    eye.poll(t_ns=0)
+    smoothed = eye.poll(t_ns=1)
+    assert smoothed.x != 0.8  # precondition: smoothing really did lag the raw sample
+    frozen = eye.poll(t_ns=2)
+    assert (frozen.x, frozen.y) == (smoothed.x, smoothed.y)
+
+
+def test_invalid_sample_before_any_valid_one_falls_back_to_neutral_center():
+    """With nothing valid ever seen there is no position to hold, so the
+    cursor must start at the neutral center the sibling branches use -- not in
+    a corner."""
+    source = _StubSource(connected=True, sample=_sample(valid=False))
+    pointer = EyeInput(source).poll(t_ns=0)
+    assert pointer.valid is False
+    assert (pointer.x, pointer.y) == (0.5, 0.5)
+
+
+def test_disconnect_clears_the_frozen_position():
+    """Across a link drop the held position is stale for the same reason the
+    running average is, so it must not survive into the reconnected session."""
+    sample = GazeSample(t_ns=0, x=0.8, y=0.3, valid=True)
+    source = _StubSource(connected=True, sample=sample)
+    eye = EyeInput(source, smoothing_config=SmoothingConfig(enabled=False))
+    assert eye.poll(t_ns=0).x == 0.8
+
+    source._connected = False
+    assert (eye.poll(t_ns=1).x, eye.poll(t_ns=1).y) == (0.5, 0.5)
+
+    # Reconnected, but the first sample back is an invalid one: fall back to
+    # the neutral center rather than resurrecting the pre-disconnect position.
+    source._connected = True
+    source._sample = GazeSample(t_ns=2, x=0.0, y=0.0, valid=False)
+    pointer = eye.poll(t_ns=2)
+    assert (pointer.x, pointer.y) == (0.5, 0.5)

@@ -13,7 +13,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QRadialGradient
 from PySide6.QtWidgets import QWidget
 
-from ..inputs.base import norm_to_px
+from ..inputs.base import norm_to_px, outside_distance
 
 # Distractor glyphs for the scanning field (ported from resources/diki, see
 # SPEC-diki-design-audit.md S3.4/S4). Distinct shapes -- not just distinct
@@ -21,29 +21,62 @@ from ..inputs.base import norm_to_px
 # visual-search assessment is for.
 _SHAPE_CIRCLE, _SHAPE_SQUARE, _SHAPE_TRIANGLE, _SHAPE_DIAMOND, _SHAPE_HEX, _SHAPE_STAR = range(6)
 
-# Drawn radius of the gaze cursor dot. Also the inset used when clamping it to
-# the canvas edge, so a clamped cursor is fully visible rather than half cut
-# off by the widget boundary (SPEC-gui-audit-2026-09-10.md S6).
-_CURSOR_RADIUS_PX = 14.0
+# The gaze cursor is a small hollow ring, modelled on Gazepoint Control's own
+# marker (SPEC-gaze-cursor-redesign.md S4.3, reference screenshots at
+# resources/images/gaze-cursor-from-calib/). Hollow and small on purpose: it no
+# longer occludes the target underneath it, which matters most at exactly the
+# moment the child is on target and the dwell ring is filling. It must stay
+# visually distinct from that dwell arc (8px stroke, target-sized radius) so it
+# never reads as a second, smaller progress indicator.
+_CURSOR_RADIUS_PX = 5.0
+_CURSOR_STROKE_PX = 2.0
+
+# The ring is drawn twice: a wider halo underneath, then the core stroke on
+# top, leaving a contrasting fringe on both sides of the core line. This is
+# what makes one small marker legible on *any* backdrop without per-theme
+# tuning (SPEC-gaze-cursor-redesign.md S10) -- a single-colour ring cannot be,
+# and the first attempt proved it: a dark-green core on the forest theme's
+# light-green background, among dark-green grid outlines drawn in the same
+# `cursor_color`, was reported as blending in and hard to notice.
+#
+# Copying Gazepoint Control's *colour* was the error there. Their saturated
+# green works because their backdrop is near-black; the transferable principle
+# is maximum contrast against the background, not the hue itself.
+# The dark fringe is the load-bearing half, and it was chosen by measurement,
+# not taste: rendered against the real forest scene, a white halo round a
+# theme-coloured core scored 32205 against the plain ring's 30832 -- a 4%
+# improvement, because white fringe on a near-white background adds almost no
+# ink. Dark fringe with a white core scored 53363, +73%. The core then carries
+# legibility on dark themes, where the fringe is what disappears. Both values
+# are deliberately theme-independent: per-theme accent colours are exactly what
+# produced the blending complaint.
+_CURSOR_HALO_STROKE_PX = 5.0
+_CURSOR_HALO_COLOR = "#102010"
+_CURSOR_CORE_COLOR = "#ffffff"
+
+# A ring lays down far less ink than the filled disc it replaces, so it needs
+# more alpha than the old 200/70 pair to stay as legible.
+_CURSOR_ALPHA = 235
+_CURSOR_ALPHA_DIM = 110
 
 
 def _clamp_to_canvas(x: float, y: float, w: int, h: int) -> tuple[float, float, bool]:
     """Pull a cursor position inside the canvas, reporting whether it had to.
 
-    Real gaze can legitimately land outside the canvas -- on the operator
-    sidebar, or anywhere else on the tracked monitor. Qt clips paintEvent
-    drawing to the widget's own rect, so such a position used to make the
-    cursor silently disappear entirely, which reads as "tracking died" rather
-    than "you're looking off to the side" (SPEC-gui-audit-2026-09-10.md S6).
-    Clamping keeps a dot on screen at the nearest edge, matching Gazepoint
-    Control's own always-visible calibration marker.
+    Off-canvas gaze no longer reaches here -- the cursor freezes at its last
+    on-canvas position instead (see :meth:`TaskCanvas._cursor_draw_position`),
+    so this is now a safety net rather than the main mechanism: it keeps a ring
+    sitting exactly on the boundary drawn whole instead of half-clipped by the
+    widget edge, and guards against rounding at 0.0/1.0.
 
-    Inset by the cursor's own radius so the clamped dot is drawn whole, not
-    half-clipped by the boundary. The returned flag is what lets the caller
-    show a clamped cursor differently from a real in-canvas one -- without it,
-    "gaze at the very edge" and "gaze left the canvas" would be identical.
+    Inset by the cursor's own radius *plus half its stroke* so the clamped ring
+    is drawn whole, not half-clipped by the boundary -- a stroke straddles the
+    path it is drawn on, so radius alone would leave the outer half of the line
+    outside the widget. The returned flag is what lets the caller show a
+    clamped cursor differently from a real in-canvas one -- without it, "gaze
+    at the very edge" and "gaze left the canvas" would be identical.
     """
-    r = _CURSOR_RADIUS_PX
+    r = _CURSOR_RADIUS_PX + max(_CURSOR_STROKE_PX, _CURSOR_HALO_STROKE_PX) / 2.0
     cx = min(max(x, r), max(float(w) - r, r))
     cy = min(max(y, r), max(float(h) - r, r))
     return cx, cy, (cx != x or cy != y)
@@ -63,6 +96,9 @@ class TaskCanvas(QWidget):
         self.layout_slots: list[tuple[float, float]] = []
         self.cursor_xy_norm: tuple[float, float] = (0.5, 0.5)
         self.cursor_valid: bool = False
+        # Last position gaze was actually inside the canvas, which off-canvas
+        # gaze freezes at (see _cursor_draw_position).
+        self._last_on_canvas_xy: tuple[float, float] | None = None
         self.dwell_progress: float = 0.0
         self.selectable: bool = True
         self.show_cursor: bool = True
@@ -155,9 +191,12 @@ class TaskCanvas(QWidget):
         self._draw_particles(painter, w, h)
 
         if self.show_cursor:
-            cx, cy = norm_to_px(*self.cursor_xy_norm, w, h)
-            ccx, ccy, clamped = _clamp_to_canvas(cx, cy, w, h)
-            self._draw_cursor(painter, ccx, ccy, clamped)
+            placed = self._cursor_draw_position()
+            if placed is not None:
+                (xn, yn), frozen = placed
+                cx, cy = norm_to_px(xn, yn, w, h)
+                ccx, ccy, _ = _clamp_to_canvas(cx, cy, w, h)
+                self._draw_cursor(painter, ccx, ccy, dim=frozen or not self.cursor_valid)
 
         painter.end()
 
@@ -339,18 +378,60 @@ class TaskCanvas(QWidget):
         span = int(-360 * 16 * max(0.0, min(1.0, self.dwell_progress)))
         painter.drawArc(int(x - r), int(y - r), int(2 * r), int(2 * r), 90 * 16, span)
 
-    def _draw_cursor(self, painter: QPainter, x: float, y: float, clamped: bool = False) -> None:
-        color = QColor(self.theme.get("cursor_color", "#ffffff"))
-        # A clamped cursor reuses the same dim treatment as an invalid one: it
-        # is still a real reading, but it is not where it appears to be, so it
-        # should not look like a normal on-canvas cursor (SPEC-gui-audit-
-        # 2026-09-10.md S6 -- the operator can still tell "looking off-canvas"
-        # from "looking at the canvas edge", which a uniformly-bright clamp
-        # would have made indistinguishable).
-        color.setAlpha(200 if (self.cursor_valid and not clamped) else 70)
-        painter.setBrush(color)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(QPointF(x, y), _CURSOR_RADIUS_PX, _CURSOR_RADIUS_PX)
+    def _cursor_draw_position(self) -> tuple[tuple[float, float], bool] | None:
+        """Where to draw the gaze marker, and whether that position is frozen.
+
+        Returns ``None`` when there is nothing to draw at all -- only before
+        the very first on-canvas reading of a run, when no position has ever
+        been established to freeze at.
+
+        **Off-canvas gaze freezes the cursor in place** rather than tracking it
+        to the nearest edge (SPEC-gaze-cursor-redesign.md S10, revising S4.2).
+        The earlier design clamped to the edge and faded by distance; the user
+        asked for parity with Gazepoint Control instead, where looking away
+        simply stops the marker. That makes "looking away" and "tracking lost"
+        visually identical, which is a deliberate, accepted consequence --
+        Gazepoint Control does not distinguish them either, and it removes the
+        distance threshold this otherwise needed.
+
+        Hit-testing is untouched by any of this. ``BaseTask`` still sees the
+        true, unfrozen, possibly out-of-range position, so freezing can never
+        cause a selection the child did not actually make -- freezing is the
+        renderer's decision alone (the same separation S6 of
+        SPEC-gui-audit-2026-09-10.md established for the clamp).
+        """
+        xy = self.cursor_xy_norm
+        if outside_distance(*xy) > 0.0:
+            if self._last_on_canvas_xy is None:
+                return None
+            return self._last_on_canvas_xy, True
+        self._last_on_canvas_xy = xy
+        return xy, False
+
+    def _draw_cursor(self, painter: QPainter, x: float, y: float, dim: bool = False) -> None:
+        """Draw the gaze marker: a small hollow ring with a contrasting fringe.
+
+        Two states, deliberately only two (S10): a live on-canvas reading at
+        full strength, and a *frozen* one -- dimmed -- covering both tracking
+        loss and gaze that has left the canvas.
+
+        Drawn as two concentric strokes at the same radius, wider first: the
+        halo's extra width survives on both sides of the narrower core, so the
+        marker carries its own contrast onto any backdrop instead of depending
+        on the theme it happens to be drawn over.
+        """
+        alpha = _CURSOR_ALPHA_DIM if (dim or not self.cursor_valid) else _CURSOR_ALPHA
+        centre = QPointF(x, y)
+        # Hollow: stroke only, no fill, so the target underneath stays visible.
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        halo = QColor(_CURSOR_HALO_COLOR)
+        halo.setAlpha(alpha)
+        painter.setPen(QPen(halo, _CURSOR_HALO_STROKE_PX))
+        painter.drawEllipse(centre, _CURSOR_RADIUS_PX, _CURSOR_RADIUS_PX)
+        core = QColor(_CURSOR_CORE_COLOR)
+        core.setAlpha(alpha)
+        painter.setPen(QPen(core, _CURSOR_STROKE_PX))
+        painter.drawEllipse(centre, _CURSOR_RADIUS_PX, _CURSOR_RADIUS_PX)
 
     def _draw_particles(self, painter: QPainter, w: int, h: int) -> None:
         if not self._particles:

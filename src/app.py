@@ -30,6 +30,7 @@ from .engine.calibration import (
     save_calibration_result,
 )
 from .engine.config import CONFIG_ROOT, deep_merge, load_task_config, load_theme
+from .engine.gaze_diagnostics import GazeDropoutLog, gaze_dropout_log_path
 from .engine.feedback import FeedbackBus
 from .engine.latency import LatencyTracker
 from .engine.sample_rate import SampleRateTracker
@@ -327,6 +328,20 @@ class AssessmentApp:
         self._latency = LatencyTracker(window_size=int(self.config.get("app", {}).get("target_fps", 60)))
         self._device_rate = SampleRateTracker()
 
+        # Dropout / off-canvas diagnostic (SPEC-gaze-cursor-redesign.md S6).
+        # Live device only: a replay fixture's dropouts are the fixture's, not
+        # the tracker's, and would pollute the aggregate the fade threshold is
+        # meant to be read from.
+        self._dropout_log = (
+            GazeDropoutLog(
+                gaze_dropout_log_path(output_root),
+                raw_probe=getattr(self.client, "last_raw_pog", None),
+                task_id=task_id,
+            )
+            if self.client.is_live
+            else None
+        )
+
         fps = int(self.config.get("app", {}).get("target_fps", 60))
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
@@ -454,6 +469,9 @@ class AssessmentApp:
 
         result = self.task.update(t_ns, pointer)
 
+        if self._dropout_log is not None:
+            self._dropout_log.observe(t_ns, pointer.valid, result.cursor_xy_norm)
+
         self.canvas.set_frame(
             target_xy_norm=result.target_xy_norm,
             target_radius_px=(result.target.radius_px if result.target else 90.0),
@@ -516,6 +534,10 @@ class AssessmentApp:
             return  # End button + task.is_done can both fire in the same tick
         self._shutdown_done = True
         self.timer.stop()
+        if self._dropout_log is not None:
+            # Flush a dropout still open at the end, so one that never
+            # recovered is recorded rather than silently lost.
+            self._dropout_log.close(time.time_ns())
         trials_path = self.recorder.write_trials(self.task.trials)
         self.recorder.log(f"Wrote {len(self.task.trials)} trials -> {trials_path}")
         self.recorder.close()

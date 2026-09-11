@@ -366,6 +366,7 @@ class GazepointClient:
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._latest: GazeSample | None = None
+        self._last_raw_pog: dict[str, str] | None = None
         self._device_info: DeviceInfo | None = None
         # Replay mode has no socket to lose, so it's always "connected".
         self._connected = replay_path is not None
@@ -472,6 +473,19 @@ class GazepointClient:
         with self._lock:
             return self._latest
 
+    def last_raw_pog(self) -> dict[str, str] | None:
+        """The raw point-of-gaze attributes of the most recent REC, verbatim.
+
+        Diagnostic-only (SPEC-gaze-cursor-redesign.md S6), deliberately kept
+        off :class:`GazeSample` so the recording schema is unaffected. It
+        answers a question the parsed sample cannot: whether a dropout's
+        ``(0.0, 0.0)`` came from the device sending literal zeros or from
+        ``rec_to_sample``'s own ``None -> 0.0`` fallback for an absent
+        attribute. ``None`` before any REC has been parsed.
+        """
+        with self._lock:
+            return dict(self._last_raw_pog) if self._last_raw_pog is not None else None
+
     def stop(self) -> None:
         self._stop_event.set()
         if self._thread is not None:
@@ -485,9 +499,15 @@ class GazepointClient:
 
     # -- reader loops ------------------------------------------------------
 
-    def _set_latest(self, sample: GazeSample) -> None:
+    # Raw REC keys retained for the dropout diagnostic (see last_raw_pog).
+    # Only the POG validity flags and coordinates -- not the whole record.
+    _RAW_POG_KEYS = ("BPOGV", "BPOGX", "BPOGY", "FPOGV", "FPOGX", "FPOGY")
+
+    def _set_latest(self, sample: GazeSample, attrs: dict[str, str] | None = None) -> None:
         with self._lock:
             self._latest = sample
+            if attrs is not None:
+                self._last_raw_pog = {k: attrs[k] for k in self._RAW_POG_KEYS if k in attrs}
 
     def _run_socket(self) -> None:
         buffer = ""
@@ -517,7 +537,7 @@ class GazepointClient:
                 line, buffer = buffer.split("\n", 1)
                 attrs = parse_rec(line)
                 if attrs is not None:
-                    self._set_latest(rec_to_sample(attrs, time.time_ns()))
+                    self._set_latest(rec_to_sample(attrs, time.time_ns()), attrs)
 
     def _on_disconnected(self) -> None:
         self._connected = False

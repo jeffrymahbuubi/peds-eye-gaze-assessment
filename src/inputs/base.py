@@ -43,6 +43,24 @@ def norm_to_px(x: float, y: float, width_px: int, height_px: int) -> tuple[float
     return x * width_px, y * height_px
 
 
+def outside_distance(x: float, y: float) -> float:
+    """How far a normalized position lies outside the 0-1 box, 0.0 if inside.
+
+    Shared by the canvas's off-canvas cursor fade and the dropout diagnostic
+    that the fade's threshold is tuned from (SPEC-gaze-cursor-redesign.md
+    S4.2/S6), so the number the diagnostic records and the number the renderer
+    acts on cannot drift apart.
+
+    Per-axis overshoot combined as the larger of the two rather than a
+    Euclidean distance: the question is how far gaze has left the canvas in
+    *any* direction, and a corner excursion should not read as ~1.4x worse
+    than an equivalent straight-out-the-side one.
+    """
+    dx = max(0.0, -x, x - 1.0)
+    dy = max(0.0, -y, y - 1.0)
+    return max(dx, dy)
+
+
 def circle_contains(cx_px: float, cy_px: float, radius_px: float, px: float, py: float) -> bool:
     """Whether pixel point (px, py) is within ``radius_px`` of (cx, cy)."""
     dx = px - cx_px

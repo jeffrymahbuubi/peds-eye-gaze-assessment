@@ -164,6 +164,13 @@ class EyeInput:
         self.dwell = DwellSelector(dwell_config)
         self.smoother = GazeSmoother(smoothing_config)
         self._last_valid: GazeSample | None = None
+        # Last pointer position actually handed to the caller, i.e. what the
+        # renderer last drew. Held so a tracking dropout can freeze the cursor
+        # in place instead of moving it (SPEC-gaze-cursor-redesign.md S4.1).
+        # Deliberately the *smoothed* position, not the raw last sample: the
+        # raw one differs from what was on screen, so returning it would make
+        # the cursor twitch at the exact moment tracking is lost.
+        self._last_pointer_xy: tuple[float, float] | None = None
 
     def latest_sample(self) -> GazeSample | None:
         """Return the raw, unsmoothed sample -- used for recording, never for
@@ -181,10 +188,22 @@ class EyeInput:
         link as down, the pointer is forced invalid at the neutral center —
         without this, a dropped connection would otherwise look identical to
         a live, motionless gaze (the last cached sample stays "valid" forever).
+
+        An invalid sample (blink, face out of view, head out of range) freezes
+        the pointer at the last position the caller was given, rather than
+        reporting the sample's own coordinates. Those coordinates are not a
+        position at all: ``rec_to_sample`` substitutes ``0.0`` for a missing
+        one, which the render path faithfully draws in the canvas's top-left
+        corner (SPEC-gaze-cursor-redesign.md S2). Note ``FPOGV`` is false
+        during *saccades* as well as blinks, so this path is taken far more
+        often than "the child blinked" suggests.
         """
         is_connected = getattr(self._source, "is_connected", None)
         if is_connected is not None and not is_connected():
             self.smoother.reset()
+            # Drop the frozen position too: across a link drop it is stale for
+            # the same reason the running average is.
+            self._last_pointer_xy = None
             return Pointer(x=0.5, y=0.5, valid=False, clicked=False)
         sample = self.latest_sample()
         if sample is None:
@@ -196,8 +215,15 @@ class EyeInput:
             # the next valid sample should start a fresh average rather than
             # blend toward wherever gaze happened to be lost.
             self.smoother.reset()
-            return Pointer(x=sample.x, y=sample.y, valid=False, clicked=False)
+            if self._last_pointer_xy is None:
+                # Nothing valid has been seen yet, so there is no position to
+                # hold. Use the neutral center the two branches above already
+                # use, so the cursor never starts life in a corner either.
+                return Pointer(x=0.5, y=0.5, valid=False, clicked=False)
+            fx, fy = self._last_pointer_xy
+            return Pointer(x=fx, y=fy, valid=False, clicked=False)
         sx, sy = self.smoother.update(sample.x, sample.y)
+        self._last_pointer_xy = (sx, sy)
         return Pointer(x=sx, y=sy, valid=True, clicked=False)
 
     def close(self) -> None:  # pragma: no cover - passthrough
