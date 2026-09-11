@@ -1,6 +1,6 @@
 # SPEC-gui-audit-2026-09-10 — Real-Device GUI Audit
 
-**Status: Round 1 (5 items) DONE (`0b433c7`). Round 2 (§6, §7, §8) diagnosed (`1599bd2`). Round 3 — §6, §8 and §4 IMPLEMENTED + live-validated; §7 ANSWERED, and answering it uncovered §9, a far more serious calibration bug (stale/previous-run results reported as the current calibration's), now also fixed + live-validated.** (`configs/default.yaml`/`configs/local_state.json` are skip-worktree'd/gitignored and were never part of any commit by design — the `127.0.0.1`/`4242`/`alpha: 0.22` values they now hold are real, just not tracked.)
+**Status: Round 1 (5 items) DONE (`0b433c7`). Round 2 (§6, §7, §8) diagnosed (`1599bd2`). Round 3 DONE (`364cc54`) — §6, §8 and §4 IMPLEMENTED + live-validated; §7 ANSWERED, and answering it uncovered §9, a far more serious calibration bug (stale/previous-run results reported as the current calibration's), now also fixed + live-validated.** (`configs/default.yaml`/`configs/local_state.json` are skip-worktree'd/gitignored and were never part of any commit by design — the `127.0.0.1`/`4242`/`alpha: 0.22` values they now hold are real, just not tracked.)
 
 **Created:** 2026-09-10
 **Last updated:** 2026-09-10 (round 3)
@@ -72,7 +72,7 @@ These are three unrelated knobs (`configs/default.yaml`'s `dwell` block, logic i
 
 **Status: APPLIED (2026-09-10, round 3).** Tested live during a real task run with a real subject: alpha was changed from `0.35` to `0.22` through the operator panel's own live control while the cursor was visible, and the user judged 0.22 better. `configs/default.yaml`'s `dwell.smoothing.alpha` is now `0.22`. Note that file is skip-worktree'd on this machine, so the new default is real and in effect locally but is **not** part of any commit — same as the `gazepoint.host` value (item 1).
 
-## 5. Right-side targeting difficulty — likely root cause found, not yet proven live
+## 5. Right-side targeting difficulty — root cause found and fixed in round 1
 
 **Reported:** targets/icons on the right side of the task screen are hard for the child's gaze to reach, across all tasks.
 
@@ -90,7 +90,7 @@ This is distinct from the already-fixed Aug-31 hit-testing bug (`peds-eye-gaze-a
 
 **Status: IMPLEMENTED, unit-tested, and live-validated (2026-09-10).** See the Log below for the full account.
 
-## 6. Gaze cursor rendering never received item 5's coordinate fix — confirmed root cause, not yet implemented
+## 6. Gaze cursor rendering never received item 5's coordinate fix — fixed in round 3
 
 **Reported (round 2):** the visible gaze cursor sometimes disappears mid-task even though the subject isn't blinking; gazing at a circle other than the center one makes it vanish. Reference screenshots at `resources/images/gaze-cursor-from-calib/` show Gazepoint Control's own calibration-result overlay, where the gaze marker is drawn wherever real gaze lands (including well outside any calibration target, e.g. one screenshot shows it near a corner and another shows it isolated below the grid) and is **never clipped or hidden** — the user wants the app's own cursor to behave the same way, always present.
 
@@ -113,7 +113,7 @@ This is distinct from the already-fixed Aug-31 hit-testing bug (`peds-eye-gaze-a
 
 **Status: IMPLEMENTED and live-validated with a real subject (2026-09-10, round 3).** See the Log below for the full account. Both open implementation questions were resolved: the clamp is a per-axis `min`/`max` in *pixel* space (inset by the cursor's own radius, so a clamped dot is drawn whole rather than half-cut by the widget boundary), and a clamped cursor does reuse the existing dim-alpha treatment, so "gaze at the canvas edge" stays visually distinguishable from "gaze left the canvas" — recovering most of the trade-off this section had accepted losing.
 
-## 7. Calibration per-point breakdown still unavailable at n=4/n=5 despite item 2a's grace window — needs live timing data
+## 7. Calibration per-point breakdown still unavailable at n=4/n=5 despite item 2a's grace window — answered in round 3 (point count was never the cause; see §9)
 
 **Reported (round 2):** with `calibration.points` set to 4 or 5, "View Calibration Details" sometimes still shows the "not available" placeholder even after waiting several seconds before clicking; with 6 or more points it reportedly always works.
 
@@ -253,4 +253,8 @@ The gap between the satisfying `CALIBRATE_RESULT_SUMMARY` ACK and the `CALIB_RES
 
   **Also worth knowing for future live sessions:** `SetupPage.can_continue()` requires **Sex** to be set, not just subject ID + connection + calibration. With it unset, both "Continue to Tasks" and every task's Run button silently no-op (`_on_run_requested` returns early), with no message anywhere — this cost time before it was spotted.
 
-  **Files changed:** `src/engine/calibration.py`, `src/tasks/base_task.py`, `src/ui/canvas.py`, `src/ui/setup_page.py`, `src/app.py`, `tests/test_calibration.py`, `tests/test_task_pipeline.py`, this SPEC, plus `configs/default.yaml` (skip-worktree'd — the `alpha: 0.22` change is real and in effect locally but is not committed, matching this project's established local-config pattern).
+  **Files changed:** `src/engine/calibration.py`, `src/tasks/base_task.py`, `src/ui/canvas.py`, `src/ui/setup_page.py`, `src/app.py`, `tests/test_calibration.py`, `tests/test_task_pipeline.py`, this SPEC, plus `configs/default.yaml` (skip-worktree'd — the `alpha: 0.22` change is real and in effect locally but is not committed, matching this project's established local-config pattern). Committed as `364cc54`, pushed to `origin/main`.
+
+- **2026-09-11 — audit pass (`/spec-memory-audit`), plus independent corroboration of §9.** Re-verified against current state: all three cited commits (`0b433c7`, `1599bd2`, `364cc54`) resolve; every code symbol this SPEC names (`_drain_socket`, `_min_calibration_s`, `calibration_timing_log_path`, `pointer_to_canvas_norm`, `cursor_xy_norm`, `_clamp_to_canvas`, `_subject_calibration_path`, `_latest_subject_calibration`) exists in the files claimed; `configs/default.yaml` holds `alpha: 0.22` and `host: "127.0.0.1"`, `configs/local_state.json` holds `4242`; pytest re-run gives 148 collected / 147 passed / 1 pre-existing unrelated failure, matching exactly. Log chronology checked and correct. Fixed three section headings (§5, §6, §7) that still read "not yet implemented" / "needs live timing data" while their own Status lines said otherwise, and refreshed the main memory file's frontmatter `description`, which still described round 2 as the latest state (that field drives recall relevance, so a stale one actively misleads a future session).
+
+  **Independent corroboration:** `sessions/_diagnostics/calibration_timing.jsonl` now carries a third record, timestamped `2026-09-11T05:09:11Z` — after round 3's session ended and not produced by it — reading `elapsed_s: 10.344`, `gap_s: 10.328`, `per_point_captured: true`, `valid: true`, `mean_error_px: 34.94`. It matches post-fix behaviour exactly (waits the full real calibration, captures its own per-point data) on a run this session had no part in, and its error value differs from both round-3 runs, so it is that run's own result rather than a retained one. The diagnostic left in place is what makes this checkable at all.
