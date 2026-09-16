@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -113,6 +113,7 @@ class AssessmentApp:
         settings_source: str = "defaults",
         settings_saved_at: str = "",
         settings_calibration: dict | None = None,
+        settings_profile_file: str = "",
         client: GazepointClient | None = None,
         preset_calibration_result: CalibrationResult | None = None,
         embedded: bool = False,
@@ -159,6 +160,7 @@ class AssessmentApp:
             apply_live_values_to_config(self.config, live_overrides)
         self._settings_source = settings_source
         self._settings_saved_at = settings_saved_at
+        self._settings_profile_file = settings_profile_file
         self._structural_overrides = dict(structural_overrides or {})
         theme_name = self.config.get("task", {}).get("theme") or self.config.get("theme", {}).get("name", "forest")
         self.theme = load_theme(theme_name)
@@ -323,6 +325,10 @@ class AssessmentApp:
             settings={
                 "source": self._settings_source,
                 "profile_saved_at": self._settings_saved_at,
+                # Which saved version this run started from (S10.12) -- with
+                # several versions per subject+task, the timestamp alone no
+                # longer identifies the file unambiguously.
+                "profile_file": self._settings_profile_file,
                 "live": dict(self._live_values),
                 "structural": self._structural_overrides,
             },
@@ -439,7 +445,7 @@ class AssessmentApp:
             self.recorder.log(f"Could not save settings profile: {exc}")
             return
         self.operator_panel.set_settings_source(
-            "profile", datetime.now(timezone.utc).isoformat(), self.calibration_snapshot()
+            "saved", datetime.now().astimezone().isoformat(), self.calibration_snapshot()
         )
         self.recorder.log(f"Settings profile saved for {self.metadata.subject_id}: {path.name}")
         self.recorder.record_event("SETTINGS_PROFILE_SAVED", time.time_ns(), path=str(path))

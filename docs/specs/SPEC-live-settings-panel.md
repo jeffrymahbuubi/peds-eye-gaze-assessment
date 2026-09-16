@@ -849,6 +849,383 @@ drift).
 have, so a shorter screen or 125 % scaling degrades to scrolling rather than to
 silent clipping.
 
+## 10.11 Tasks-page "Save Settings" renamed to "Load Settings" (2026-09-17) — implemented; SUPERSEDED IN PART by §10.12 the same day (single-profile premise and enable rule)
+
+### 10.11.1 Reported
+
+Two buttons both named saving settings — the OperatorPanel's own "Save for
+this subject" (§10.3, live, during a run) and the Tasks-page card's "Save
+Settings" (§10.6.1, added so a physician could save *after* seeing a run's
+results, since that is usually the moment they know the tuning was right) —
+read as one ambiguous action from two places. Requested change: repurpose the
+Tasks-page button into a **Load** action instead, on the model "tune and save
+live during testing, then load a saved profile from the task-selection
+screen." The automatic latest-profile auto-load (§10.3's precedence) was to
+be kept unchanged.
+
+### 10.11.2 Why a rename alone would have been empty, and what makes Load real
+
+Saving remains **only** possible from the OperatorPanel's "Save for this
+subject" during a live run — the Tasks-page duplicate is gone outright, not
+renamed in place. But a straight "replay the automatic load" button would
+have done nothing every time it mattered: `resolve_settings_precedence()`
+(§10.6.3, §10.9) already has values **carried over from an earlier run this
+sitting always beat a saved profile** — correct for "run 1 tunes, run 2
+collects," but it also means a saved profile is *unreachable* for the rest of
+the sitting the moment any run of that task finishes, short of restarting the
+whole app. Load Settings is the escape hatch for exactly that case: an
+explicit action to discard the carried-over values and drop back to the
+subject's saved profile, still in the same sitting.
+
+**Two decisions taken via `AskUserQuestion`, both the recommended option:**
+
+1. **What Load does:** force-reload the saved profile, discarding anything
+   carried over — not a no-op replay of the automatic load, and not a
+   cross-subject picker (the profile store is one file per subject+task,
+   §10.1's `settings_profile.py`; there is nothing to pick between for a
+   single subject).
+2. **When it is enabled:** only when it would change something — a saved
+   profile exists **and** the current source is not already `"profile"`.
+   Given precedence, this collapses to exactly: `source == "carried"` and a
+   profile is on disk. A fresh sitting with no carried value is already
+   running from the profile automatically, so the button starts (and stays)
+   disabled until a run produces a carried value to shadow it.
+
+### 10.11.3 Implementation
+
+`_on_load_settings_requested()` in `dashboard_window.py` does one thing:
+`self._task_live_overrides.pop(task_id, None)`. Nothing else needs to change
+— `_resolve_settings()` (§10.9's shared precedence wrapper) re-reads the
+profile from disk on its very next call with the carried entry gone, so the
+Tasks-page badge refresh right after, and the next Run, fall through to the
+profile **through the exact same code path** the badge and Run already
+shared. No second "prefer profile" flag was added; reusing the existing
+precedence rule was the point, the same principle §10.9's structural change
+established for the badge.
+
+The enable condition reuses `resolve_settings_precedence()` a second time per
+card in `_refresh_settings_badges()` — call it with the carried value dropped
+and check whether the result's `source` comes back `"profile"` — rather than
+inventing a second, independently-maintained notion of "has a usable
+profile." This also means the button's enabled state, not just the badge
+text, is driven by precedence: a profile file that exists but is empty of
+both `live` and `structural` content correctly leaves the button disabled,
+matching how such a profile is already treated as `"defaults"` everywhere
+else (§10.9's test suite already covers this case for the badge).
+
+`set_task_load_settings_enabled(task_id, True)` also resets the button's text
+back to "Load Settings" on the transition into enabled — needed because,
+unlike the old Save button (which only ever went disabled→enabled once per
+sitting), this button now cycles disabled→enabled→disabled every time a
+carried value reappears then gets discarded again, and a stale "Settings
+Loaded ✓" left over from an earlier load in the same sitting would otherwise
+look like current state.
+
+> **Superseded (§10.12.8, same day):** `set_task_load_settings_enabled` and
+> the transition-reset no longer exist. The button's label is now derived
+> from resolved state on every badge refresh via `set_load_settings_state`;
+> the enable rule in this section's decision 2 is replaced by "any version
+> exists". The §10.11.4 table below describes the §10.11 build as it was.
+
+### 10.11.4 Live validation (qt-mcp, dashboard + `tools/fake_gazepoint_server.py`)
+
+The discriminating sequence — proving Load changes what the *next Run*
+applies, not just the badge text:
+
+| Step | Static Click card / OperatorPanel |
+|---|---|
+| Run 1: `alpha` 0.22→**0.10**, "Save for this subject", End task | Badge → "Carried from last run"; profile written to `sessions/_settings/LOADTEST/click_static.json` |
+| Run 2: `alpha` 0.10→**0.35** (not saved), End task | Badge → "Carried from last run"; **Load Settings enabled** (a profile exists and is being shadowed) |
+| Click **Load Settings** | Badge → **"Profile saved · 8px error, 5pt"**; button → **"Settings Loaded ✓"**, disabled |
+| Run 3 (Run button) | OperatorPanel's `Smoothing alpha` opened at **0.10** — the profile's value, not 0.35, the just-discarded carried value |
+| End Run 3 (no changes made) | Badge → "Carried from last run" again; Load Settings **re-enabled**, text reset to "Load Settings" (not a stale "✓") |
+
+Run 3 is the row that actually discriminates: a button that only replayed the
+automatic load, or that merely changed the badge's wording, could not have
+changed what the OperatorPanel's spin box opened at. Also confirmed: every
+card starts with Load Settings disabled and no badge-vs-button mismatch
+across all four task cards before any run.
+
+Suite: **191 collected, 190 passed, 1 pre-existing unrelated failure**
+(`test_config_merges_task_over_default`, the long-known local `target_fps`
+drift) — unchanged from before this round, since the change is Qt-layer
+wiring only and this codebase's test suite is Qt-free by convention
+(live-validated via qt-mcp instead, per every prior round of this SPEC).
+
+**Cleanup:** `LOADTEST` profile and its directory deleted, dashboard and fake
+server processes killed, ports 4242/9142 confirmed closed, `configs/
+local_state.json` unchanged (was already `127.0.0.1:4242` from a previous
+session, left as found).
+
+**SUPERSEDED IN PART by §10.12 (2026-09-17, same day, after the user tested
+it):** the "one profile per subject+task" premise in §10.11.2 and the
+enable rule in §10.11.2 decision 2 are replaced. The mechanism in §10.11.3
+(drop the carried entry, let the shared precedence path do the rest) is kept
+and extended.
+
+## 10.12 Saved settings become a dated history, and Load Settings picks from it (2026-09-17) — approved, IMPLEMENTED and validated (§10.12.8)
+
+### 10.12.1 Reported
+
+The user exercised §10.11 by simulating a second day of data collection
+(09/18) for a subject with a profile saved on 09/17. On the Tasks page the
+09/17 profile **auto-loaded** (correct per §10.3) and Load Settings was
+**greyed out** (correct per §10.11.2 decision 2 — nothing was being
+shadowed). That is the letter of what was decided and not what was wanted.
+The requirement, in the user's own framing:
+
+> save a setting on 09/17 and it is marked 09/17; on 09/18 save a new
+> setting for the same task, marked 09/18; on 09/19 choose **either** 09/17
+> or 09/18 for that task.
+
+§10.11 could not do this for a structural reason, not a logic one: the store
+is **one file per subject+task**, `sessions/_settings/<subject>/<task_id>.json`,
+**replaced** on every save (`save_settings_profile`, §10.1). A 09/18 save
+destroys the 09/17 profile. There is nothing to choose between.
+
+### 10.12.2 A second finding the user's date-based model exposes
+
+`saved_at` is written in **UTC** (`datetime.now(timezone.utc)`,
+`settings_profile.py:185`) and displayed as `saved_at[:10]` in both the
+Tasks-page badge tooltip (`dashboard_window.py:271`) and the OperatorPanel's
+source line (`operator_panel.py:431`). Taiwan is UTC+8, so **any save made
+before 08:00 local shows the previous day's date**. It is already visible on
+disk: the user's own `sessions/_settings/TESTING/click_grid.json` carries
+`saved_at: 2026-09-16T20:40:01+00:00` for a save made on 09/17 local time,
+and §10.11.4's validation run hit the same thing (noted there as a
+"non-issue" — it is not one once the date *is* the label). Once profiles are
+identified by date, this is a correctness bug, and it is in scope here.
+
+### 10.12.3 Decisions (`AskUserQuestion`, 2026-09-17)
+
+1. **Same-day saves: keep every save.** Each save is its own entry labelled
+   with date **and** time. Nothing is ever silently overwritten — which is
+   also the §10.5.2 principle (an exploratory save must not destroy a working
+   one) applied within a day, not just across runs.
+2. **Picker: the native Windows file chooser.** Load Settings opens
+   `QFileDialog.getOpenFileName()` in that subject+task's profile folder.
+   The user chose this over an inline dropdown or a custom dialog to keep the
+   round simple. Consequence: **the filename is the picker's label**, so it
+   must carry the readable local date and time.
+3. **No delete action this round.** Old versions are removed by hand from
+   `sessions/_settings/` if ever needed.
+
+Kept unchanged, from earlier decisions: auto-load at run start applies the
+**most recent** saved version (§10.3's precedence, reconfirmed by the user in
+§10.11.1); saving remains an explicit action available only from the
+OperatorPanel during a live run (§10.5.2, §10.11.2); the §10.3 precedence
+"carried-in-sitting beats a profile" still governs the automatic path.
+
+### 10.12.4 Design
+
+**Store.** New saves are written to
+`sessions/_settings/<subject_id>/<task_id>/<YYYY-MM-DD>_<HH-MM-SS>.json`,
+timestamped in **local time**. One task per folder, so the file dialog opens
+directly on exactly the list the user is choosing from and nothing from
+another task is in view. The payload is unchanged except that `saved_at`
+becomes local time **with its UTC offset** (`datetime.now().astimezone()`),
+so an ISO parse still recovers the true instant while `[:10]` is finally the
+local date. `schema_version` is not bumped: the shape is the same and every
+reader takes named keys.
+
+**Legacy files.** The existing flat `<subject>/<task_id>.json` (all profiles
+saved before this change — `DIKI`, `TESTING`, and any real subjects) is read
+as **one more version** of that task, ordered by its own `saved_at`. It is
+never migrated or rewritten; it simply stops being the write target. The
+file dialog opens on the new per-task folder, so a legacy version is
+reachable through the dialog by going up one level — acceptable for a file
+that stops being created from now on, and stated here so it is not mistaken
+for a bug.
+
+**Engine (`settings_profile.py`, Qt-free as before):**
+
+- `list_settings_profiles(output_root, subject_id, task_id) -> list[Path]` —
+  the per-task folder's `*.json` plus the legacy file if present, **sorted by
+  the `saved_at` inside each file** (newest first), not by filename, so a
+  legacy file and a renamed file both sort correctly. Unreadable files are
+  skipped, matching the module's tolerance rule.
+- `load_settings_profile(...)` keeps its signature and now returns the
+  **newest** version — every existing caller (auto-load, the badge, tests)
+  keeps working unchanged. A new `load_settings_profile_file(path)` loads one
+  specific version and is what the picker uses.
+- `save_settings_profile(...)` writes the new timestamped path and returns
+  it, as today. A collision within one second is handled by appending a
+  suffix rather than overwriting — the one-per-second case is improbable
+  but the rule of decision 1 is "never overwrite", so it is enforced rather
+  than assumed.
+- `resolve_settings_precedence(carried, profile, structural)` is unchanged.
+  The picker feeds it the *chosen* profile instead of the newest one; the
+  rule stays: carried > the profile it was given > defaults.
+- A small `format_saved_at(iso) -> "09/18 14:32"` display helper, local
+  time, tolerant of the legacy UTC strings — lives here, next to
+  `format_calibration` in `settings_registry.py`, for the same no-Qt
+  testability reason (§10.6.2).
+
+**Dashboard (`dashboard_window.py`):**
+
+- New `_task_selected_profile: dict[str, Path]` — the version the operator
+  explicitly chose, per task, for this sitting.
+- `_resolve_settings(task_id)` reads the selected version if one is set,
+  otherwise the newest (today's behaviour). Still the single path shared by
+  the badge and `_on_run_requested` (§10.9's structural rule holds).
+- `_on_load_settings_requested(task_id)`: open the file dialog in the
+  subject+task folder (created if missing, so the dialog has somewhere to
+  open); on a choice, **validate** that the file loads and that its
+  `task_id` matches the card — a profile from a different task carries
+  different keys (`motion.*`, §10's "motion trap") and is refused with the
+  reason shown on the button, as the existing in-place confirmation pattern
+  does. A file from a **different subject** is also refused: §10.1's stated
+  reason for per-subject keying is that one child's tuning must not silently
+  become another's, and a dialog that can browse up a level makes that a
+  one-click mistake. (If cross-subject reuse is ever wanted it is a
+  deliberate feature with its own badge wording, not a side effect of a
+  file picker.) On success: drop the carried entry (§10.11.3, unchanged),
+  record the selection, refresh badges. Cancel does nothing.
+- `_on_task_finished`: clear the task's selection — the run it was chosen for
+  has happened, and its ending values are now the carried entry, which wins
+  next per §10.3. Keeping the selection would be invisible (shadowed) and
+  confusing if it resurfaced after a later Load.
+- **Enable rule (replaces §10.11.2 decision 2):** Load Settings is enabled
+  whenever **at least one** saved version exists for the current subject and
+  task — including when the newest one has already auto-loaded, which is
+  exactly the greyed-out case reported. With a single version the button
+  still works (it re-applies that version over carried values, §10.11's
+  original purpose).
+- Badge text carries the date: `Profile 09/18 · 8px error, 5pt` (was
+  "Profile saved · …" with the date only in the tooltip). The tooltip names
+  the file.
+- Button confirmation after a load: `Loaded 09/17 14:32 ✓`, reverting to
+  "Load Settings" on the next enable transition as in §10.11.3.
+
+**OperatorPanel / `AssessmentApp`:** the source line uses `format_saved_at`
+(local time, fixing §10.12.2 there too). After "Save for this subject" the
+line reads **"Saved as 09/18 14:32 · Tuned under …"** instead of reusing the
+"Loaded from…" wording — a pre-existing label-honesty quirk observed in
+§10.11.4, cheap to fix while the line is being touched. `metadata.json`'s
+`settings` block gains `profile_file` (the version's filename) beside the
+existing `profile_saved_at`, so a run records exactly which version it
+started from; additive, no schema bump (§10.4).
+
+### 10.12.5 What this does not change
+
+- Automatic behaviour on a fresh sitting: newest version auto-loads, badge
+  says so, no click needed. The user's 09/18 scenario still auto-loads 09/17
+  — the difference is the button is now live so 09/17-vs-09/18 is a choice.
+- Carried-in-sitting precedence (§10.3) — the run you just tuned still wins
+  over any saved version until you explicitly Load one.
+- The Tasks page has **no** inline list of versions; the file dialog is the
+  list (decision 2). No delete (decision 3).
+
+### 10.12.6 Validation plan (qt-mcp, once approved)
+
+The discriminating rows, mirroring §10.11.4's method:
+
+| Step | Expected |
+|---|---|
+| Run, tune `alpha` to 0.10, Save, End | `sessions/_settings/<S>/click_static/<today>_<time>.json` exists; OperatorPanel line "Saved as <today> <time>" |
+| Run again, tune to 0.30, Save, End | a **second** file; the first is untouched |
+| Restart the app (fresh sitting), same subject | badge `Profile <today> · …` naming the **0.30** file (newest); **Load Settings enabled** — the reported greyed-out case |
+| Load Settings → choose the **0.10** file | badge names the 0.10 file; button `Loaded … ✓`; next Run's OperatorPanel opens at **0.10** |
+| Load Settings → choose a file from another task's folder | refused, reason shown, badge unchanged |
+| A legacy flat `<task_id>.json` present alongside | listed/ordered by its `saved_at`, auto-loads when it is the newest |
+| Any save made before 08:00 local (or a legacy UTC file) | displayed date is the **local** date |
+
+Driving a native `QFileDialog` under qt-mcp blocks the probe until the
+dialog closes; the working pattern is the backgrounded PowerShell `SendKeys`
+path-typing script fired in the same message as the click — already
+recorded in `qt-mcp-tool-reference` from the Load Calibration File work
+(`SPEC-result-logic.md` §10). Plan to use it rather than rediscover it.
+
+### 10.12.7 State (as designed)
+
+Design only at the time of writing; §10.11's implementation (3 files) was
+still uncommitted, and §10.12 was to build on its
+`_on_load_settings_requested` / `_refresh_settings_badges` structure rather
+than revert it. Superseded by §10.12.8 below.
+
+### 10.12.8 Implemented and validated (2026-09-17, same day, user-approved)
+
+Built as designed, with two departures worth recording:
+
+1. **The Load button's label is derived from state on every badge refresh,
+   not set by event handlers.** §10.11.3's "reset the text on the
+   disabled→enabled transition" cannot work once the button stays enabled
+   (any version existing keeps it live), so a confirmation set by the click
+   handler would have been wiped by the very next refresh — or, if
+   protected, would go stale after the next run. `_TaskCard` now exposes
+   `set_load_settings_state(enabled, text, tooltip)` and
+   `_refresh_settings_badges` paints `Loaded 09/17 05:16 ✓` for exactly as
+   long as `_task_selected_profile` holds that choice and the resolved source
+   is `profile`; otherwise `Load Settings` with the version count in the
+   tooltip. A refused file sets a transient `Not loaded ✗` with the reason,
+   cleared by the next repaint. Same principle as §10.9's badge: text that
+   can lie is text that isn't derived from what the run will use.
+2. **A stale selection falls back to the newest version, not to defaults.**
+   If the chosen file has gone by the next resolve (deleted by hand between
+   Load and Run), the run should be what a fresh sitting would get, and the
+   badge should say so, rather than silently dropping to task defaults.
+   Also: changing the Subject ID clears every selection — a version chosen
+   for one child must not follow the operator to the next.
+
+Everything else matches §10.12.4: `settings_profile_dir()`,
+`list_settings_profiles()` (ordered by each file's `saved_at`, filename as
+tie-break so `<stem>_2.json` sorts after `<stem>.json`),
+`load_settings_profile_file()` (returns `subject_id`/`task_id`/`path` for the
+refusal checks), `load_settings_profile()` unchanged in signature and now
+"newest", `save_settings_profile()` writing local-time timestamped files with
+a numeric suffix on a same-second collision, `parse_saved_at()` (legacy UTC
+and naive strings both parse), `format_saved_at()` in `settings_registry.py`
+beside `format_calibration`. `AssessmentApp` gained `settings_profile_file`
+and `metadata.json`'s `settings` block records it. The OperatorPanel line
+reads **"Saved as 09/17 05:16. Tuned under 8px error, 5pt."** after a save
+(new `"saved"` source) instead of the borrowed "Loaded from…" wording.
+
+**Tests: +9** in `tests/test_settings_profile.py` — ordering by `saved_at`
+not filename; the legacy flat file read as a version, sorted by its own
+timestamp and never rewritten; unreadable/non-JSON files skipped; empty
+folder is "no versions"; same-second saves never overwrite (frozen clock,
+`_2` suffix); `saved_at` written with an offset and the filename matching
+its local wall-clock time; loaded files carry identity for the refusal
+checks; `parse_saved_at` on legacy/naive/garbage input; and the §10.12.2
+property that a legacy UTC string and a local-offset string for the same
+instant **display identically**. `test_saving_replaces_rather_than_accumulates`
+was renamed to `test_newest_save_wins_on_load_and_earlier_saves_are_kept`
+and now also asserts both files exist — the old name encoded the behaviour
+this section removes. Suite: **200 collected, 199 passed, 1 pre-existing
+unrelated failure** (`target_fps` drift).
+
+**Live validation** (dashboard + `tools/fake_gazepoint_server.py`, qt-mcp),
+against the §10.12.6 plan:
+
+| Step | Observed |
+|---|---|
+| Fresh subject `HISTTEST`, no versions | badge "Task defaults", Load Settings **disabled** |
+| Run 1: `alpha` 0.22→0.10, Save, End | panel line **"Saved as 09/17 05:16. Tuned under 8px error, 5pt."**; on disk `click_static/2026-09-17_05-16-53.json`, `saved_at: 2026-09-17T05:16:53+08:00` — the **local** date and offset (§10.12.2 fixed); badge → "Carried from last run"; Load Settings **enabled** |
+| Run 2: 0.10→0.30, Save, End | a **second** file `…05-17-22.json` (alpha 0.3); the first still 0.1 and untouched |
+| **App killed and relaunched**, same subject — the reported case | badge **"Profile 09/17 · 8px error, 5pt"**, tooltip naming `2026-09-17_05-17-22.json` (newest, auto-applied); **Load Settings enabled**, tooltip "Choose which of this subject's 2 saved version(s) the next run starts from." — this is the row that was greyed out before |
+| Load Settings → native dialog → the older `…05-16-53.json` | **Driven by the user by hand**, who reported it worked (my SendKeys automation typed into VS Code instead of the dialog — see the note below); the user closed the app afterwards without starting a run |
+| Next Run applies the chosen version | Not observed in the live app (no run followed the load). Covered instead by driving `DashboardWindow._resolve_settings` — the exact path `_on_run_requested` reads — offscreen against the two real HISTTEST files: fresh sitting → `…05-17-22.json`, alpha **0.3**; older selected → `…05-16-53.json`, alpha **0.1**; carried present → `carried`, 0.99; selection pointing at a deleted file → newest, 0.3 |
+| Refusal of a wrong-task / wrong-subject file | Not exercised live; the checks are three `if`s on fields the engine tests prove are returned. Flagged, not claimed. |
+
+**qt-mcp note for the next session:** the `SendKeys` pattern from
+`SPEC-result-logic.md` §10 only works if the file dialog is the **foreground
+window**. Here the click was issued from a Claude Code session running inside
+VS Code, so VS Code held focus and the typed path went to its terminal; a
+follow-up `AppActivate('Load Settings')` also failed to find the dialog by
+title. Either activate the target app's main window *before* clicking, or —
+as happened here — let a human drive the dialog. `qt_click` on a button that
+opens a native dialog does not return until the dialog closes, as recorded.
+
+**Cleanup:** `HISTTEST` profiles and both session directories deleted, fake
+server and dashboard processes killed, ports 4242/9142 confirmed closed,
+`configs/local_state.json` unchanged (`127.0.0.1:4242`, as found).
+
+**State: 8 files dirty** (this SPEC, `src/app.py`,
+`src/engine/settings_profile.py`, `src/ui/dashboard_window.py`,
+`src/ui/operator_panel.py`, `src/ui/settings_registry.py`,
+`src/ui/tasks_page.py`, `tests/test_settings_profile.py`) — §10.11 and
+§10.12 together. **Not committed.**
+
 ## 11. Log
 
 - **2026-09-04** — SPEC created. Design-only session (`/sparc:orchestrator`,
@@ -1212,3 +1589,9 @@ silent clipping.
   **SUPERSEDED IN PART, same day — §10.9.1's claim that §10.8 fixed the panel clipping is WRONG; see the entry below and §10.10.** The §10.7 badge and autocomplete work in this entry stands.
 
 - **2026-09-11, evening (later) — the user reported the overflow was still there, and they were right. §10.8's fix could never have worked, and §10.9.1's validation of it was invalid. Root-caused, corrected, and refixed with the QScrollArea; see §10.10.** Two compounding mistakes, both mine. **(1) The measurement was taken without fonts.** §10.8.2's 891/935 came from a `QT_QPA_PLATFORM=offscreen` process, which has no font directory and so measures every control short; the real requirement on the Windows platform is **989 px (1038 for `follow_moving`)** against **980 px** available when maximized — so the panel does not fit on a 1920×1080 screen at all, and §10.8.3's "fits, 41–85 px spare" was never true. **(2) The validation could not have detected the failure.** §10.9.1 screenshotted the panel alone via `qt_screenshot(ref=...)`, i.e. `QWidget.grab()`, which renders a widget at its own full size and structurally cannot show clipping by a parent or the screen edge — and §10.9.1's own numbers (panel 989 inside a 957 px hole) already contained the contradiction unnoticed. Measured live before the fix: panel `minimumSizeHint` 1038 with `minimumSizeHint == sizeHint`, `QStackedWidget` 1038, and **`DashboardWindow` grown to 1920×1090 on a 1080 px screen**, staying at 1090 through a full minimize→maximize cycle because a window cannot shrink below its layout minimum. **Fix:** the `QScrollArea` §10.8.3 had offered and the user had declined against the wrong numbers — re-asked with the corrected figures, they chose it. Built *inside* `OperatorPanel` rather than around it, so it also fixes §10.8.4's standalone `MainWindow` occurrence, previously out of scope. Both `SPEC-ui-setup-task-selection.md` §22 gotchas handled (`autoFillBackground` cleared on viewport *and* content widget; scrollbar themed in the panel's own sheet, since `MainWindow` never installs the app-wide one). **Result:** panel `minimumSizeHint` **1038 → 58**, window **1090 → 1009**, panel sized **957** = exactly the space available, scrollbar `maximum: 81` = exactly the former overflow, and the Settings-profile card reachable by scrolling. Validated against a **full-window** screenshot this time. Suite **191 collected, 190 passed, 1 pre-existing unrelated failure**. Two rules recorded in §10.10 for future sessions: never take a size measurement under `offscreen`, and never judge clipping from a `grab()` of the widget alone.
+
+- **2026-09-17 — §10.11 added and implemented: Tasks-page "Save Settings" renamed to "Load Settings".** User feedback (`/sparc:orchestrator`, device connected but no human subject available for testing): the Tasks-page card's "Save Settings" (§10.6.1) duplicated the OperatorPanel's own "Save for this subject" and the two read as ambiguous. Two decisions taken via `AskUserQuestion` before writing code, both the recommended option: Load force-reloads the current subject's saved profile, discarding anything carried over from an earlier run this sitting (not a cross-subject picker — the store is one profile per subject+task); and the button is enabled only when that would actually change something, i.e. `source == "carried"` and a profile exists on disk. Saving now happens **only** from the OperatorPanel during a live run — the Tasks-page duplicate is removed, not relabelled. Implementation is one line of substance: `_on_load_settings_requested()` drops the task's entry from `_task_live_overrides`, and the existing shared `_resolve_settings()`/`resolve_settings_precedence()` path (§10.9's structural change) does the rest for both the badge and the next Run — no second "prefer profile" flag. The enable condition reuses the same precedence function rather than a second, independently-maintained check. Renamed throughout: `_TaskCard.loadSettingsRequested` (was `saveSettingsRequested`), `set_task_load_settings_enabled`/`set_task_settings_loaded` (was `..._save_settings_enabled`/`..._settings_saved`), `dashboard_window._on_load_settings_requested` (was `_on_save_settings_requested`, which called `save_settings_profile` — that import is gone from `dashboard_window.py` entirely now that saving lives only in `app.py`). No test file references these Qt-layer symbols (`tests/` has no `tasks_page`/`dashboard_window` coverage, consistent with this suite's Qt-free convention), so no test edits were needed; suite unchanged at 191/190 (1 pre-existing `target_fps` failure). **Live-validated via qt-mcp end to end** against `tools/fake_gazepoint_server.py`, with the discriminating row being what it actually proves: tuned `alpha` to 0.10 and saved, tuned to 0.35 and ended the run without saving (badge "Carried from last run", Load Settings newly enabled), clicked Load Settings (badge flips to "Profile saved · 8px error, 5pt", button → "Settings Loaded ✓" and disables), then started a third run and read the OperatorPanel's live `Smoothing alpha` spin box directly — it opened at **0.10**, the profile's value, not 0.35, proving the override reaches an actual run and isn't cosmetic. Ending that run without further changes re-enabled Load Settings and reset its text, confirming the disabled→enabled transition isn't sticky. See §10.11 for the full write-up. Cleanup: `LOADTEST` profile/session artifacts deleted, both processes killed, ports 4242/9142 confirmed closed, `configs/local_state.json` left unchanged (already `127.0.0.1:4242` from a prior session). **Not yet committed** (asking the user first, per this project's standing commit policy).
+
+- **2026-09-17, later — the user tested §10.11 and it is not what they need; §10.12 added, DESIGN ONLY, awaiting approval before implementation.** Simulating a second day (09/18) for a subject with a 09/17 profile: the profile auto-loaded and Load Settings was greyed out — both correct per §10.11's decisions, and not the requirement, which is a **dated history**: save on 09/17, save again on 09/18, choose either on 09/19. §10.11 could not do that structurally — the store is one file per subject+task, replaced on every save, so a 09/18 save destroys 09/17. **Second finding (§10.12.2):** `saved_at` is written in UTC and displayed as `[:10]`, so any save before 08:00 Taiwan time shows yesterday's date — already on disk in the user's own `TESTING/click_grid.json`, and hit in §10.11.4's own validation where it was wrongly waved off as a non-issue. Once the date is the label, it is a bug and in scope. Three decisions via `AskUserQuestion`: **keep every save** (date + time, never overwrite — §10.5.2's principle within a day); picker is the **native Windows file chooser** opened in the subject+task folder (the user chose this over an inline dropdown or a custom dialog to keep it simple, so the filename is the label and must carry local date+time); **no delete** this round. Design (§10.12.4): new saves go to `<subject>/<task_id>/<YYYY-MM-DD>_<HH-MM-SS>.json` in local time with `saved_at` stored local-with-offset; the legacy flat file is read as one more version and never rewritten; `load_settings_profile` keeps its signature and returns the newest so every caller is untouched; a per-task `_task_selected_profile` feeds the chosen version into the unchanged `resolve_settings_precedence`, cleared when the run it was chosen for finishes; **Load Settings is enabled whenever at least one version exists** (replacing §10.11.2's rule — the greyed-out case); a chosen file must match the card's task **and** subject or is refused with the reason on the button; badge and OperatorPanel line show the local date; `metadata.json` gains `profile_file`. §10.11 annotated as superseded in part, in its heading. §10.11's code remains uncommitted; §10.12 builds on it, so commit both together once implemented (or §10.11 first as a checkpoint — user's call). Validation plan in §10.12.6, including the `QFileDialog`-under-qt-mcp `SendKeys` pattern already on record.
+
+- **2026-09-17, later still — §10.12 approved and IMPLEMENTED; see §10.12.8.** Two departures from the design, both recorded there: the Load button's label is now derived from resolved state on every badge refresh (a handler-set confirmation would be wiped or go stale once the button stays enabled), and a selection whose file has vanished falls back to the newest version rather than to defaults; Subject-ID changes clear selections. Engine: per-task version folders with local-time timestamped filenames, `saved_at` stored with the local offset (fixing §10.12.2 at the source), newest-first listing by each file's own `saved_at` with filename tie-break, legacy flat file read as a version and never rewritten, same-second collision suffix. `load_settings_profile` keeps its signature (now "newest") so no caller changed. OperatorPanel says "Saved as 09/17 05:16" after a save instead of borrowing the "Loaded from…" wording. `metadata.json` gains `settings.profile_file`. **+9 tests; suite 200 collected, 199 passed, 1 pre-existing unrelated failure.** Live-validated via qt-mcp end to end **except the file-dialog pick itself, which the user drove by hand and confirmed** — my `SendKeys` automation typed into VS Code (the foreground window) instead of the dialog, and `AppActivate` by title did not find it; recorded in §10.12.8 so the next session activates the app window first or hands the dialog to a human. The reported greyed-out case is the row that matters and was observed directly: after an app restart with two versions on disk the badge read "Profile 09/17 · 8px error, 5pt" naming the newest file **and Load Settings was enabled**. "Next Run applies the chosen version" was not observed in the live app (the user closed it without running) and is covered by driving `_resolve_settings` offscreen against the two real files (older selected → 0.1; fresh → 0.3; carried wins; stale selection → newest). Cleanup done (HISTTEST artifacts, processes, ports, `local_state.json` untouched). **8 files dirty, §10.11+§10.12 together, not committed.**

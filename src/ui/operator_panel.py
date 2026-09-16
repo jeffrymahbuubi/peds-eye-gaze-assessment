@@ -53,7 +53,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .settings_registry import LiveSetting, format_calibration, live_settings_for_task
+from .settings_registry import (
+    LiveSetting,
+    format_calibration,
+    format_saved_at,
+    live_settings_for_task,
+)
 from .slider_spin import SliderSpinRow
 
 # HUD palette (SPEC-diki-design-audit.md S8.10). _TEXT/_MUTED/_ACCENT/_OK are
@@ -427,9 +432,15 @@ class OperatorPanel(QWidget):
         compensating for bad tracking rather than suiting the child, and that
         is worth seeing at the moment they are applied, not only in the file.
         """
-        if source == "profile":
-            when = f" (saved {saved_at[:10]})" if saved_at else ""
-            text = f"Loaded from this subject's saved profile{when}."
+        if source in ("profile", "saved"):
+            when = format_saved_at(saved_at)
+            if source == "saved":
+                # Just written by "Save for this subject" -- say so, rather
+                # than reusing the loaded wording for a file that was not
+                # loaded (S10.12.4).
+                text = f"Saved as {when}." if when else "Saved for this subject."
+            else:
+                text = f"Loaded from this subject's saved profile{f' ({when})' if when else ''}."
             cal = format_calibration(calibration)
             if cal:
                 text += f" Tuned under {cal}."

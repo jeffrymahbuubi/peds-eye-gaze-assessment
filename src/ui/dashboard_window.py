@@ -19,6 +19,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -37,12 +38,14 @@ from .results_page import ResultsPage
 from .setup_page import SetupPage
 from .task_settings_dialog import TaskSettingsDialog
 from ..engine.settings_profile import (
+    list_settings_profiles,
     load_settings_profile,
+    load_settings_profile_file,
     resolve_settings_precedence,
-    save_settings_profile,
+    settings_profile_dir,
 )
 from ..engine.task_runner import TASK_REGISTRY
-from .settings_registry import format_calibration
+from .settings_registry import format_calibration, format_saved_at
 from .tasks_page import TasksPage
 from .wtmh_theme import STYLESHEET
 
@@ -85,6 +88,11 @@ class DashboardWindow(QMainWindow):
         # exactly what was in effect, not a re-derivation. In-memory only;
         # the saved profile is what survives the app closing.
         self._task_live_overrides: dict[str, dict] = {}
+        # The saved version the operator explicitly chose via Load Settings
+        # (S10.12), per task, for the next run only -- cleared when that run
+        # finishes, because its ending values then become the carried entry
+        # above, which wins next per S10.3. Absent = the newest version.
+        self._task_selected_profile: dict[str, Path] = {}
 
         central = QWidget(self)
         central.setObjectName("wtmhDashboard")
@@ -110,11 +118,11 @@ class DashboardWindow(QMainWindow):
         self.setup_page.continueRequested.connect(self._on_continue_to_tasks)
         # Which profile applies depends entirely on the Subject ID, so a stale
         # badge after an edit would be actively misleading (S10.7.3 A).
-        self.setup_page.subjectIdChanged.connect(lambda _text: self._refresh_settings_badges())
+        self.setup_page.subjectIdChanged.connect(self._on_subject_id_changed)
         self.tasks_page.runRequested.connect(self._on_run_requested)
         self.tasks_page.settingsRequested.connect(self._on_settings_requested)
         self.tasks_page.analyzeRequested.connect(self._on_analyze_requested)
-        self.tasks_page.saveSettingsRequested.connect(self._on_save_settings_requested)
+        self.tasks_page.loadSettingsRequested.connect(self._on_load_settings_requested)
         self.tasks_page.backToSetupRequested.connect(lambda: self.stack.setCurrentIndex(_SETUP_INDEX))
         self.results_page.backRequested.connect(lambda: self._go_to_tab(_TASKS_INDEX))
 
@@ -197,49 +205,67 @@ class DashboardWindow(QMainWindow):
 
     # -- embed-in-place task run --------------------------------------------
 
-    def _on_save_settings_requested(self, task_id: str) -> None:
-        """Save the last finished run's settings as this subject's profile.
+    def _on_load_settings_requested(self, task_id: str) -> None:
+        """Let the operator choose which saved version the next run starts from.
 
-        SPEC-live-settings-panel.md S10.5.1: the OperatorPanel's own Save is
-        only reachable while a run is in progress, but a physician usually
-        only knows a run's settings were right after seeing its results. The
-        values are the ones already captured in ``_task_live_overrides`` when
-        that run finished, so this saves exactly what that run ended with --
-        no re-derivation, and nothing to go stale.
+        SPEC-live-settings-panel.md S10.12: every save is kept, so a subject
+        can have a 09/17 and a 09/18 profile for the same task and the
+        operator picks between them here -- via the native file dialog,
+        opened on that subject+task's own folder (decision 2). The chosen
+        file must be a profile for **this** task (other tasks carry different
+        keys, e.g. ``motion.*``) and **this** subject (S10.1's reason for
+        per-subject keying: one child's tuning must not become another's by
+        a browse-up-one-level mistake); anything else is refused with the
+        reason on the button.
+
+        On success the carried entry is dropped (S10.11.3, unchanged): the
+        explicit choice is now the most recent deliberate act, so the shared
+        :meth:`_resolve_settings` path -- the badge refresh right below, and
+        the next Run -- applies the chosen version on its own.
         """
-        live = self._task_live_overrides.get(task_id)
-        if not live:
-            return  # no finished run this sitting; the button is disabled anyway
+        subject_id = self.setup_page.subject_id()
         output_root = load_task_config(task_id).get("recording", {}).get("output_root", "sessions")
-        cal = self.setup_page.calibration_result
-        calibration = (
-            {"error_px": cal.mean_error_px, "points": cal.n_points} if cal is not None else {}
+        directory = settings_profile_dir(output_root, subject_id, task_id)
+        directory.mkdir(parents=True, exist_ok=True)  # so the dialog has somewhere to open
+        chosen, _filter = QFileDialog.getOpenFileName(
+            self,
+            f"Load Settings — {subject_id} / {task_id}",
+            str(directory),
+            "Settings profile (*.json)",
         )
-        try:
-            path = save_settings_profile(
-                output_root,
-                self.setup_page.subject_id(),
-                task_id,
-                live,
-                self._task_overrides.get(task_id),
-                calibration=calibration,
-            )
-        except OSError as exc:
-            print(f"Could not save settings profile: {exc}")
+        if not chosen:
             return
-        self.tasks_page.set_task_settings_saved(task_id, path.name)
-        # A profile now exists where it may not have before, and this subject
-        # now has a directory for the completer to offer.
+        profile = load_settings_profile_file(chosen)
+        if profile is None:
+            self.tasks_page.set_task_load_settings_refused(
+                task_id, f"{Path(chosen).name} is not a readable settings profile."
+            )
+            return
+        if profile["task_id"] and profile["task_id"] != task_id:
+            self.tasks_page.set_task_load_settings_refused(
+                task_id,
+                f"{Path(chosen).name} is a profile for {profile['task_id']}, not {task_id}.",
+            )
+            return
+        if profile["subject_id"] and profile["subject_id"] != subject_id:
+            self.tasks_page.set_task_load_settings_refused(
+                task_id,
+                f"{Path(chosen).name} belongs to subject {profile['subject_id']}, "
+                f"not {subject_id}.",
+            )
+            return
+        self._task_selected_profile[task_id] = Path(chosen)
+        self._task_live_overrides.pop(task_id, None)
         self._refresh_settings_badges()
-        self.setup_page.refresh_subject_completer()
 
     def _resolve_settings(self, task_id: str) -> dict:
         """Work out which settings a run of this task would start from.
 
         Settings precedence (S10.3): values carried from an earlier run in this
         sitting win, because they are the most recent deliberate act. Failing
-        that, the subject's saved profile is applied automatically -- with the
-        panel saying so, which is the other half of that decision.
+        that, the saved version the operator explicitly chose (S10.12) if any,
+        else the subject's **newest** saved version -- with the panel saying
+        so, which is the other half of that decision.
 
         Shared by :meth:`_on_run_requested` and the Tasks-page badge rather
         than duplicated, so the badge cannot promise one thing while the run
@@ -251,16 +277,31 @@ class DashboardWindow(QMainWindow):
         carried = self._task_live_overrides.get(task_id)
         # Skip the disk read entirely when something was carried -- it would
         # lose to it anyway.
-        profile = (
-            None
-            if carried
-            else load_settings_profile(output_root, self.setup_page.subject_id(), task_id)
-        )
+        profile = None
+        if not carried:
+            selected = self._task_selected_profile.get(task_id)
+            if selected is not None:
+                profile = load_settings_profile_file(selected)
+            if profile is None:
+                # No explicit choice, or the chosen file has since gone: the
+                # newest version, exactly as a fresh sitting would.
+                profile = load_settings_profile(output_root, self.setup_page.subject_id(), task_id)
         resolved = resolve_settings_precedence(
             carried, profile, self._task_overrides.get(task_id)
         )
         resolved["output_root"] = output_root
+        resolved["profile_path"] = (
+            profile["path"] if profile is not None and resolved["source"] == "profile" else ""
+        )
         return resolved
+
+    def _on_subject_id_changed(self, _text: str) -> None:
+        # Which profile applies depends entirely on the Subject ID, so a stale
+        # badge after an edit would be actively misleading (S10.7.3 A) -- and
+        # a version chosen for one subject must not follow the operator to
+        # the next (S10.12).
+        self._task_selected_profile.clear()
+        self._refresh_settings_badges()
 
     def _refresh_settings_badges(self) -> None:
         """Restate on every card what a Run would apply right now.
@@ -271,22 +312,28 @@ class DashboardWindow(QMainWindow):
         though a saved profile also exists. A badge naming the profile in that
         case would be worse than no badge at all.
         """
+        subject_id = self.setup_page.subject_id()
         for task_id in TASK_REGISTRY:
             resolved = self._resolve_settings(task_id)
             source = resolved["source"]
+            when = format_saved_at(resolved["saved_at"], with_time=False)
             if source == "carried":
                 text = "Carried from last run"
                 tooltip = (
                     "This task was tuned earlier in this sitting; those values win over "
-                    "any saved profile. Press Save Settings to keep them for this subject."
+                    "any saved profile. Save from the running task's own panel to keep them, "
+                    "or Load Settings to go back to a saved version."
                 )
             elif source == "profile":
                 detail = format_calibration(resolved["calibration"])
-                text = f"Profile saved · {detail}" if detail else "Profile saved"
-                saved_at = resolved["saved_at"][:10]
+                text = f"Profile {when}" if when else "Profile saved"
+                if detail:
+                    text += f" · {detail}"
+                full_when = format_saved_at(resolved["saved_at"])
                 tooltip = (
-                    f"This subject's saved settings for this task will be applied"
-                    + (f" (saved {saved_at})" if saved_at else "")
+                    "This subject's saved settings for this task will be applied"
+                    + (f" (saved {full_when})" if full_when else "")
+                    + (f": {Path(resolved['profile_path']).name}" if resolved["profile_path"] else "")
                     + "."
                 )
             else:
@@ -296,6 +343,29 @@ class DashboardWindow(QMainWindow):
                     "the task's configured defaults. Check the Subject ID if you expected one."
                 )
             self.tasks_page.set_task_settings_badge(task_id, text, source, tooltip)
+
+            # Load Settings (S10.12): live whenever there is anything to choose
+            # from -- including when the newest version has already been
+            # auto-applied, since the point is being able to pick an *older*
+            # one. Its label confirms an explicit choice for as long as that
+            # choice is what the next Run will use.
+            versions = list_settings_profiles(resolved["output_root"], subject_id, task_id)
+            selected = self._task_selected_profile.get(task_id)
+            if selected is not None and source == "profile":
+                label = format_saved_at(resolved["saved_at"])
+                button_text = f"Loaded {label} ✓" if label else "Loaded ✓"
+                button_tip = f"The next run starts from {selected.name}. Click to choose another."
+            else:
+                button_text = "Load Settings"
+                button_tip = (
+                    f"Choose which of this subject's {len(versions)} saved version(s) the "
+                    "next run starts from."
+                    if versions
+                    else "Enabled once this subject has a saved settings profile for this task."
+                )
+            self.tasks_page.set_task_load_settings_state(
+                task_id, bool(versions), button_text, button_tip
+            )
 
     def _on_run_requested(self, task_id: str) -> None:
         if self._active_assessment is not None:
@@ -329,6 +399,9 @@ class DashboardWindow(QMainWindow):
                 settings_source=settings_source,
                 settings_saved_at=settings_saved_at,
                 settings_calibration=settings_calibration,
+                settings_profile_file=(
+                    Path(resolved["profile_path"]).name if resolved["profile_path"] else ""
+                ),
                 client=self.setup_page.client,
                 preset_calibration_result=self.setup_page.calibration_result,
                 embedded=True,
@@ -369,8 +442,9 @@ class DashboardWindow(QMainWindow):
             # dict, so what carries is exactly what was in effect. Must happen
             # before the view is torn down, like session_dir above.
             self._task_live_overrides[task_id] = dict(assessment._live_values)
-            # Saving a profile needs a finished run's values to save.
-            self.tasks_page.set_task_save_settings_enabled(task_id, True)
+            # The version chosen for this run has been used; its ending values
+            # are now the carried entry above, which wins next (S10.12.4).
+            self._task_selected_profile.pop(task_id, None)
         if assessment is not None:
             self.stack.removeWidget(assessment.view)
             assessment.view.deleteLater()

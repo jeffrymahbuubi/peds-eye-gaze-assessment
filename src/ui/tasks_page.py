@@ -38,7 +38,7 @@ class _TaskCard(QFrame):
     runRequested = Signal(str)
     settingsRequested = Signal(str)
     analyzeRequested = Signal(str)
-    saveSettingsRequested = Signal(str)
+    loadSettingsRequested = Signal(str)
 
     def __init__(self, task_id: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -106,23 +106,25 @@ class _TaskCard(QFrame):
         self.analyze_button.clicked.connect(lambda: self.analyzeRequested.emit(self.task_id))
         buttons.addWidget(self.analyze_button)
 
-        # SPEC-live-settings-panel.md S10.5.1: the OperatorPanel's own "Save
-        # for this subject" is only reachable *during* a run, but the moment a
-        # physician actually knows a run's settings were good is after seeing
-        # its hit rate and reaction times. This is the same save, available
-        # once a run has finished -- it stores that run's ending values, which
-        # DashboardWindow already holds.
-        self.save_settings_button = QPushButton("Save Settings")
-        self.save_settings_button.setObjectName("wtmhGhost")
-        self.save_settings_button.setEnabled(False)
-        self.save_settings_button.setToolTip(
-            "Enabled after a run — saves that run's settings as this subject's "
-            "profile for this task."
+        # SPEC-live-settings-panel.md S10.11/S10.12: saving happens ONLY from
+        # the OperatorPanel's "Save for this subject" during a live run -- a
+        # second Save button here duplicated that and the two were easy to
+        # confuse. This button instead opens the subject+task's folder of
+        # saved versions (every save is kept, S10.12) so the operator can
+        # choose which one the next Run starts from -- including an older
+        # one, and including over values carried from an earlier run this
+        # sitting. Enabled whenever at least one saved version exists; the
+        # text is set by DashboardWindow from the resolved state.
+        self.load_settings_button = QPushButton("Load Settings")
+        self.load_settings_button.setObjectName("wtmhGhost")
+        self.load_settings_button.setEnabled(False)
+        self.load_settings_button.setToolTip(
+            "Enabled once this subject has a saved settings profile for this task."
         )
-        self.save_settings_button.clicked.connect(
-            lambda: self.saveSettingsRequested.emit(self.task_id)
+        self.load_settings_button.clicked.connect(
+            lambda: self.loadSettingsRequested.emit(self.task_id)
         )
-        buttons.addWidget(self.save_settings_button)
+        buttons.addWidget(self.load_settings_button)
         buttons.addStretch(1)
         layout.addLayout(buttons)
 
@@ -165,28 +167,32 @@ class _TaskCard(QFrame):
         self.run_button.setEnabled(enabled)
         self.settings_button.setEnabled(enabled)
 
-    def set_save_settings_enabled(self, enabled: bool) -> None:
-        self.save_settings_button.setEnabled(enabled)
+    def set_load_settings_state(self, enabled: bool, text: str, tooltip: str) -> None:
+        """Enabled state and label together, both derived from resolved state.
 
-    def set_settings_saved(self, filename: str) -> None:
-        """Confirm the save on the button itself.
-
-        A silent write is indistinguishable from a button that does nothing,
-        and this one has no dialog and no visible side effect anywhere else on
-        the page.
+        DashboardWindow repaints this on every badge refresh, so a
+        confirmation ("Loaded 09/17 14:32 ✓") lasts exactly as long as the
+        selection it confirms and can never go stale (S10.12.4).
         """
-        self.save_settings_button.setText("Settings Saved ✓")
-        self.save_settings_button.setToolTip(
-            f"Saved as this subject's profile for this task ({filename}). "
-            "Press Run again to apply it, or save again after another run."
-        )
+        self.load_settings_button.setEnabled(enabled)
+        self.load_settings_button.setText(text)
+        self.load_settings_button.setToolTip(tooltip)
+
+    def set_load_settings_refused(self, reason: str) -> None:
+        """Say on the button why a chosen file was not applied.
+
+        A silent refusal is indistinguishable from a button that does nothing;
+        there is no dialog. Cleared by the next state repaint.
+        """
+        self.load_settings_button.setText("Not loaded ✗")
+        self.load_settings_button.setToolTip(reason)
 
 
 class TasksPage(QWidget):
     runRequested = Signal(str)
     settingsRequested = Signal(str)
     analyzeRequested = Signal(str)
-    saveSettingsRequested = Signal(str)
+    loadSettingsRequested = Signal(str)
     backToSetupRequested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -232,7 +238,7 @@ class TasksPage(QWidget):
             card.runRequested.connect(self.runRequested)
             card.settingsRequested.connect(self.settingsRequested)
             card.analyzeRequested.connect(self.analyzeRequested)
-            card.saveSettingsRequested.connect(self.saveSettingsRequested)
+            card.loadSettingsRequested.connect(self.loadSettingsRequested)
             self._cards[task_id] = card
             self._outer.addWidget(card)
         self._outer.addStretch(1)
@@ -251,13 +257,15 @@ class TasksPage(QWidget):
         if task_id in self._cards:
             self._cards[task_id].set_settings_badge(text, source, tooltip)
 
-    def set_task_save_settings_enabled(self, task_id: str, enabled: bool) -> None:
+    def set_task_load_settings_state(
+        self, task_id: str, enabled: bool, text: str, tooltip: str
+    ) -> None:
         if task_id in self._cards:
-            self._cards[task_id].set_save_settings_enabled(enabled)
+            self._cards[task_id].set_load_settings_state(enabled, text, tooltip)
 
-    def set_task_settings_saved(self, task_id: str, filename: str) -> None:
+    def set_task_load_settings_refused(self, task_id: str, reason: str) -> None:
         if task_id in self._cards:
-            self._cards[task_id].set_settings_saved(filename)
+            self._cards[task_id].set_load_settings_refused(reason)
 
     def set_all_runs_enabled(self, enabled: bool) -> None:
         """Disable every card's Run/Settings while one task is embedded and running."""

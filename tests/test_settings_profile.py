@@ -11,14 +11,19 @@ import json
 
 from src.engine.settings_profile import (
     known_subject_ids,
+    list_settings_profiles,
     load_settings_profile,
+    load_settings_profile_file,
+    parse_saved_at,
     resolve_settings_precedence,
     save_settings_profile,
+    settings_profile_dir,
     settings_profile_path,
 )
 from src.ui.settings_registry import (
     apply_live_values_to_config,
     format_calibration,
+    format_saved_at,
     initial_live_values,
 )
 
@@ -61,11 +66,130 @@ def test_profile_of_the_wrong_shape_degrades_to_none(tmp_path):
     assert load_settings_profile(tmp_path, "S1", "click_grid") is None
 
 
-def test_saving_replaces_rather_than_accumulates(tmp_path):
-    save_settings_profile(tmp_path, "S1", "click_grid", {"dwell.smoothing.alpha": 0.5})
-    save_settings_profile(tmp_path, "S1", "click_grid", {"dwell.smoothing.alpha": 0.1})
+def test_newest_save_wins_on_load_and_earlier_saves_are_kept(tmp_path):
+    """S10.12: every save is its own file; the automatic path takes the newest."""
+    first = save_settings_profile(tmp_path, "S1", "click_grid", {"dwell.smoothing.alpha": 0.5})
+    second = save_settings_profile(tmp_path, "S1", "click_grid", {"dwell.smoothing.alpha": 0.1})
+    assert first != second
+    assert first.is_file() and second.is_file()
+    assert first.parent == second.parent == settings_profile_dir(tmp_path, "S1", "click_grid")
     got = load_settings_profile(tmp_path, "S1", "click_grid")
     assert got["live"] == {"dwell.smoothing.alpha": 0.1}
+    assert got["path"] == str(second)
+
+
+# -- S10.12: a dated history of versions -------------------------------------
+
+
+def _write_version(directory, name, saved_at, alpha, subject="S1", task="click_grid"):
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / name
+    path.write_text(
+        json.dumps(
+            {
+                "subject_id": subject,
+                "task_id": task,
+                "saved_at": saved_at,
+                "live": {"dwell.smoothing.alpha": alpha},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_versions_are_ordered_by_saved_at_not_filename(tmp_path):
+    d = settings_profile_dir(tmp_path, "S1", "click_grid")
+    older = _write_version(d, "zzz.json", "2026-09-17T10:00:00+08:00", 0.1)
+    newer = _write_version(d, "aaa.json", "2026-09-18T10:00:00+08:00", 0.3)
+    assert list_settings_profiles(tmp_path, "S1", "click_grid") == [newer, older]
+    assert load_settings_profile(tmp_path, "S1", "click_grid")["live"]["dwell.smoothing.alpha"] == 0.3
+
+
+def test_legacy_flat_file_is_one_more_version_and_never_rewritten(tmp_path):
+    """Profiles saved before S10.12 live at <subject>/<task>.json; they must
+    stay loadable, sort by their own timestamp, and stop being the write target."""
+    legacy = settings_profile_path(tmp_path, "S1", "click_grid")
+    _write_version(legacy.parent, legacy.name, "2026-09-11T10:00:00+00:00", 0.7)
+    d = settings_profile_dir(tmp_path, "S1", "click_grid")
+    older = _write_version(d, "2026-09-10_10-00-00.json", "2026-09-10T10:00:00+08:00", 0.1)
+    assert list_settings_profiles(tmp_path, "S1", "click_grid") == [legacy, older]
+    before = legacy.read_text(encoding="utf-8")
+    new = save_settings_profile(tmp_path, "S1", "click_grid", {"dwell.smoothing.alpha": 0.9})
+    assert new.parent == d
+    assert legacy.read_text(encoding="utf-8") == before
+    assert list_settings_profiles(tmp_path, "S1", "click_grid")[0] == new
+
+
+def test_unreadable_versions_are_skipped_not_fatal(tmp_path):
+    d = settings_profile_dir(tmp_path, "S1", "click_grid")
+    good = _write_version(d, "2026-09-17_10-00-00.json", "2026-09-17T10:00:00+08:00", 0.1)
+    d.joinpath("broken.json").write_text("{not json", encoding="utf-8")
+    d.joinpath("notes.txt").write_text("ignored", encoding="utf-8")
+    assert list_settings_profiles(tmp_path, "S1", "click_grid") == [good]
+
+
+def test_no_versions_means_none(tmp_path):
+    assert list_settings_profiles(tmp_path, "S1", "click_grid") == []
+    assert load_settings_profile(tmp_path, "S1", "click_grid") is None
+
+
+def test_same_second_saves_never_overwrite(tmp_path, monkeypatch):
+    import src.engine.settings_profile as mod
+
+    class _Frozen(mod.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 9, 18, 14, 32, 5).astimezone()
+
+    monkeypatch.setattr(mod, "datetime", _Frozen)
+    a = save_settings_profile(tmp_path, "S1", "click_grid", {"dwell.smoothing.alpha": 0.1})
+    b = save_settings_profile(tmp_path, "S1", "click_grid", {"dwell.smoothing.alpha": 0.2})
+    assert a.name == "2026-09-18_14-32-05.json"
+    assert b.name == "2026-09-18_14-32-05_2.json"
+    assert load_settings_profile_file(a)["live"]["dwell.smoothing.alpha"] == 0.1
+
+
+def test_saved_at_is_local_time_with_offset(tmp_path):
+    path = save_settings_profile(tmp_path, "S1", "click_grid", LIVE)
+    saved_at = load_settings_profile_file(path)["saved_at"]
+    parsed = parse_saved_at(saved_at)
+    assert parsed is not None and parsed.utcoffset() is not None
+    # The filename is the picker's label (S10.12 decision 2): it must show
+    # the same local wall-clock time the timestamp does.
+    assert path.stem.startswith(parsed.strftime("%Y-%m-%d_%H-%M-%S"))
+
+
+def test_loaded_file_carries_identity_for_refusal_checks(tmp_path):
+    d = settings_profile_dir(tmp_path, "OTHER", "scanning")
+    path = _write_version(d, "v.json", "2026-09-17T10:00:00+08:00", 0.1, subject="OTHER", task="scanning")
+    got = load_settings_profile_file(path)
+    assert got["subject_id"] == "OTHER"
+    assert got["task_id"] == "scanning"
+    assert got["path"] == str(path)
+    assert load_settings_profile_file(tmp_path / "missing.json") is None
+
+
+def test_parse_saved_at_handles_legacy_utc_naive_and_garbage():
+    assert parse_saved_at("").__class__.__name__ == "NoneType"
+    assert parse_saved_at("not a date") is None
+    naive = parse_saved_at("2026-09-10")
+    assert naive is not None and naive.utcoffset() is not None  # treated as UTC
+    utc = parse_saved_at("2026-09-16T20:40:01+00:00")
+    local = parse_saved_at("2026-09-17T04:40:01+08:00")
+    assert utc == local  # same instant
+
+
+def test_format_saved_at_renders_the_local_date_not_the_utc_one():
+    """S10.12.2: the same instant, written by a legacy (UTC) and a new (local)
+    profile, must display identically -- the bug was slicing the UTC string."""
+    utc = "2026-09-16T20:40:01+00:00"
+    local = "2026-09-17T04:40:01+08:00"
+    assert format_saved_at(utc) == format_saved_at(local)
+    assert format_saved_at(utc, with_time=False) == format_saved_at(local, with_time=False)
+    assert format_saved_at("") == ""
+    assert format_saved_at("garbage") == ""
+    assert len(format_saved_at(local, with_time=False)) == 5  # "MM/DD"
 
 
 # -- applying a profile back onto a config ------------------------------------

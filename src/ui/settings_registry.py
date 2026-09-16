@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..engine.settings_profile import parse_saved_at
+
 
 @dataclass(frozen=True, slots=True)
 class LiveSetting:
@@ -290,6 +292,23 @@ def format_calibration(calibration: dict[str, Any] | None) -> str:
     if isinstance(points, int):
         parts.append(f"{points}pt")
     return ", ".join(parts)
+
+
+def format_saved_at(saved_at: str, with_time: bool = True) -> str:
+    """Render a profile's ``saved_at`` in **local** time, e.g. ``09/18 14:32``.
+
+    The date is the label an operator picks a version by (S10.12), so it has
+    to be the local date: slicing the stored ISO string (``saved_at[:10]``,
+    as the badge and panel did before S10.12) showed the UTC date, which is
+    the previous day for any save before 08:00 in this lab's timezone.
+    Legacy UTC-stamped profiles and S10.12 local-offset ones both convert
+    correctly. Returns "" for an empty or unparseable value.
+    """
+    when = parse_saved_at(saved_at)
+    if when is None:
+        return ""
+    local = when.astimezone()
+    return local.strftime("%m/%d %H:%M" if with_time else "%m/%d")
 
 
 def apply_live_values_to_config(config: dict[str, Any], values: dict[str, Any]) -> None:
