@@ -498,6 +498,81 @@ effective_rate_hz, longest_gap_s, an off-screen-sample case, and the new
 round beyond what §2 already covers — no new headless-path tests were
 needed.
 
+## 11. Results page has no scroll (2026-09-17) — implemented and live-validated
+
+### 11.1 Reported
+
+User feedback: "Do a small update on the result UI, currently it doesn't
+have scroll." (§10 below is a log-only entry, hence this section's number.)
+
+### 11.2 Diagnosis
+
+`ResultsPage` (`src/ui/results_page.py`) stacked its four metric cards
+(5 + 3 + 3 + 6 form rows), the warning banner, and the fixed-height (140 px)
+Session Log card directly in the page's outer `QVBoxLayout`. No
+`QScrollArea` anywhere on the page — the only two in the app were Setup's
+card stack (`SPEC-ui-setup-task-selection.md` §22) and the OperatorPanel
+(`SPEC-live-settings-panel.md` §10.10).
+
+Measured live (real Windows fonts, maximized 1920×1009 — never offscreen,
+per `SPEC-live-settings-panel.md` §10.10's rule): the content stack is
+**978 px** tall against an **869 px** viewport, so even at this machine's
+maximized size the Session Log card was cut off at the bottom, with no way
+to reach it. Any shorter window (1600×900, 125 % scaling) loses more.
+
+### 11.3 Fix
+
+Same shape as Setup's §22: the header row (page title + "← Back to Tasks")
+stays pinned outside; `self._content` (everything else, unchanged) becomes
+the widget of a new `QScrollArea#wtmhResultsScroll` with
+`setWidgetResizable(True)`, no frame, horizontal bar always off, and
+`addStretch(1)` at the end of the content layout so a tall viewport doesn't
+stretch the cards apart. Both §22 gotchas applied:
+
+- §22.5 — `setWidget()` turns on `autoFillBackground` for the viewport
+  *and* the content widget; the QSS transparent rule reaches only the
+  viewport, so both are cleared explicitly in code (otherwise black bands
+  appear in the 16 px gaps between cards).
+- §22.6 — the app-wide themed `QScrollBar` rule in `wtmh_theme.py` already
+  covers it; the `QScrollArea#wtmhSetupScroll` transparent-background
+  selector was widened to also match `#wtmhResultsScroll` rather than
+  duplicating the rule.
+
+Files: `src/ui/results_page.py`, `src/ui/wtmh_theme.py`. No behaviour change
+to `populate()` or to what is displayed; `tests/` has no Qt-layer coverage
+(project convention), so no test edits. Suite unchanged: **200 collected,
+199 passed, 1 pre-existing unrelated failure** (`target_fps` drift).
+
+### 11.4 Live validation (qt-mcp, `tools/fake_gazepoint_server.py` on 4250)
+
+Port 4242 was held by the real Gazepoint Control this session (no gaze
+subject available), so the fake server ran on 4250 and the Setup page's
+port field was set to match. Subject `SCROLLRES`, calibration via the fake
+server, Static Click run and ended via the OperatorPanel's "End task"
+shortcut, then Analyze.
+
+| Check | Observed |
+|---|---|
+| Scroll area present | `QScrollArea "wtmhResultsScroll"` 1872×869, `minimumSizeHint` 58×58 (so the page can no longer force the window taller than the screen) |
+| Overflow is real | vertical `QScrollBar` `maximum: 109`, `pageStep: 869` → content 978 px |
+| Top of page | header row pinned; Session Log card clipped at the bottom, scrollbar thumb visible at right (window screenshot, not a widget grab) |
+| Scrolled to `value: 109` | full Session Log card visible with its 4 log lines; header + Back button still pinned; no black bands between cards |
+| Window size | `DashboardWindow` stays 1920×1009 before and after showing Results (did not auto-grow) |
+
+Not exercised: the empty state ("No results yet…") — that label sits
+outside the scroll area and is untouched.
+
+**qt-mcp gotcha hit (new):** a `qt_wait_for` with `timeout_ms` ≥ the MCP
+client's own ~30 s limit desynchronises the probe channel by one reply —
+every subsequent tool result is the *previous* call's answer (a
+`qt_screenshot` came back as `'image'` KeyError, `qt_list_windows` as "no
+windows" while the app was alive). Relaunching the target app resets it.
+Keep `qt_wait_for` timeouts well under 30 s and poll instead.
+
+**Cleanup:** `SCROLLRES` session/calibration/settings artifacts deleted,
+dashboard + fake server killed, ports 4250/9142 confirmed closed,
+`configs/local_state.json` restored 4250 → `127.0.0.1:4242`.
+
 ## Log
 
 - **2026-09-09 — §1-§5 above implemented, unit-tested, and (§2/§3) live-
@@ -630,3 +705,17 @@ needed.
   touched `git status` either way. **Files changed:** `tools/
   fake_gazepoint_server.py` only (docstring, `WAYPOINTS`/`FIXATION_HOLD_S`
   constants, `send_rec_loop()`). No `src`/`tests` changes this round.
+
+- **2026-09-17 — §11: Results page given a scroll area, implemented and
+  live-validated, via `/sparc:orchestrator`.** User feedback that the
+  Results UI "doesn't have scroll". Measured live at maximized 1920×1009:
+  content 978 px in an 869 px viewport, Session Log card unreachable. Fix
+  is Setup's §22 pattern applied to `ResultsPage` (pinned header row,
+  `QScrollArea#wtmhResultsScroll` around the content, both §22 gotchas
+  applied, theme selector widened instead of duplicated). Validated via
+  qt-mcp against the fake server on 4250 (4242 held by the real Gazepoint
+  Control): scrollbar `maximum: 109`, full log card visible after
+  scrolling, window stayed 1920×1009. Suite 200 collected / 199 passed /
+  1 pre-existing `target_fps` failure. **Files changed:**
+  `src/ui/results_page.py`, `src/ui/wtmh_theme.py`, this SPEC. **Left
+  uncommitted**, ask-before-commit as always.

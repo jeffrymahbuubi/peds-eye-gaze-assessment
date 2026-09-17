@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -76,11 +77,28 @@ class ResultsPage(QWidget):
         self._empty_label.setObjectName("wtmhMuted")
         outer.addWidget(self._empty_label)
 
+        # Four metric cards plus the Session Log stack taller than the
+        # window on common screens, so the content scrolls while the header
+        # row (title + "Back to Tasks") stays pinned above it -- same shape
+        # and same two gotchas as Setup's card scroll
+        # (SPEC-ui-setup-task-selection.md S22 / S22.5).
+        scroll = QScrollArea()
+        scroll.setObjectName("wtmhResultsScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
         self._content = QWidget()
         content_layout = QVBoxLayout(self._content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(16)
-        outer.addWidget(self._content)
+        scroll.setWidget(self._content)
+        # setWidget() turns on autoFillBackground for both the viewport and
+        # the content widget (black bands in the gaps between cards); the
+        # QSS transparent rule reaches only the viewport, so clear both here.
+        scroll.viewport().setAutoFillBackground(False)
+        self._content.setAutoFillBackground(False)
+        outer.addWidget(scroll, stretch=1)
         self._content.setVisible(False)
 
         self._session_title = QLabel("")
@@ -127,6 +145,7 @@ class ResultsPage(QWidget):
         self._log_view.setFixedHeight(140)
         log_layout.addWidget(self._log_view)
         content_layout.addWidget(log_card)
+        content_layout.addStretch(1)
 
     @staticmethod
     def _add_category_card(parent_layout: QVBoxLayout, title: str, metrics: list[str]) -> dict[str, QLabel]:

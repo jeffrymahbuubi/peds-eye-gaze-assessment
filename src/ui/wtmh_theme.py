@@ -64,10 +64,12 @@ QWidget#wtmhTitleBar QLabel {{ color: {TITLEBAR_TEXT}; }}
 QLabel#wtmhBrandTitle {{ font-size: 15px; font-weight: 600; }}
 
 /* Setup page's card stack scrolls independently of the pinned "Continue to
-   Tasks" footer (SPEC-ui-setup-task-selection.md S22) -- the scroll area
-   and its viewport otherwise paint an opaque native background over the
-   page's own {BACKGROUND} tint. */
-QScrollArea#wtmhSetupScroll, QScrollArea#wtmhSetupScroll > QWidget {{
+   Tasks" footer (SPEC-ui-setup-task-selection.md S22), and the Results
+   page's card stack below its pinned header row (SPEC-result-logic.md S11)
+   -- the scroll area and its viewport otherwise paint an opaque native
+   background over the page's own {BACKGROUND} tint. */
+QScrollArea#wtmhSetupScroll, QScrollArea#wtmhSetupScroll > QWidget,
+QScrollArea#wtmhResultsScroll, QScrollArea#wtmhResultsScroll > QWidget {{
     background: transparent;
     border: none;
 }}
