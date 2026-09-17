@@ -11,6 +11,10 @@ sessions/2026-07-15_P001_click_static/
   events.jsonl       # discrete events (TARGET_SHOWN, HIT, TIMEOUT, MISS_CLICK)
 ```
 
+**Planned, not yet written:** `all_gaze.csv` (and later `fixations.csv`) in
+Gazepoint Analysis's own 62-column export layout, alongside — not replacing
+— `gaze_stream.csv`. Design and status: `specs/SPEC-gazepoint-analysis-export-parity.md`.
+
 All timestamps are **nanoseconds** (`time.time_ns()` domain, UTC-based). Divide
 by `1e6` for milliseconds. Coordinates are **normalized** (0–1, origin
 top-left) unless the field name ends in `_px`.

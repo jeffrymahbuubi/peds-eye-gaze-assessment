@@ -155,13 +155,36 @@ from `gaze_stream.csv`, not pulled from Gazepoint Analysis.
 | Selection precision | Revisit / re-attempt counts | A 2026 CP oculomotor-training study (ScienceDirect, *Acta Psychologica*) tracked "fixation precision and visual exploration" pre/post intervention using gaze-driven games; this app's `attempts` field is a rough analogue. | Yes (`attempts`), not yet framed as a precision metric |
 | Pupil | Mean/trend pupil diameter | Secondary priority — literature treats it mainly as an attention/cognitive-load signal, not CP-specific. | **Aggregated 2026-09-03** — mean pupil L/R mm in `session_metrics.json`; trend-over-time still not computed |
 
-**Planned next step (not yet started):** the user intends to pull a sample
-export from Gazepoint Analysis directly (`_all_gaze.csv`, `_fixations.csv`,
-`Data_Summary_export_*.csv`) to see exactly which fields/statistics it
-actually produces in practice, then attempt to reverse-engineer those
-derived statistics (especially the AOI/session-summary ones with no API
-equivalent) from this app's own raw `gaze_stream.csv`, so the app doesn't
-depend on Gazepoint Analysis at all for CP-relevant session summaries.
+### Sample export analysed (2026-09-17) — what Analysis actually produces vs. what we record
+
+The planned step above was done against a real Gazepoint Analysis v7.3.0
+export (`resources/gazepoint-analysis-example-data/` in the top-level
+project). Full findings and the resulting plan:
+`docs/specs/SPEC-gazepoint-analysis-export-parity.md`. The short version:
+
+- **The export is the same `<REC>` stream this app already consumes** —
+  `_all_gaze.csv` is 62 columns of raw API attributes plus ~6 columns
+  Analysis computes at export; `_fixations.csv` is the same columns filtered
+  to each fixation's last valid sample; `Data_Summary` is AOI statistics
+  (empty unless AOIs were drawn in Analysis).
+- **We keep 6 of the 62 columns** (`gaze_stream.csv`, with FPOG/BPOG folded
+  into one `x,y`). A further ~30 are either already received and discarded
+  (`TIME`, `FPOGS`, `LPMMV/RPMMV`, `CX/CY/CS`) or one `ENABLE_SEND_*` flag
+  away (`CNT`, `TIMETICK`, `KB/KBS`, `USER`, pixel pupil `LPD/RPD` +
+  centre/scale, blinks `BKID/BKDUR/BKPMIN`, `PIXS/PIXV`). The biometrics
+  columns need the Biometrics kit and are excluded by decision.
+- **The API-less columns are derivable after all.** `SACCADE_MAG` /
+  `SACCADE_DIR` were reverse-engineered from the sample: pixel distance and
+  `atan2` angle between consecutive fixation POGs, reproduced to 0.0002 px /
+  0.00004° over every saccade once the recording's screen size (3440×1440)
+  is known. This turns the "needs genuinely new tracking" entries for
+  saccade amplitude/direction in the table below into an offline derivation
+  from `gaze_stream.csv` — **provided the session's screen size is persisted,
+  which `metadata.json` does not do today.** AOI "time viewed / revisits"
+  remain genuinely new tracking.
+- **None of the derivations exist in code yet** (checked 2026-09-17); the
+  SPEC gates them as derive → golden-test against the vendor's own file →
+  report → approve → wire.
 
 ## Sources
 
