@@ -717,5 +717,8 @@ dashboard + fake server killed, ports 4250/9142 confirmed closed,
   Control): scrollbar `maximum: 109`, full log card visible after
   scrolling, window stayed 1920×1009. Suite 200 collected / 199 passed /
   1 pre-existing `target_fps` failure. **Files changed:**
-  `src/ui/results_page.py`, `src/ui/wtmh_theme.py`, this SPEC. **Left
-  uncommitted**, ask-before-commit as always.
+  `src/ui/results_page.py`, `src/ui/wtmh_theme.py`, this SPEC. Left
+  uncommitted at first, ask-before-commit as always; **then committed and
+  pushed at the user's instruction as `1e58491`** (`origin/main`
+  `f0c3f38..1e58491`). This log line is recorded in a follow-up doc-only
+  commit.
