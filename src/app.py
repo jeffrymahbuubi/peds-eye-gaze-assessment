@@ -19,6 +19,7 @@ from PySide6.QtCore import Qt, QPoint, QTimer, QUrl
 from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import QApplication, QDialog
 
+from .data.analysis_export import finalize_all_gaze
 from .data.exporter import write_session_metrics
 from .data.recorder import SessionRecorder
 from .data.schema import SessionMetadata
@@ -335,6 +336,21 @@ class AssessmentApp:
         )
         self.recorder = SessionRecorder(self.metadata, output_root=output_root)
         self.recorder.open()
+        recording_cfg = self.config.get("recording", {})
+        self._save_all_gaze = bool(recording_cfg.get("save_all_gaze", True))
+        if self._save_all_gaze:
+            # Gazepoint Analysis export layout (SPEC-gazepoint-analysis-
+            # export-parity.md S5): the task id stands in for Analysis's
+            # media name; the tick frequency was read at connect.
+            info = self.client.device_info
+            self.recorder.open_all_gaze(
+                media_name=task_id,
+                tick_frequency=info.tick_frequency if info is not None else None,
+            )
+        # Filled once the canvas has its real on-screen size (see
+        # _record_geometry); not at construction, when a widget still
+        # reports 0x0 or its pre-layout default.
+        self._geometry_recorded = False
 
         # Human-readable session narrative (SPEC-result-logic.md §8.3's
         # Session Log panel) -- connect()/calibrate() above both had to run
@@ -551,6 +567,55 @@ class AssessmentApp:
         offset_y = canvas_origin.y() - (info.screen_y or 0)
         self.task.set_gaze_geometry(info.screen_width, info.screen_height, offset_x, offset_y)
 
+    def _record_geometry(self) -> None:
+        """Persist the frames the recorded gaze maps onto (SPEC-gazepoint-
+        analysis-export-parity.md S4.2), once, into ``metadata.json``.
+
+        ``screen_*_px`` is the tracked monitor -- the only correct scale for
+        any pixel metric derived from the stream; the canvas fields say where
+        the task scene sat on it. Physical size comes from config when set,
+        else the OS (EDID -- can be wrong, hence the override); viewing
+        distance is config only, nothing measures it. Runs on the first tick
+        where the canvas has a real size (a widget reports 0x0 or a
+        pre-layout default at construction). In replay mode the monitor
+        fields stay None -- there is no tracked screen to report.
+        """
+        if self.canvas.width() <= 0 or self.canvas.height() <= 0:
+            return
+        info = self.client.device_info
+        app_cfg = self.config.get("app", {})
+        meta = self.metadata
+        canvas_origin = self.canvas.mapToGlobal(QPoint(0, 0))
+        offset_x, offset_y = canvas_origin.x(), canvas_origin.y()
+        if info is not None and info.screen_width and info.screen_height:
+            meta.screen_width_px = info.screen_width
+            meta.screen_height_px = info.screen_height
+            offset_x -= info.screen_x or 0
+            offset_y -= info.screen_y or 0
+        meta.canvas_width_px = int(self.canvas.width())
+        meta.canvas_height_px = int(self.canvas.height())
+        meta.canvas_offset_x_px = int(offset_x)
+        meta.canvas_offset_y_px = int(offset_y)
+        physical_w = app_cfg.get("screen_physical_width_mm")
+        physical_h = app_cfg.get("screen_physical_height_mm")
+        if physical_w is None or physical_h is None:
+            screen = self.canvas.screen()
+            if screen is not None:
+                size_mm = screen.physicalSize()
+                physical_w = physical_w if physical_w is not None else round(size_mm.width(), 1)
+                physical_h = physical_h if physical_h is not None else round(size_mm.height(), 1)
+        meta.screen_physical_width_mm = float(physical_w) if physical_w else None
+        meta.screen_physical_height_mm = float(physical_h) if physical_h else None
+        distance = app_cfg.get("viewing_distance_mm")
+        meta.viewing_distance_mm = float(distance) if distance else None
+        self._geometry_recorded = True
+        self.recorder.log(
+            f"Geometry: monitor {meta.screen_width_px}x{meta.screen_height_px}px, canvas "
+            f"{meta.canvas_width_px}x{meta.canvas_height_px}px at +{offset_x},+{offset_y}, "
+            f"physical {meta.screen_physical_width_mm}x{meta.screen_physical_height_mm}mm, "
+            f"viewing distance {meta.viewing_distance_mm}mm."
+        )
+
     def _tick(self) -> None:
         if self._paused:
             return
@@ -560,6 +625,14 @@ class AssessmentApp:
         # configured screen_width_px/height_px default.
         self.task.set_screen_size(self.canvas.width(), self.canvas.height())
         self._sync_gaze_geometry()
+        if not self._geometry_recorded:
+            self._record_geometry()
+        if self._save_all_gaze:
+            # Every raw <REC> since the last frame, at device rate -- the
+            # per-frame gaze_stream.csv sample below is a different, coarser
+            # view and stays as it was.
+            for raw_t_ns, attrs in self.client.drain_raw():
+                self.recorder.record_raw(raw_t_ns, attrs)
         pointer = self.eye.poll(t_ns)
         if self.input_mode != "eye":
             pointer = Pointer(
@@ -644,9 +717,27 @@ class AssessmentApp:
             # Flush a dropout still open at the end, so one that never
             # recovered is recorded rather than silently lost.
             self._dropout_log.close(time.time_ns())
+        if self._save_all_gaze:
+            for raw_t_ns, attrs in self.client.drain_raw():  # whatever arrived since the last tick
+                self.recorder.record_raw(raw_t_ns, attrs)
         trials_path = self.recorder.write_trials(self.task.trials)
         self.recorder.log(f"Wrote {len(self.task.trials)} trials -> {trials_path}")
+        if self._save_all_gaze:
+            # Saccade columns + fixations.csv are a post-pass (a fixation's
+            # saccade describes the jump *into* it), scaled by the tracked
+            # monitor -- never the canvas (SPEC S4.2). Without a reported
+            # SCREEN_SIZE fall back to the configured default, and say so.
+            app_cfg = self.config.get("app", {})
+            width = self.metadata.screen_width_px or int(app_cfg.get("screen_width_px", 1920))
+            height = self.metadata.screen_height_px or int(app_cfg.get("screen_height_px", 1080))
+            if not self.metadata.screen_width_px:
+                self.recorder.log(
+                    f"SCREEN_SIZE unknown; saccade pixels scaled by configured {width}x{height}."
+                )
+            self.recorder.log(f"Saccade metrics scaled by {width}x{height}px.")
         self.recorder.close()
+        if self._save_all_gaze:
+            finalize_all_gaze(self.recorder.session_dir, width, height)
         write_session_metrics(self.recorder.session_dir)
         if self._owns_client:
             self.client.stop()

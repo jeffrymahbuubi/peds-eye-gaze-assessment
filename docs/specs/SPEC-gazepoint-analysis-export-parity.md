@@ -1,14 +1,17 @@
 # SPEC-gazepoint-analysis-export-parity — Match Gazepoint Analysis's CSV export from our own recorder
 
-**Status: DESIGN ONLY — nothing implemented.** §1–§4 are findings from the
-user's sample export (verified against the files, not the manual alone).
-§5 (Bucket B/C: raw fields we can record directly) and §6 (Bucket D:
-fields Gazepoint Analysis computes, which we must derive) are the plan.
-§6 has a two-stage gate the user set: **derive + test first, report, get
-approval, only then wire into the app.**
+**Status: IMPLEMENTED, tested and live-validated (§9), 2026-09-17.** §1–§4
+are findings from the user's sample export (verified against the files, not
+the manual alone). §5 (Bucket B/C: raw fields recorded directly into a new
+Analysis-layout `all_gaze.csv`), §6 (Bucket D: `SACCADE_MAG`/`SACCADE_DIR`
++ `fixations.csv`, derived at session close and golden-tested against the
+vendor's own export), and §4.2's geometry persistence are all built. The
+user waived §6's approval gate the same day ("§5 + full §6, skip the
+approval gate"), so Stage 1 and Stage 2 landed together. **Not yet
+committed.**
 
 **Created:** 2026-09-17
-**Last updated:** 2026-09-17
+**Last updated:** 2026-09-17 (§9 — implemented)
 
 ## 1. Origin / what was asked
 
@@ -31,7 +34,7 @@ Analysis's own session-level summary" had left open since 2026-09-03.
 | File | Rows | Verified structure |
 |---|---|---|
 | `User 0_all_gaze.csv` | 639 samples × **62 columns** | Every `<REC>` record of the recording, in Gazepoint's own attribute names, plus Analysis-computed columns |
-| `User 0_fixations.csv` | 15 rows × same 62 columns | **One row per fixation = the last valid (`FPOGV=1`) sample of each `FPOGID`.** Checked programmatically: the fixation rows' `CNT` (18, 40, 59, 104, …) equal the last-valid-sample `CNT` per `FPOGID` in `all_gaze`; the single-sample fixation `FPOGID=1` at `CNT=0` is dropped |
+| `User 0_fixations.csv` | 16 rows × same 62 columns | **One row per fixation = the last valid (`FPOGV=1`) sample of each `FPOGID`.** Checked programmatically: the fixation rows' `CNT` (18, 40, 59, 104, …) equal the last-valid-sample `CNT` per `FPOGID` in `all_gaze`; the single-sample fixation `FPOGID=1` at `CNT=0` is dropped |
 | `Data_Summary_export_09-10-26-11.39.31_eyetracker.csv` | header only | AOI statistics per user + averages; no data rows because no AOIs were defined in Analysis for this recording |
 
 The 62 columns, in file order:
@@ -288,7 +291,118 @@ derivation.
   from persisted physical size + viewing distance (to be added to
   `metadata.json` and the Setup page/config).
 
-## 9. Log
+## 9. Implemented (2026-09-17, same day) — what was built and how it differs from §5/§6
+
+Scope decided by `AskUserQuestion`: §5 + full §6 (approval gate waived),
+§4.2 geometry persisted now with config-only physical size / viewing
+distance (no Setup-page field), `USER` left blank (strict parity).
+
+### 9.1 New module: `src/data/analysis_export.py` (Qt-free)
+
+- `ALL_GAZE_COLUMNS` (the 62 names), `all_gaze_header()` (renders
+  `TIME(<start>)` / `TIMETICK(f=…)`), `rec_to_all_gaze_row()` (device
+  values verbatim; Analysis-style defaults for absent fields — `KB` is a
+  single space, `USER`/`AOI` empty, floats `0.00000`, `TTL0` `0.000`).
+- `read_all_gaze()` reads ours *or* a vendor file (drops the trailing empty
+  column Analysis emits; keys rows by base column name).
+- `fixation_row_indices()`, `saccade_mag_dir()`, `annotate_saccades()`,
+  `finalize_all_gaze()` (the post-pass: rewrites `all_gaze.csv` with the
+  saccade columns and writes `fixations.csv`).
+- `compute_saccade_metrics()` (+ `saccade_amplitude_deg()`): n, mean/median
+  amplitude px, circular-mean direction, mean amplitude in degrees **only
+  when `metadata.json` carries the full geometry** — never guessed.
+
+### 9.2 Three rules found while fitting `_fixations.csv` (beyond §4's two)
+
+1. **The recording's final record is never a fixation row.** The sample's
+   last fixation ends at `CNT=639` but its row is `CNT=638` — Analysis reads
+   with one-record lookahead and never emits the last one. Reproduced.
+2. **Zero-duration fixations are dropped** (`FPOGID=1` at `CNT=0`, `FPOGD=0`,
+   absent from the vendor file).
+3. **The trailing comma**: Analysis ends every line with an empty 63rd
+   column. We write exactly 62 columns; §5.1's "byte-compatible" is
+   therefore "column-compatible" — `read_all_gaze()` accepts both.
+
+With these, the golden test matches the vendor's fixation rows **16/16 by
+`CNT`** and `SACCADE_MAG`/`SACCADE_DIR` on every row within 0.01 px / 0.01°
+(actual max error 0.0002 px / 0.00004°).
+
+### 9.3 Departures from the §5/§6 text
+
+- **`MEDIA_NAME` = the task id**, not "" — the task *is* our stimulus, and
+  a self-describing file costs nothing. `MEDIA_ID` stays 0.
+- **Rows are captured at device rate, not per GUI frame.** `latest()` gives
+  one sample per tick (~75 Hz here, so a 150 Hz stream would lose half its
+  records); the client now keeps a `deque` of every parsed `<REC>` and
+  `drain_raw()` hands them to `SessionRecorder.record_raw()` each tick. The
+  live check below: 860 `all_gaze` rows vs. 3 976 `gaze_stream` rows for the
+  same 52 s run — the fake server streams at 20 Hz while the GUI ticked at
+  ~76 Hz, so the two files legitimately differ in row count in *either*
+  direction depending on which side is faster. `gaze_stream.csv` is
+  untouched.
+- **`TIME` origin** = the first record drained *for this run* (the reader
+  thread only starts at run start, after calibration — so no pre-run
+  records leak in). Device `TIME` when present, else host time; never
+  mixed.
+- **Replay mode** queues a raw record once per distinct fixture record
+  (`ReplayGazeSource.sample_and_record_at()`), only for raw-REC fixtures.
+- **Saccade scale fallback:** if `SCREEN_SIZE` was never reported, the
+  post-pass scales by `app.screen_width_px/height_px` and writes a
+  `session.log` line saying so — the file still gets values, but the log
+  says they are not device-sourced.
+- **Physical size** comes from `QScreen.physicalSize()` (EDID) unless
+  `app.screen_physical_width_mm/height_mm` is set; this machine reported
+  527×296 mm, plausible for its 24" panel.
+
+### 9.4 Files changed
+
+`src/data/analysis_export.py` (new), `src/data/recorder.py`
+(`open_all_gaze`, `record_raw`), `src/data/schema.py` (9 geometry fields),
+`src/data/exporter.py` (`saccades` block in `session_metrics.json`),
+`src/inputs/gazepoint_client.py` (8 enable keys, `TIME_TICK_FREQUENCY`
+query → `DeviceInfo.tick_frequency`, raw queue + `drain_raw()`),
+`src/app.py` (open/drain/finalize + `_record_geometry()`),
+`src/ui/results_page.py` (Mean amplitude / Mean direction filled),
+`configs/default.yaml` (new `enable.*` keys, `recording.save_all_gaze`,
+`app.screen_physical_*_mm`, `app.viewing_distance_mm`),
+`tools/fake_gazepoint_server.py` (emits every recorded attribute +
+`TIME_TICK_FREQUENCY`), `tests/test_analysis_export.py` (new, 16 tests),
+`tests/fixtures/gazepoint_analysis_sample/` (the vendor export, checked in
+as the golden fixture — an anonymous "User 0" test recording, not subject
+data), `tests/test_gazepoint_client.py` (+3), `docs/DATA_SCHEMA.md`.
+
+**Suite: 219 collected, 218 passed, 1 pre-existing unrelated failure**
+(`target_fps` drift), +19.
+
+### 9.5 Live validation (qt-mcp, fake server on 4250, subject `PARITYTEST`)
+
+| Check | Observed |
+|---|---|
+| Subscriptions sent at connect | all 13 expected `ENABLE_SEND_*` (incl. COUNTER, TIME_TICK, KB, USER_DATA, PUPIL_LEFT/RIGHT, BLINK, PIX); none of DIAL/GSR/HR/TTL; `TIME_TICK_FREQUENCY` queried and answered |
+| `all_gaze.csv` | header exactly the 62 columns with `TIME(2026/09/17 09:00:39.228)` / `TIMETICK(f=1000000000)`; 860 rows; `TIME` starts at `0.00000`; `MEDIA_NAME=click_static`; `KB=" "`, `USER=""`, biometrics 0 |
+| `fixations.csv` | 30 rows, one per `FPOGID`, each the last row before the id changed; first row `SACCADE_MAG=0` |
+| Derived values | waypoint (0.50,0.15)→(0.85,0.15): **672.00 px, 0.00°** = 0.35×1920 exactly; (0.85,0.15)→(0.15,0.50): 195.71° (dx −1344, dy +378) |
+| `metadata.json` | `screen 1920×1080`, `canvas 1640×957 at +0,+75` (the operator column is on the right, the title bar above), `physical 527×296 mm`, `viewing_distance 650` |
+| `session_metrics.json` `saccades` | `n 29, mean 936.8 px, median 672.0 px, mean 22.24°, direction 357.48°` |
+| Results page | "Mean amplitude **936.8 px (22.24°)**", "Mean direction **357.5°**" — previously "—" |
+
+**Cleanup:** `PARITYTEST` session/calibration/settings deleted, dashboard +
+fake server killed (the fake server needed a by-port kill — the command-line
+match missed it), ports 4250/9142 confirmed closed, `local_state.json`
+restored 4250 → `127.0.0.1:4242`.
+
+### 9.6 Not exercised / caveats
+
+- Real GP3 HD not tested this round (no subject); the fake server proves
+  the plumbing, and the golden test proves the maths against the vendor.
+  A real 150 Hz run should show `all_gaze.csv` with ~2× the rows of
+  `gaze_stream.csv`.
+- `configs/default.yaml` has `git update-index --skip-worktree` set; the
+  committed copy is staged separately from the local drift (see the log).
+- The headless `--replay` path (`task_runner.run_headless_replay`) does
+  not write `all_gaze.csv` — it has no client to drain. Unchanged.
+
+## 10. Log
 
 - **2026-09-17 — §1–§4 findings + §5–§6 plan written, via
   `/sparc:orchestrator`; design only, zero `src`/`tests` changes.** The
@@ -310,3 +424,18 @@ derivation.
   persist monitor px, canvas px + offset, physical mm, and viewing distance
   in `metadata.json`; resolves the §8 px-vs-degrees question as "both".
   Still design only.
+
+- **2026-09-17, later still — §9: IMPLEMENTED (§5 + full §6 + §4.2
+  geometry), tested, live-validated, via `/sparc:orchestrator`.** Scope,
+  geometry-entry method and the `USER` column decided by `AskUserQuestion`
+  (full §6 with the approval gate waived; config-only physical size /
+  viewing distance; `USER` blank). New Qt-free `src/data/analysis_export.py`
+  with a golden test against the vendor's own export (16/16 fixation rows
+  by `CNT`; `SACCADE_MAG`/`DIR` to 0.0002 px / 0.00004°) — three further
+  vendor rules found while fitting (§9.2). Raw records captured at device
+  rate via a client-side queue, not per GUI frame (§9.3). Live run against
+  the fake server: every subscription sent, `all_gaze.csv` + `fixations.csv`
+  + geometry in `metadata.json` + `saccades` in `session_metrics.json`, and
+  the Results page's Mean amplitude / Mean direction filled (§9.5). Suite
+  219 / 218 / 1 pre-existing. `docs/DATA_SCHEMA.md` documents the new files
+  and fields. Uncommitted, ask-before-commit as always.

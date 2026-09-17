@@ -9,6 +9,16 @@ app:
   # real window geometry is available (headless replay).
   screen_width_px: 1920
   screen_height_px: 1080
+  # Geometry for degrees-of-visual-angle (SPEC-gazepoint-analysis-export-
+  # parity.md S4.2), recorded into every session's metadata.json. Physical
+  # size: null = read from the OS (QScreen.physicalSize, i.e. the monitor's
+  # EDID -- sometimes wrong, so measure and override here when it matters).
+  # Viewing distance is the eye-to-screen distance; 650 mm is Gazepoint's
+  # nominal operating distance for the GP3 HD.
+  screen_physical_width_mm: null
+  screen_physical_height_mm: null
+  viewing_distance_mm: 650
+
 
 input:
   # "eye" = gaze pointer + dwell selection
@@ -42,13 +52,30 @@ gazepoint:
     time: true
     pog_fix: true
     pog_best: true
-    pupil_left: true
+    pupil_left: true             # LPMM/RPMM, pupil diameter in mm (one PUPILMM switch for both)
     pupil_right: true
     cursor: true
+    # Raw fields recorded only for all_gaze.csv (Gazepoint Analysis export
+    # parity, SPEC-gazepoint-analysis-export-parity.md S5.2); nothing in the
+    # app reads them. Biometrics-kit fields (DIAL/GSR/HR/TTL) are not
+    # subscribed -- their columns are written as zeros, as Analysis does
+    # without the kit.
+    counter: true                # CNT
+    time_tick: true              # TIME_TICK -> TIMETICK
+    kb: true                     # KB/KBS
+    user_data: true              # USER
+    pupil_left_px: true          # LPCX/LPCY/LPD/LPS/LPV (pixel pupil; NOT the mm switch above)
+    pupil_right_px: true         # RPCX/RPCY/RPD/RPS/RPV
+    blink: true                  # BKID/BKDUR/BKPMIN
+    pix: true                    # PIXS/PIXV
 
 recording:
   output_root: "sessions"
   save_gaze_stream: true
+  # all_gaze.csv (+ fixations.csv at session close): every raw <REC> in
+  # Gazepoint Analysis's own 62-column export layout, next to -- never
+  # replacing -- gaze_stream.csv. ~3 MB/min at 150 Hz.
+  save_all_gaze: true
   save_screen_capture: false   # requires opencv (gui extra)
 
 theme:

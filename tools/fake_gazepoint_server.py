@@ -78,6 +78,9 @@ DEVICE_INFO_REPLIES = {
     # undershoot math itself (that's covered by tests/test_task_pipeline.py's
     # direct unit tests instead).
     "SCREEN_SIZE": '<ACK ID="SCREEN_SIZE" X="0" Y="0" WIDTH="1920" HEIGHT="1080" />\r\n',
+    # all_gaze.csv's TIMETICK(f=..) header (SPEC-gazepoint-analysis-export-
+    # parity.md S5.1); the real GP3 HD reports 1e9 (OpenCV tick counter).
+    "TIME_TICK_FREQUENCY": '<ACK ID="TIME_TICK_FREQUENCY" FREQ="1000000000" />\r\n',
 }
 
 
@@ -97,6 +100,7 @@ def send_rec_loop(conn: socket.socket, stop_event: threading.Event) -> None:
     waypoint_index = -1
     fixation_id = 0
     fixation_start = 0.0
+    counter = 0
     while not stop_event.wait(interval_s):
         elapsed = time.monotonic() - t0
         current_index = int(elapsed // FIXATION_HOLD_S) % len(WAYPOINTS)
@@ -106,11 +110,23 @@ def send_rec_loop(conn: socket.socket, stop_event: threading.Event) -> None:
             fixation_start = elapsed
         x, y = WAYPOINTS[waypoint_index]
         fix_duration = elapsed - fixation_start
+        # Every attribute all_gaze.csv records (SPEC-gazepoint-analysis-
+        # export-parity.md S5), with plausible constants for the ones this
+        # fake does not model, so the live all_gaze path is exercisable
+        # without a subject. Biometrics-kit fields are deliberately absent.
         line = (
-            f'<REC TIME="{elapsed:.3f}" FPOGX="{x}" FPOGY="{y}" FPOGV="1" '
-            f'FPOGID="{fixation_id}" FPOGD="{fix_duration:.3f}" '
-            f'BPOGX="{x}" BPOGY="{y}" BPOGV="1" LPMM="3.0" RPMM="3.0" />\r\n'
+            f'<REC CNT="{counter}" TIME="{elapsed:.5f}" TIME_TICK="{time.monotonic_ns()}" '
+            f'FPOGX="{x:.5f}" FPOGY="{y:.5f}" FPOGS="{fixation_start:.5f}" '
+            f'FPOGD="{fix_duration:.5f}" FPOGID="{fixation_id}" FPOGV="1" '
+            f'BPOGX="{x:.5f}" BPOGY="{y:.5f}" BPOGV="1" '
+            f'CX="0.50000" CY="0.50000" CS="0" KB=" " KBS="0" USER="" '
+            f'LPCX="0.53492" LPCY="0.41770" LPD="14.56116" LPS="1.20453" LPV="1" '
+            f'RPCX="0.82296" RPCY="0.37728" RPD="19.28113" RPS="1.20453" RPV="1" '
+            f'BKID="0" BKDUR="0.00000" BKPMIN="19" '
+            f'LPMM="3.00000" LPMMV="1" RPMM="3.00000" RPMMV="1" '
+            f'PIXS="0.00000" PIXV="0" />\r\n'
         )
+        counter += 1
         try:
             conn.sendall(line.encode("ascii"))
         except OSError:

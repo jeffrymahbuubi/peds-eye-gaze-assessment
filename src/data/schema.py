@@ -180,6 +180,23 @@ class SessionMetadata:
     # deliberately NOT bumped: every existing reader takes named keys and is
     # unaffected, and older sessions simply lack the block.
     settings: dict[str, Any] | None = None
+    # Geometry the normalized gaze maps onto (SPEC-gazepoint-analysis-
+    # export-parity.md S4.2). ``screen_*_px`` is the tracked monitor Gazepoint
+    # Control reports via SCREEN_SIZE -- the only correct scale for any pixel
+    # metric derived from the stream; the canvas fields describe where the
+    # task scene sat on it (targets are authored normalized-to-canvas). The
+    # physical size and viewing distance make degrees of visual angle
+    # computable later. All additive; ``schema_version`` deliberately not
+    # bumped, same reasoning as ``settings`` above.
+    screen_width_px: int | None = None
+    screen_height_px: int | None = None
+    canvas_width_px: int | None = None
+    canvas_height_px: int | None = None
+    canvas_offset_x_px: int | None = None
+    canvas_offset_y_px: int | None = None
+    screen_physical_width_mm: float | None = None
+    screen_physical_height_mm: float | None = None
+    viewing_distance_mm: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {f.name: getattr(self, f.name) for f in fields(self)}

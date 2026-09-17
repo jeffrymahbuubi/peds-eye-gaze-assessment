@@ -13,6 +13,8 @@ import statistics
 from pathlib import Path
 from typing import Any
 
+from .analysis_export import compute_saccade_metrics
+
 
 def load_metadata(session_dir: str | Path) -> dict[str, Any]:
     path = Path(session_dir) / "metadata.json"
@@ -231,10 +233,18 @@ def write_session_metrics(session_dir: str | Path) -> Path:
     result always exists on disk without a separate manual
     ``analysis/analyze_session.py`` invocation.
     """
+    try:
+        metadata = load_metadata(session_dir)
+    except (OSError, ValueError):
+        metadata = {}
     payload = {
         "summary": summarize(session_dir),
         "fixation_saccade": compute_fixation_saccade_metrics(session_dir),
         "fixations_per_trial": compute_trial_fixation_counts(session_dir),
+        # Amplitude/direction from fixations.csv (SPEC-gazepoint-analysis-
+        # export-parity.md S6); empty for sessions recorded without
+        # all_gaze.csv rather than absent, so readers can rely on the key.
+        "saccades": compute_saccade_metrics(session_dir, metadata),
     }
     path = Path(session_dir) / "session_metrics.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")

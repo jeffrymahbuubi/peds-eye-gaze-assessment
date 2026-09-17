@@ -7,13 +7,12 @@ sessions/2026-07-15_P001_click_static/
   metadata.json      # subject + session + calibration + schema_version
   session.log        # human-readable timeline
   gaze_stream.csv    # per-frame gaze samples
+  all_gaze.csv       # every raw <REC>, Gazepoint Analysis 62-column export layout
+  fixations.csv      # one row per fixation, same layout (written at session close)
   trials.csv         # one row per trial (analysis-ready)
   events.jsonl       # discrete events (TARGET_SHOWN, HIT, TIMEOUT, MISS_CLICK)
+  session_metrics.json  # rolled-up result (summary / fixation_saccade / saccades)
 ```
-
-**Planned, not yet written:** `all_gaze.csv` (and later `fixations.csv`) in
-Gazepoint Analysis's own 62-column export layout, alongside — not replacing
-— `gaze_stream.csv`. Design and status: `specs/SPEC-gazepoint-analysis-export-parity.md`.
 
 All timestamps are **nanoseconds** (`time.time_ns()` domain, UTC-based). Divide
 by `1e6` for milliseconds. Coordinates are **normalized** (0–1, origin
@@ -68,6 +67,40 @@ One row per rendered frame.
 | `fixation_id` | int\|"" | FPOGID (blank if not fixating) |
 | `fix_duration_s` | float\|"" | fixation duration so far |
 | `pupil_left`, `pupil_right` | float\|"" | pupil diameter (mm), v2 analysis |
+
+## all_gaze.csv and fixations.csv
+
+Gazepoint Analysis's own export layout, reproduced from the raw `<REC>`
+stream so the session reads like an Analysis export (`gp3tools` etc.) —
+`specs/SPEC-gazepoint-analysis-export-parity.md`. Off with
+`recording.save_all_gaze: false`.
+
+- **One row per `<REC>` received at device rate** (150 Hz on USB 3), not per
+  rendered frame — so it has more rows than `gaze_stream.csv`.
+- **62 columns in Analysis's order and spelling**: `MEDIA_ID`, `MEDIA_NAME`
+  (the task id), `CNT`, `TIME(<recording start>)` (seconds from the first
+  record), `TIMETICK(f=<Hz>)`, the FPOG/BPOG fields, cursor/keyboard/`USER`,
+  pixel pupil (`LPCX`…`RPV`), blinks (`BKID`/`BKDUR`/`BKPMIN`), mm pupil
+  (`LPMM`…`RPMMV`), biometrics (always 0 — the kit is not subscribed),
+  `PIXS`/`PIXV`, `AOI` (always blank), `SACCADE_MAG`, `SACCADE_DIR`,
+  `VID_FRAME` (always 0). Device values are written verbatim.
+- **`SACCADE_MAG`/`SACCADE_DIR`** are filled at session close on each
+  fixation's row: pixel distance and angle (0–360°, counter-clockwise from
+  +x, screen-up positive) from the previous fixation's POG, scaled by the
+  **tracked monitor** size in `metadata.json` (`screen_width_px` ×
+  `screen_height_px`) — never by the canvas. Zero elsewhere.
+- **`fixations.csv`** = the rows Analysis would export: the last `FPOGV=1`
+  record of each `FPOGID`, excluding the recording's final record, with
+  zero-duration fixations dropped. Both rules are golden-tested against a
+  real Analysis v7.3.0 export (`tests/fixtures/gazepoint_analysis_sample/`).
+
+Geometry fields in `metadata.json` (all additive, `null` when unknown):
+`screen_width_px`/`screen_height_px` (tracked monitor, from `SCREEN_SIZE`),
+`canvas_width_px`/`canvas_height_px`/`canvas_offset_x_px`/`canvas_offset_y_px`
+(where the task scene sat on it), `screen_physical_width_mm`/`_height_mm`
+(config, else the OS/EDID value), `viewing_distance_mm` (config). These let
+`session_metrics.json`'s `saccades` block report amplitude in degrees of
+visual angle as well as px.
 
 ## events.jsonl
 

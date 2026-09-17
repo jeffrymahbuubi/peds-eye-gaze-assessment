@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..data.analysis_export import compute_saccade_metrics
 from ..data.exporter import compute_fixation_saccade_metrics, load_metadata, summarize
 from .tasks_page import TASK_INFO
 
@@ -216,9 +217,16 @@ class ResultsPage(QWidget):
         self._fixation_rows["Median duration"].setText(_fmt(fix["median_fixation_duration_s"], " s", 2))
         self._fixation_rows["Rate"].setText(_fmt(fix["fixation_rate_per_min"], " /min", 1))
 
-        # Amplitude/direction need fixation-centroid tracking this codebase
-        # doesn't capture yet (SPEC-result-logic.md §8.4's "needs genuinely
-        # new tracking" gap class) -- left as "—" deliberately, not a bug.
+        # Amplitude/direction come from fixations.csv, derived at session
+        # close exactly as Gazepoint Analysis computes them (SPEC-gazepoint-
+        # analysis-export-parity.md §6); "—" for sessions recorded without
+        # all_gaze.csv. Degrees appear only when the geometry was recorded.
+        saccades = compute_saccade_metrics(session_dir, metadata)
+        amplitude = _fmt(saccades["mean_amplitude_px"], " px", 1)
+        if saccades["mean_amplitude_deg"] is not None:
+            amplitude += f" ({saccades['mean_amplitude_deg']:.2f}°)"
+        self._saccade_rows["Mean amplitude"].setText(amplitude)
+        self._saccade_rows["Mean direction"].setText(_fmt(saccades["mean_direction_deg"], "°", 1))
         self._saccade_rows["Latency (to first fixation)"].setText(
             _fmt(summary["mean_time_to_first_fixation_ms"], " ms", 0)
         )

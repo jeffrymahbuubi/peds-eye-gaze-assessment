@@ -150,7 +150,7 @@ from `gaze_stream.csv`, not pulled from Gazepoint Analysis.
 |---|---|---|---|
 | Data quality | % valid/on-screen samples, calibration error | A 2025 CP study found 6/39 children couldn't calibrate to the required accuracy at all — a clinical signal, not just QC. A toddler eye-tracking battery study (eLife 2023) uses accuracy + precision as its two general per-session data-quality proxies. | `valid`, `calibration_error_px` — **aggregated 2026-09-03** (`valid_ratio` in `session_metrics.json`; calibration error was already in `metadata.json`) |
 | Fixation | Mean/median fixation duration, fixation count/rate | One of six features reaching AUC ≥0.90 classifying CVI (common in CP) vs. controls (2025 study, cited above in this doc). | `fixation_id`, `fix_duration_s` — **aggregated 2026-09-03** (session-level mean/median/max duration, count, rate/min; plus a new per-trial fixation count not in the original design-toward list) |
-| Saccade | Latency (≈ time-to-first-fixation), amplitude, direction | Same 2025 study. Amplitude/direction are exactly the two fields Gazepoint doesn't expose live (see above) — would need in-house computation from consecutive fixation POGs. | Latency: yes (`time_to_first_fixation_ms`, per-trial). Saccade **count/rate aggregated 2026-09-03** (session-level, from fixation-id transitions). Amplitude/direction: still not recorded — a distinct latency-per-saccade metric also isn't broken out separately from the existing per-trial time-to-first-fixation |
+| Saccade | Latency (≈ time-to-first-fixation), amplitude, direction | Same 2025 study. Amplitude/direction are exactly the two fields Gazepoint doesn't expose live (see above) — computed in-house from consecutive fixation POGs, exactly as Gazepoint Analysis does at export. | Latency: yes (`time_to_first_fixation_ms`, per-trial). Saccade **count/rate aggregated 2026-09-03**. **Amplitude/direction: DONE 2026-09-17** — per-saccade in `fixations.csv` (`SACCADE_MAG` px, `SACCADE_DIR` deg), session mean/median px + mean degrees of visual angle + circular-mean direction in `session_metrics.json` `saccades` (SPEC-gazepoint-analysis-export-parity.md). A distinct latency-per-saccade metric still isn't broken out |
 | Task performance | Hit rate / accuracy %, mean reaction time, time-on-task | Matches the metrics used in the published Compass-based longitudinal CP study `click_grid` is modeled on. | Yes, already computed by `analysis/analyze_session.py` |
 | Selection precision | Revisit / re-attempt counts | A 2026 CP oculomotor-training study (ScienceDirect, *Acta Psychologica*) tracked "fixation precision and visual exploration" pre/post intervention using gaze-driven games; this app's `attempts` field is a rough analogue. | Yes (`attempts`), not yet framed as a precision metric |
 | Pupil | Mean/trend pupil diameter | Secondary priority — literature treats it mainly as an attention/cognitive-load signal, not CP-specific. | **Aggregated 2026-09-03** — mean pupil L/R mm in `session_metrics.json`; trend-over-time still not computed |
@@ -182,9 +182,14 @@ project). Full findings and the resulting plan:
   from `gaze_stream.csv` — **provided the session's screen size is persisted,
   which `metadata.json` does not do today.** AOI "time viewed / revisits"
   remain genuinely new tracking.
-- **None of the derivations exist in code yet** (checked 2026-09-17); the
-  SPEC gates them as derive → golden-test against the vendor's own file →
-  report → approve → wire.
+- **Implemented the same day** (SPEC §9): every session now also writes
+  `all_gaze.csv` (62-column Analysis layout, every raw `<REC>` at device
+  rate) and `fixations.csv`, `metadata.json` carries the monitor / canvas /
+  physical / viewing-distance geometry, `session_metrics.json` has a
+  `saccades` block (amplitude px + degrees, circular-mean direction), and
+  the Results page's saccade amplitude/direction rows are filled. The
+  derivation is golden-tested against the vendor's own export. The table
+  below is updated accordingly.
 
 ## Sources
 

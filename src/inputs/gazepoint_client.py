@@ -26,6 +26,7 @@ import re
 import socket
 import threading
 import time
+from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,9 +40,16 @@ _ATTR_RE = re.compile(r'(\w+)="([^"]*)"')
 # NOTE: rec_to_sample() reads LPMM/RPMM (pupil diameter in millimeters), which
 # is gated by ENABLE_SEND_PUPILMM (API manual §5.16) -- not by
 # ENABLE_SEND_PUPIL_LEFT/RIGHT, which instead gate the pixel-based LPD/RPD
-# fields (§5.9/5.10) that this client does not read. Both config keys map to
-# the one PUPILMM enable so `gazepoint.enable.pupil_left`/`pupil_right` in
-# configs/default.yaml keep working as independent on/off switches.
+# fields (§5.9/5.10). Both config keys map to the one PUPILMM enable so
+# `gazepoint.enable.pupil_left`/`pupil_right` in configs/default.yaml keep
+# working as independent on/off switches. The pixel LPD/RPD family has its
+# own, differently-named keys below (`pupil_left_px`/`pupil_right_px`) --
+# never reuse the mm names for them.
+#
+# Keys from `counter` down exist for all_gaze.csv parity with Gazepoint
+# Analysis's export (SPEC-gazepoint-analysis-export-parity.md S5.2): nothing
+# in the app reads them, they are recorded verbatim. Biometrics-kit switches
+# (DIAL/GSR/HR/TTL) are deliberately absent.
 _ENABLE_RECORDS = {
     "time": "ENABLE_SEND_TIME",
     "pog_fix": "ENABLE_SEND_POG_FIX",
@@ -49,7 +57,20 @@ _ENABLE_RECORDS = {
     "pupil_left": "ENABLE_SEND_PUPILMM",
     "pupil_right": "ENABLE_SEND_PUPILMM",
     "cursor": "ENABLE_SEND_CURSOR",
+    "counter": "ENABLE_SEND_COUNTER",
+    "time_tick": "ENABLE_SEND_TIME_TICK",
+    "kb": "ENABLE_SEND_KB",
+    "user_data": "ENABLE_SEND_USER_DATA",
+    "pupil_left_px": "ENABLE_SEND_PUPIL_LEFT",
+    "pupil_right_px": "ENABLE_SEND_PUPIL_RIGHT",
+    "blink": "ENABLE_SEND_BLINK",
+    "pix": "ENABLE_SEND_PIX",
 }
+
+# Upper bound on raw <REC> records buffered between drain_raw() calls -- ~70s
+# at 150 Hz. Only reached if nobody drains (e.g. no recorder), in which case
+# the oldest are dropped rather than memory growing without bound.
+_RAW_QUEUE_MAX = 10_000
 
 
 def enable_command(record_id: str, state: bool = True) -> bytes:
@@ -135,9 +156,14 @@ class DeviceInfo:
     screen_y: int | None = None
     screen_width: int | None = None
     screen_height: int | None = None
+    # TIME_TICK_FREQUENCY: divisor turning TIME_TICK into seconds; recorded in
+    # all_gaze.csv's TIMETICK(f=..) header for parity with Analysis's export.
+    tick_frequency: int | None = None
 
 
-_DEVICE_INFO_QUERY_IDS = ("PRODUCT_ID", "SERIAL_ID", "CAMERA_SIZE", "API_ID", "SCREEN_SIZE")
+_DEVICE_INFO_QUERY_IDS = (
+    "PRODUCT_ID", "SERIAL_ID", "CAMERA_SIZE", "API_ID", "SCREEN_SIZE", "TIME_TICK_FREQUENCY",
+)
 _DEVICE_INFO_TIMEOUT_S = 0.5
 
 
@@ -188,6 +214,7 @@ def _query_device_info(sock: socket.socket) -> DeviceInfo:
     camera = fields.get("CAMERA_SIZE", {})
     api = fields.get("API_ID", {})
     screen = fields.get("SCREEN_SIZE", {})
+    tick = fields.get("TIME_TICK_FREQUENCY", {})
     return DeviceInfo(
         model=_clean_placeholder(product.get("VALUE"), placeholders=("NONE",)),
         bus=product.get("BUS") or None,
@@ -200,6 +227,7 @@ def _query_device_info(sock: socket.socket) -> DeviceInfo:
         screen_y=_parse_int(screen.get("Y")),
         screen_width=_parse_int(screen.get("WIDTH")),
         screen_height=_parse_int(screen.get("HEIGHT")),
+        tick_frequency=_parse_int(tick.get("FREQ")),
     )
 
 
@@ -323,6 +351,11 @@ class ReplayGazeSource:
 
     def sample_at(self, elapsed_s: float) -> GazeSample:
         """Return the sample active at ``elapsed_s`` seconds into playback."""
+        return self.sample_and_record_at(elapsed_s)[0]
+
+    def sample_and_record_at(self, elapsed_s: float) -> tuple[GazeSample, dict]:
+        """:meth:`sample_at` plus the fixture record it came from (raw REC
+        dict or normalized dict, verbatim) so a caller can tell records apart."""
         if self._loop and self._duration > 0:
             elapsed_s = elapsed_s % (self._duration + 1e-6)
         # Records are time-ordered; find last with offset <= elapsed.
@@ -334,7 +367,7 @@ class ReplayGazeSource:
                 break
         offset, rec = self._records[idx]
         t_ns = int(elapsed_s * 1e9)
-        return _record_to_sample(rec, t_ns)
+        return _record_to_sample(rec, t_ns), rec
 
     def iter_samples(self, base_ns: int = 0) -> Iterable[GazeSample]:
         """Iterate all fixture samples with absolute timestamps from ``base_ns``."""
@@ -367,6 +400,10 @@ class GazepointClient:
         self._lock = threading.Lock()
         self._latest: GazeSample | None = None
         self._last_raw_pog: dict[str, str] | None = None
+        # Every raw <REC> since the last drain_raw(), for all_gaze.csv -- the
+        # recorder needs each record at device rate, not the one-per-GUI-frame
+        # view latest() gives.
+        self._raw_queue: deque[tuple[int, dict[str, str]]] = deque(maxlen=_RAW_QUEUE_MAX)
         self._device_info: DeviceInfo | None = None
         # Replay mode has no socket to lose, so it's always "connected".
         self._connected = replay_path is not None
@@ -486,6 +523,20 @@ class GazepointClient:
         with self._lock:
             return dict(self._last_raw_pog) if self._last_raw_pog is not None else None
 
+    def drain_raw(self) -> list[tuple[int, dict[str, str]]]:
+        """Every raw ``<REC>`` (receive ``t_ns``, verbatim attribute dict)
+        parsed since the previous call, oldest first, then cleared.
+
+        Feeds ``SessionRecorder.record_raw`` for ``all_gaze.csv``
+        (SPEC-gazepoint-analysis-export-parity.md S5.3). Replay mode queues
+        only fixtures whose lines are raw REC dicts; normalized fixtures have
+        nothing raw to offer.
+        """
+        with self._lock:
+            items = list(self._raw_queue)
+            self._raw_queue.clear()
+        return items
+
     def stop(self) -> None:
         self._stop_event.set()
         if self._thread is not None:
@@ -508,6 +559,7 @@ class GazepointClient:
             self._latest = sample
             if attrs is not None:
                 self._last_raw_pog = {k: attrs[k] for k in self._RAW_POG_KEYS if k in attrs}
+                self._raw_queue.append((sample.t_ns, attrs))
 
     def _run_socket(self) -> None:
         buffer = ""
@@ -567,7 +619,16 @@ class GazepointClient:
     def _run_replay(self) -> None:
         source = ReplayGazeSource(self._replay_path, loop=True)
         start = time.monotonic()
+        last_record: dict | None = None
         while not self._stop_event.is_set():
             elapsed = time.monotonic() - start
-            self._set_latest(source.sample_at(elapsed))
+            sample, record = source.sample_and_record_at(elapsed)
+            # Queue a raw fixture record once per distinct record, not once
+            # per poll, so a paced replay yields the same all_gaze.csv row
+            # count a live device would for that fixture.
+            raw = None
+            if record is not last_record and ("FPOGX" in record or "BPOGX" in record):
+                raw = {k: str(v) for k, v in record.items()}
+            last_record = record
+            self._set_latest(sample, raw)
             time.sleep(1.0 / 60.0)

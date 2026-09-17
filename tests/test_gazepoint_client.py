@@ -29,6 +29,8 @@ _DEVICE_INFO_REPLIES = {
     "API_ID": '<ACK ID="API_ID" VALUE="2.0" />\n',
     # SPEC-gui-audit-2026-09-10.md item 5 -- the tracked-screen region.
     "SCREEN_SIZE": '<ACK ID="SCREEN_SIZE" X="0" Y="0" WIDTH="1920" HEIGHT="1080" />\n',
+    # all_gaze.csv's TIMETICK(f=..) header (SPEC-gazepoint-analysis-export-parity.md S5.1).
+    "TIME_TICK_FREQUENCY": '<ACK ID="TIME_TICK_FREQUENCY" FREQ="10000000" />\n',
 }
 
 
@@ -281,6 +283,83 @@ def test_connect_only_sends_enabled_records(fake_server):
         client.stop()
 
 
+def test_connect_sends_the_export_parity_records_when_enabled(fake_server):
+    """SPEC-gazepoint-analysis-export-parity.md S5.2: the raw-field keys map
+    to their own ENABLE_SEND_* commands, and the pixel-pupil keys are the
+    PUPIL_LEFT/RIGHT switches -- not PUPILMM, which the mm keys own."""
+    enable = {
+        "counter": True, "time_tick": True, "kb": True, "user_data": True,
+        "pupil_left_px": True, "pupil_right_px": True, "blink": True, "pix": True,
+        "pupil_left": False, "pupil_right": False,
+    }
+    client = GazepointClient(enable=enable)
+    client.connect(host="127.0.0.1", port=fake_server.port)
+    try:
+        assert _wait_until(lambda: "ENABLE_SEND_DATA" in fake_server.received_text())
+        sent = fake_server.received_text()
+        for record_id in (
+            "ENABLE_SEND_COUNTER", "ENABLE_SEND_TIME_TICK", "ENABLE_SEND_KB",
+            "ENABLE_SEND_USER_DATA", "ENABLE_SEND_PUPIL_LEFT", "ENABLE_SEND_PUPIL_RIGHT",
+            "ENABLE_SEND_BLINK", "ENABLE_SEND_PIX",
+        ):
+            assert f'ID="{record_id}"' in sent, record_id
+        assert "ENABLE_SEND_PUPILMM" not in sent
+        # Biometrics-kit switches are never sent (excluded by decision).
+        for record_id in ("ENABLE_SEND_DIAL", "ENABLE_SEND_GSR", "ENABLE_SEND_HR", "ENABLE_SEND_TTL"):
+            assert record_id not in sent
+    finally:
+        client.stop()
+
+
+def test_drain_raw_yields_every_rec_once_at_device_rate(fake_server):
+    """all_gaze.csv needs every <REC>, not the one-per-frame view latest()
+    gives: three records pushed faster than any GUI tick must all be drained,
+    verbatim, oldest first, and a second drain must be empty."""
+    client = GazepointClient(reconnect_interval_s=0.1)
+    client.connect(host="127.0.0.1", port=fake_server.port)
+    client.start_streaming()
+    try:
+        fake_server.wait_for_connection()
+        for x in (0.1, 0.2, 0.3):
+            fake_server.send_rec(x, 0.5)
+        assert _wait_until(lambda: len(client._raw_queue) >= 3)
+        drained = client.drain_raw()
+        assert [attrs["FPOGX"] for _t, attrs in drained] == ["0.1", "0.2", "0.3"]
+        assert all(isinstance(t, int) and t > 0 for t, _attrs in drained)
+        assert client.drain_raw() == []
+    finally:
+        client.stop()
+
+
+def test_replay_queues_raw_records_only_for_raw_fixtures(tmp_path: Path):
+    raw_fixture = tmp_path / "raw.jsonl"
+    raw_fixture.write_text(
+        '{"TIME": "0.0", "FPOGX": "0.4", "FPOGY": "0.4", "FPOGV": "1", "CNT": "0"}\n'
+        '{"TIME": "0.5", "FPOGX": "0.6", "FPOGY": "0.6", "FPOGV": "1", "CNT": "1"}\n',
+        encoding="utf-8",
+    )
+    client = GazepointClient(replay_path=raw_fixture)
+    client.start_streaming()
+    try:
+        assert _wait_until(lambda: len(client._raw_queue) >= 1, timeout_s=2.0)
+        drained = client.drain_raw()
+        assert drained and drained[0][1]["CNT"] == "0"
+        # One queue entry per distinct fixture record, not per 60 Hz poll.
+        assert len(drained) <= 2
+    finally:
+        client.stop()
+
+    normalized_fixture = tmp_path / "norm.jsonl"
+    normalized_fixture.write_text('{"t_ns": 0, "x": 0.5, "y": 0.5, "valid": true}', encoding="utf-8")
+    client = GazepointClient(replay_path=normalized_fixture)
+    client.start_streaming()
+    try:
+        time.sleep(0.1)
+        assert client.drain_raw() == []
+    finally:
+        client.stop()
+
+
 def test_is_live_true_for_socket_mode_false_for_replay(tmp_path: Path):
     fixture = tmp_path / "g.jsonl"
     fixture.write_text('{"t_ns": 0, "x": 0.5, "y": 0.5, "valid": true}', encoding="utf-8")
@@ -371,6 +450,7 @@ def test_connect_populates_device_info_from_get_replies(fake_server):
         assert info.screen_y == 0
         assert info.screen_width == 1920
         assert info.screen_height == 1080
+        assert info.tick_frequency == 10_000_000
     finally:
         client.stop()
 
