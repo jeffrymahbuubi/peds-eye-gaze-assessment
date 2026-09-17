@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import __version__
 from ..app import AssessmentApp
 from ..engine.config import CONFIG_ROOT, load_task_config
 from ..engine.calibration import CalibrationFileError
@@ -61,7 +62,7 @@ _RUN_INDEX = 3  # the embedded TaskRunView is inserted/removed here per run
 class DashboardWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Pediatric Eye-Gaze Assessment")
+        self.setWindowTitle(f"Pediatric Eye-Gaze Assessment v{__version__}")
         if _ICON_PATH.exists():
             from PySide6.QtGui import QIcon
 

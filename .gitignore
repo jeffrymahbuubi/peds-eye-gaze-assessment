@@ -25,3 +25,7 @@ configs/local_state.json
 .DS_Store
 .idea/
 .vscode/
+
+# Compiled app artifacts (tools/pyinstaller/build_exe.py) -- the git tag is the record, not the exe
+compiled/
+build/

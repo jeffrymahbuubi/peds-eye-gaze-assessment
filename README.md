@@ -1,4 +1,4 @@
-# Pediatric Eye-Gaze Assessment Tool (v0.1)
+# Pediatric Eye-Gaze Assessment Tool (v1.0.0)
 
 兒童眼控電腦操作能力評估工具 — prototype.
 
@@ -274,9 +274,35 @@ re-run the task to feel the new pacing. Full diagnosis behind these settings:
 ## Tests & lint
 
 ```bash
-pytest        # 114 tests, all headless
+pytest        # 224 tests, all headless (1 long-known local-config failure, see docs/specs)
 ruff check .
 ```
+
+## Building the Windows executable
+
+A one-folder, windowed PyInstaller build (`tools/pyinstaller/`), published to
+`compiled/PedsEyeGaze-<version>/` plus a `.zip` next to it:
+
+```bash
+uv pip install --python .venv/Scripts/python.exe "pyinstaller>=6.10"   # once
+python tools/pyinstaller/build_exe.py                                   # ~2 min, ~140 MB
+```
+
+What you get: `PedsEyeGaze.exe` (double-click → the dashboard; the `--gui`
+and `--replay` modes still work as command-line flags), `configs/` next to
+the exe (therapist-editable, the frozen app reads it from there — not from
+`_internal/`), `sessions/` and `logs/` created beside the exe on first run
+(a windowed exe has no console, so stdout/stderr and Qt messages go to
+`logs/app-<timestamp>.log`), and `BUILD_INFO.txt` with the version, git
+commit and dirty flag. Set `viewing_distance_mm` / `screen_physical_*_mm`
+in the shipped `configs/default.yaml` per clinic PC if degrees-of-visual-angle
+matter.
+
+`tools/pyinstaller/auto-py-to-exe.json` is the same configuration for
+`auto-py-to-exe` (Settings → Configuration → Import, launched from the repo
+root); it cannot run the post-build copy of `configs/`, so do that by hand.
+`compiled/` and `build/` are gitignored — the release tag (`v1.0.0`) is the
+record of what was built.
 
 ## Analysis
 

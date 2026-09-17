@@ -7,13 +7,25 @@ light (pyyaml only) so therapists can edit plain YAML (plan US-02).
 
 from __future__ import annotations
 
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-CONFIG_ROOT = Path(__file__).resolve().parents[2] / "configs"
+
+def _config_root() -> Path:
+    """``<repo>/configs`` from source; ``<exe folder>/configs`` in a compiled
+    build (``tools/pyinstaller/build_exe.py`` copies it there), so the YAML
+    stays where a therapist can find and edit it rather than inside the
+    bundle's ``_internal/``."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "configs"
+    return Path(__file__).resolve().parents[2] / "configs"
+
+
+CONFIG_ROOT = _config_root()
 
 
 def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

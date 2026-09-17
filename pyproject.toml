@@ -1,6 +1,6 @@
 [project]
 name = "peds-eye-gaze-assessment"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pediatric eye-control computer operation assessment tool (Gazepoint GP3HD + dwell/switch input)"
 readme = "README.md"
 requires-python = ">=3.11"

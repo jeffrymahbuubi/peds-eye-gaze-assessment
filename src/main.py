@@ -15,14 +15,62 @@ calibration made once in Setup carry over to every task Run
 replacement for ``--task ... --gui`` above::
 
     python -m src.main --dashboard
+
+Compiled build (PyInstaller one-folder, ``tools/pyinstaller/``): the exe
+runs ``main()`` too. With no arguments it launches the dashboard, works from
+its own folder (so ``sessions/`` and ``configs/local_state.json`` land next
+to the exe wherever it was launched from), and mirrors stdout/stderr and Qt
+messages into ``logs/`` since a windowed exe has no console.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from datetime import datetime
+from pathlib import Path
 
 from .engine.task_runner import TASK_REGISTRY, run_headless_replay
+
+
+def is_frozen() -> bool:
+    """True inside a PyInstaller build."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def prepare_frozen_environment() -> Path | None:
+    """One-time setup for the compiled exe; a no-op when run from source.
+
+    Returns the log file path when one was opened. Everything here is about
+    the exe having no console and no fixed working directory -- none of it
+    changes behaviour when run from source.
+    """
+    if not is_frozen():
+        return None
+    exe_dir = Path(sys.executable).resolve().parent
+    os.chdir(exe_dir)
+
+    log_dir = exe_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_path = log_dir / f"app-{datetime.now():%Y%m%d-%H%M%S}.log"
+    # A windowed PyInstaller exe starts with sys.stdout/stderr set to None;
+    # anything printed would raise. Line-buffered so a crash keeps the tail.
+    log_file = open(log_path, "a", encoding="utf-8", buffering=1)  # noqa: SIM115
+    sys.stdout = log_file
+    sys.stderr = log_file
+    print(f"=== start {datetime.now():%Y-%m-%d %H:%M:%S} cwd={exe_dir} argv={sys.argv[1:]}")
+
+    try:
+        from PySide6.QtCore import qInstallMessageHandler
+
+        def _qt_to_log(_mode, _context, message: str) -> None:
+            print(f"[qt] {message}")
+
+        qInstallMessageHandler(_qt_to_log)
+    except ImportError:  # pragma: no cover - GUI optional
+        pass
+    return log_path
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -74,6 +122,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    prepare_frozen_environment()
+    if argv is None:
+        argv = sys.argv[1:]
+    if is_frozen() and not argv:
+        # Double-clicked exe: the dashboard is the product; the headless and
+        # single-task modes stay reachable by passing their flags explicitly.
+        argv = ["--dashboard"]
     args = build_parser().parse_args(argv)
 
     if args.dashboard:
